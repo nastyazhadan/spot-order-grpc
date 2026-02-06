@@ -17,7 +17,7 @@ type MarketViewer interface {
 }
 
 var (
-	ErrMarketsNotFound = errors.New("markets store is empty")
+	ErrMarketNotFound = errors.New("markets store is empty")
 )
 
 func NewService(marketProvider MarketViewer) *Service {

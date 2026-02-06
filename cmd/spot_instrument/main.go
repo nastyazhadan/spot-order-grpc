@@ -18,7 +18,7 @@ func main() {
 		log.Fatalf("listen %s: %v", addr, err)
 	}
 
-	store := storage.NewMarketStore()
+	store := db.NewMarketStore()
 	useCase := spot_instrument.NewService(store)
 
 	grpcServer := grpc.NewServer()
