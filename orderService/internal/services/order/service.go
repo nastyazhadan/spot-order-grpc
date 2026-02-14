@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/orderService/errors/service"
-	storageErrors "github.com/nastyazhadan/spot-order-grpc/orderService/errors/storage"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/storage"
 
 	"github.com/google/uuid"
 )
@@ -62,7 +62,7 @@ func (s *Service) CreateOrder(
 		}
 	}
 	if !found {
-		return uuid.Nil, models.StatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrMarketsNotFound)
+		return uuid.Nil, models.StatusCancelled, fmt.Errorf("%s: %w", op, service.ErrMarketsNotFound)
 	}
 
 	orderID := uuid.New()
@@ -80,7 +80,7 @@ func (s *Service) CreateOrder(
 	}
 	if err := s.saver.SaveOrder(ctx, newOrder); err != nil {
 		if errors.Is(err, storageErrors.ErrOrderAlreadyExists) {
-			return uuid.Nil, models.StatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderAlreadyExists)
+			return uuid.Nil, models.StatusCancelled, fmt.Errorf("%s: %w", op, service.ErrOrderAlreadyExists)
 		}
 
 		return uuid.Nil, models.StatusCancelled, fmt.Errorf("%s: %w", op, err)
@@ -95,14 +95,14 @@ func (s *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID)
 	result, err := s.getter.GetOrder(ctx, orderID)
 	if err != nil {
 		if errors.Is(err, storageErrors.ErrOrderNotFound) {
-			return models.StatusUnspecified, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderNotFound)
+			return models.StatusUnspecified, fmt.Errorf("%s: %w", op, service.ErrOrderNotFound)
 		}
 
 		return models.StatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if result.UserID != userID {
-		return models.StatusUnspecified, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderNotFound)
+		return models.StatusUnspecified, fmt.Errorf("%s: %w", op, service.ErrOrderNotFound)
 	}
 
 	return result.Status, nil

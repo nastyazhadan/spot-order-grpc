@@ -6,9 +6,9 @@ import (
 	"math"
 	"strconv"
 
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/orderService/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/mapper"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v6"
 
 	"github.com/google/uuid"
@@ -65,9 +65,9 @@ func (s *serverAPI) CreateOrder(
 
 	if err != nil {
 		switch {
-		case errors.Is(err, serviceErrors.ErrOrderAlreadyExists):
+		case errors.Is(err, service.ErrOrderAlreadyExists):
 			return nil, status.Error(codes.AlreadyExists, err.Error())
-		case errors.Is(err, serviceErrors.ErrMarketsNotFound):
+		case errors.Is(err, service.ErrMarketsNotFound):
 			return nil, status.Error(codes.NotFound, err.Error())
 		default:
 			return nil, status.Error(codes.Internal, "internal error")
@@ -102,7 +102,7 @@ func (s *serverAPI) GetOrderStatus(
 	stat, err := s.svc.GetOrderStatus(ctx, orderID, userID)
 	if err != nil {
 		switch {
-		case errors.Is(err, serviceErrors.ErrOrderNotFound):
+		case errors.Is(err, service.ErrOrderNotFound):
 			return nil, status.Error(codes.NotFound, err.Error())
 		default:
 			return nil, status.Error(codes.Internal, "internal error")

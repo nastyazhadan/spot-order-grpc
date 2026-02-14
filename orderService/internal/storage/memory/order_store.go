@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/nastyazhadan/spot-order-grpc/orderService/errors/storage"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/shared/errors/storage"
 
 	"github.com/google/uuid"
 )
