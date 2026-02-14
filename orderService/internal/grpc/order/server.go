@@ -65,9 +65,9 @@ func (s *serverAPI) CreateOrder(
 
 	if err != nil {
 		switch {
-		case errors.Is(err, service.ErrOrderAlreadyExists):
+		case errors.Is(err, serviceErrors.ErrOrderAlreadyExists):
 			return nil, status.Error(codes.AlreadyExists, err.Error())
-		case errors.Is(err, service.ErrMarketsNotFound):
+		case errors.Is(err, serviceErrors.ErrMarketsNotFound):
 			return nil, status.Error(codes.NotFound, err.Error())
 		default:
 			return nil, status.Error(codes.Internal, "internal error")
@@ -102,7 +102,7 @@ func (s *serverAPI) GetOrderStatus(
 	stat, err := s.svc.GetOrderStatus(ctx, orderID, userID)
 	if err != nil {
 		switch {
-		case errors.Is(err, service.ErrOrderNotFound):
+		case errors.Is(err, serviceErrors.ErrOrderNotFound):
 			return nil, status.Error(codes.NotFound, err.Error())
 		default:
 			return nil, status.Error(codes.Internal, "internal error")

@@ -11,7 +11,7 @@ import (
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/orderService/internal/client/grpc"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/storage/memory"
+	storage "github.com/nastyazhadan/spot-order-grpc/orderService/internal/storage/memory"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 
 	"google.golang.org/grpc"
@@ -63,7 +63,7 @@ func (a *App) Start() error {
 
 	marketClient := grpcClient.New(a.spotConn)
 
-	store := memory.NewOrderStore()
+	store := storage.NewOrderStore()
 	useCase := svcOrder.NewService(store, store, marketClient)
 
 	validator, err := validate.ProtovalidateUnary()

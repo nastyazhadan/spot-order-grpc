@@ -1,4 +1,4 @@
-/storageErrors/
+/serviceErrors/
 .idea/
-/spotService/storageErrors/
-/orderService/storageErrors/
+/spotService/serviceErrors/
+/orderService/serviceErrors/

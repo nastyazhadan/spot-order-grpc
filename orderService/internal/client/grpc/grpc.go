@@ -23,13 +23,13 @@ func New(connection *grpc.ClientConn) *Client {
 	}
 }
 
-func (client *Client) ViewMarkets(ctx context.Context, roles []proto.UserRole) ([]models.Market, error) {
+func (client *Client) ViewMarkets(ctx context.Context, roles []int32) ([]models.Market, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	userRoles := make([]proto.UserRole, 0, len(roles))
 	for _, role := range roles {
-		userRoles = append(userRoles, role)
+		userRoles = append(userRoles, proto.UserRole(role))
 	}
 
 	if len(userRoles) == 0 {
