@@ -3,9 +3,10 @@ package memory
 import (
 	"context"
 	"fmt"
-	"spotOrder/errors/storage"
-	"spotOrder/internal/domain/models"
 	"sync"
+
+	"github.com/nastyazhadan/spot-order-grpc/orderService/errors/storage"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 
 	"github.com/google/uuid"
 )

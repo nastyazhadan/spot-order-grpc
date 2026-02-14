@@ -2,11 +2,12 @@ package grpc
 
 import (
 	"context"
-	"spotOrder/internal/domain/models"
-	"spotOrder/internal/mapper"
 	"time"
 
-	proto "github.com/nastyazhadan/protos/gen/go/spot_order"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/mapper"
+	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
+
 	"google.golang.org/grpc"
 )
 
@@ -16,31 +17,39 @@ type Client struct {
 	api proto.SpotInstrumentServiceClient
 }
 
-func New(conn *grpc.ClientConn) *Client {
+func New(connection *grpc.ClientConn) *Client {
 	return &Client{
-		api: proto.NewSpotInstrumentServiceClient(conn),
+		api: proto.NewSpotInstrumentServiceClient(connection),
 	}
 }
 
-func (c *Client) ViewMarkets(ctx context.Context, roles []int32) ([]models.Market, error) {
+func (client *Client) ViewMarkets(ctx context.Context, roles []proto.UserRole) ([]models.Market, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	userRoles := make([]proto.UserRole, 0, len(roles))
 	for _, role := range roles {
-		userRoles = append(userRoles, proto.UserRole(role))
+		userRoles = append(userRoles, role)
 	}
 
-	resp, err := c.api.ViewMarkets(ctx, &proto.ViewMarketsRequest{
+	if len(userRoles) == 0 {
+		userRoles = []proto.UserRole{proto.UserRole_ROLE_VIEWER}
+	}
+
+	response, err := client.api.ViewMarkets(ctx, &proto.ViewMarketsRequest{
 		UserRoles: userRoles,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	out := make([]models.Market, 0, len(resp.GetMarkets()))
-	for _, m := range resp.GetMarkets() {
-		out = append(out, mapper.MarketFromProto(m))
+	out := make([]models.Market, 0, len(response.GetMarkets()))
+	for _, market := range response.GetMarkets() {
+		mappedMarket, err := mapper.MarketFromProto(market)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, mappedMarket)
 	}
 
 	return out, nil

@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"math"
-	serviceErrors "spotOrder/errors/service"
-	"spotOrder/internal/domain/models"
-	"spotOrder/internal/mapper"
 	"strconv"
 
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/orderService/errors/service"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/mapper"
+	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v6"
+
 	"github.com/google/uuid"
-	proto "github.com/nastyazhadan/protos/gen/go/spot_order"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

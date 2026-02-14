@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/mapper"
 

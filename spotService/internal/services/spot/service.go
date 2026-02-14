@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"spotOrder/internal/domain/models"
+
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 )
 
 type Service struct {
@@ -45,7 +46,7 @@ func (s *Service) ViewMarkets(ctx context.Context, userRoles []int32) ([]models.
 	}
 
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].ID < out[j].ID
+		return out[i].Name < out[j].Name
 	})
 
 	return out, nil

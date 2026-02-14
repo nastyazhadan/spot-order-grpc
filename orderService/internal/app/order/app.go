@@ -3,16 +3,17 @@ package order
 import (
 	"context"
 	"fmt"
-	grpcClient "github.com/nastyazhadan/spotOrder/internal/client/grpc"
 	"log"
 	"net"
 	"os"
-	grpcOrder "spotOrder/internal/grpc/order"
-	svcOrder "spotOrder/internal/services/order"
-	"spotOrder/internal/storage/memory"
 	"time"
 
+	grpcClient "github.com/nastyazhadan/spot-order-grpc/orderService/internal/client/grpc"
+	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
+	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/storage/memory"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"

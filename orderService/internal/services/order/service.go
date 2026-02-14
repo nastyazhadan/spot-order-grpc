@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	serviceErrors "spotOrder/errors/service"
-	storageErrors "spotOrder/errors/storage"
-	"spotOrder/internal/domain/models"
 	"time"
+
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/orderService/errors/service"
+	storageErrors "github.com/nastyazhadan/spot-order-grpc/orderService/errors/storage"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 
 	"github.com/google/uuid"
 )

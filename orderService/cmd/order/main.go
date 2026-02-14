@@ -3,7 +3,8 @@ package main
 import (
 	"flag"
 	"log"
-	"spotOrder/internal/app/order"
+
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/app/order"
 )
 
 func main() {

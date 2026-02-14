@@ -14,7 +14,8 @@ func MarketToProto(market models.Market) *proto.Market {
 	}
 
 	return &proto.Market{
-		Id:        market.ID,
+		Id:        market.ID.String(),
+		Name:      market.Name,
 		Enabled:   market.Enabled,
 		DeletedAt: deletedAt,
 	}

@@ -9,7 +9,7 @@ import (
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 	storage "github.com/nastyazhadan/spot-order-grpc/spotService/internal/storage/memory"
 
-	"github.com/nastyazhadan/spot-order-grpc//shared/interceptors/validate"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
