@@ -2,10 +2,10 @@ package grpc
 
 import (
 	"context"
-	"spotOrder/internal/domain/models"
-	"spotOrder/internal/mapper"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/mapper"
 
-	proto "github.com/nastyazhadan/protos/gen/go/spot_order"
+	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

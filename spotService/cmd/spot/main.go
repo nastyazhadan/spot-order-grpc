@@ -2,7 +2,8 @@ package main
 
 import (
 	"flag"
-	"spotOrder/internal/app/spot"
+
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/app/spot"
 )
 
 func main() {

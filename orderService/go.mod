@@ -1,4 +1,4 @@
-module spotOrder
+module github.com/nastyazhadan/spot-order-service/orderService
 
 go 1.25
 

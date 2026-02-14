@@ -3,9 +3,11 @@ package memory
 import (
 	"context"
 	"fmt"
-	"spotOrder/internal/domain/models"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 )
 
 type MarketStore struct {
@@ -25,17 +27,20 @@ func (ms *MarketStore) fill() {
 	now := time.Now()
 
 	ms.markets["BTC-USDT"] = models.Market{
-		ID:        "BTC-USDT",
+		ID:        uuid.New(),
+		Name:      "BTC-USDT",
 		Enabled:   true,
 		DeletedAt: nil,
 	}
 	ms.markets["ETH-USDT"] = models.Market{
-		ID:        "ETH-USDT",
+		ID:        uuid.New(),
+		Name:      "ETH-USDT",
 		Enabled:   false,
 		DeletedAt: nil,
 	}
 	ms.markets["DOGE-USDT"] = models.Market{
-		ID:        "DOGE-USDT",
+		ID:        uuid.New(),
+		Name:      "DOGE-USDT",
 		Enabled:   true,
 		DeletedAt: &now,
 	}

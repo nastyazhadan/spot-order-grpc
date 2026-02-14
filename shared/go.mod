@@ -1,4 +1,4 @@
-module github.com/nastyazhadan/protos
+module github.com/nastyazhadan/spot-order-grpc/shared
 
 go 1.25
 
