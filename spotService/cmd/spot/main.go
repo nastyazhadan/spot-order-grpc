@@ -7,10 +7,10 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "", "server address")
+	address := flag.String("addr", "", "server address")
 	flag.Parse()
 
-	app, err := spot.New(*addr)
+	app, err := spot.New(*address)
 	if err != nil {
 		panic(err)
 	}

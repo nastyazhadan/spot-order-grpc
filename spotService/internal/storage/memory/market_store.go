@@ -23,22 +23,22 @@ func NewMarketStore() *MarketStore {
 	return marketStore
 }
 
-func (ms *MarketStore) fill() {
+func (marketStore *MarketStore) fill() {
 	now := time.Now()
 
-	ms.markets["BTC-USDT"] = models.Market{
+	marketStore.markets["BTC"] = models.Market{
 		ID:        uuid.New(),
 		Name:      "BTC-USDT",
 		Enabled:   true,
 		DeletedAt: nil,
 	}
-	ms.markets["ETH-USDT"] = models.Market{
+	marketStore.markets["ETH"] = models.Market{
 		ID:        uuid.New(),
 		Name:      "ETH-USDT",
 		Enabled:   false,
 		DeletedAt: nil,
 	}
-	ms.markets["DOGE-USDT"] = models.Market{
+	marketStore.markets["DOGE"] = models.Market{
 		ID:        uuid.New(),
 		Name:      "DOGE-USDT",
 		Enabled:   true,
@@ -46,11 +46,11 @@ func (ms *MarketStore) fill() {
 	}
 }
 
-func (ms *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
+func (marketStore *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 	const op = "storage.MarketStore.ListAll"
 
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
+	marketStore.mu.RLock()
+	defer marketStore.mu.RUnlock()
 
 	select {
 	case <-ctx.Done():
@@ -58,13 +58,14 @@ func (ms *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 	default:
 	}
 
-	if len(ms.markets) == 0 {
-		return nil, nil
+	marketsCount := len(marketStore.markets)
+	if marketsCount == 0 {
+		return []models.Market{}, nil
 	}
 
-	out := make([]models.Market, 0, len(ms.markets))
+	out := make([]models.Market, 0, marketsCount)
 
-	for _, market := range ms.markets {
+	for _, market := range marketStore.markets {
 		out = append(out, market)
 	}
 

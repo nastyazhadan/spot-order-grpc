@@ -16,18 +16,18 @@ type MarketViewer interface {
 	ListAll(ctx context.Context) ([]models.Market, error)
 }
 
-func NewService(marketProvider MarketViewer) *Service {
+func NewService(marketViewer MarketViewer) *Service {
 	return &Service{
-		marketViewer: marketProvider,
+		marketViewer: marketViewer,
 	}
 }
 
-func (s *Service) ViewMarkets(ctx context.Context, userRoles []int32) ([]models.Market, error) {
+func (service *Service) ViewMarkets(ctx context.Context, userRoles []int32) ([]models.Market, error) {
 	const op = "ViewMarkets"
 
 	// TODO: добавить проверку ролей
 
-	markets, err := s.marketViewer.ListAll(ctx)
+	markets, err := service.marketViewer.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}

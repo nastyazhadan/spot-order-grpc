@@ -5,11 +5,11 @@ import (
 	"log"
 	"net"
 
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 	storage "github.com/nastyazhadan/spot-order-grpc/spotService/internal/storage/memory"
 
-	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -17,56 +17,56 @@ import (
 type App struct {
 	grpcServer *grpc.Server
 	listener   net.Listener
-	addr       string
+	address    string
 }
 
-func New(addr string) (*App, error) {
-	if addr == "" {
-		addr = ":50052"
+func New(address string) (*App, error) {
+	if address == "" {
+		address = ":50052"
 	}
 
 	return &App{
-		addr: addr,
+		address: address,
 	}, nil
 }
 
-func (a *App) Start() error {
-	lis, err := net.Listen("tcp", a.addr)
+func (app *App) Start() error {
+	listener, err := net.Listen("tcp", app.address)
 	if err != nil {
-		return fmt.Errorf("listen %s: %w", a.addr, err)
+		return fmt.Errorf("listen %s: %w", app.address, err)
 	}
-	a.listener = lis
+	app.listener = listener
 
-	store := storage.NewMarketStore()
-	useCase := svcSpot.NewService(store)
+	marketStore := storage.NewMarketStore()
+	useCase := svcSpot.NewService(marketStore)
 
-	a.grpcServer = grpc.NewServer()
+	app.grpcServer = grpc.NewServer()
 
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return fmt.Errorf("proto validate: %w", err)
 	}
 
-	a.grpcServer = grpc.NewServer(
+	app.grpcServer = grpc.NewServer(
 		grpc.UnaryInterceptor(validator),
 	)
 
-	grpcSpot.Register(a.grpcServer, useCase)
+	grpcSpot.Register(app.grpcServer, useCase)
 
-	reflection.Register(a.grpcServer) // для отладки
+	reflection.Register(app.grpcServer) // для отладки
 
-	log.Printf("SpotInstrumentService listening on %s", a.addr)
+	log.Printf("SpotInstrumentService listening on %s", app.address)
 
-	if err := a.grpcServer.Serve(a.listener); err != nil {
+	if err := app.grpcServer.Serve(app.listener); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}
 
 	return nil
 }
 
-func (a *App) Stop() error {
-	if a.grpcServer != nil {
-		a.grpcServer.GracefulStop()
+func (app *App) Stop() error {
+	if app.grpcServer != nil {
+		app.grpcServer.GracefulStop()
 	}
 	return nil
 }

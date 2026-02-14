@@ -13,8 +13,8 @@ import (
 
 func MarketFromProto(market *proto.Market) (models.Market, error) {
 	var deletedAt *time.Time
-	if ts := market.GetDeletedAt(); ts != nil {
-		t := ts.AsTime()
+	if delTime := market.GetDeletedAt(); delTime != nil {
+		t := delTime.AsTime()
 		deletedAt = &t
 	}
 

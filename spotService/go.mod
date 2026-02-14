@@ -4,9 +4,8 @@ go 1.25
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260214204149-f91beccc1dcc
+	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260214224154-851183829f2f
 	google.golang.org/grpc v1.78.0
-	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -22,4 +21,5 @@ require (
 	golang.org/x/text v0.33.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260203192932-546029d2fa20 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260203192932-546029d2fa20 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )
