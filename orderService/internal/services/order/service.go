@@ -44,7 +44,7 @@ func (s *Service) CreateOrder(
 	ctx context.Context,
 	userID uuid.UUID,
 	marketID uuid.UUID,
-	orderType models.Type,
+	orderType models.OrderType,
 	price models.Decimal,
 	quantity int64,
 ) (uuid.UUID, models.OrderStatus, error) {
@@ -67,7 +67,7 @@ func (s *Service) CreateOrder(
 	}
 
 	orderID := uuid.New()
-	status := models.OrderStatusCreated
+	orderStatus := models.OrderStatusCreated
 
 	newOrder := models.Order{
 		ID:        orderID,
@@ -76,7 +76,7 @@ func (s *Service) CreateOrder(
 		Type:      orderType,
 		Price:     price,
 		Quantity:  quantity,
-		Status:    status,
+		Status:    orderStatus,
 		CreatedAt: time.Now().UTC(),
 	}
 	if err := s.saver.SaveOrder(ctx, newOrder); err != nil {
@@ -87,7 +87,7 @@ func (s *Service) CreateOrder(
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
-	return orderID, status, nil
+	return orderID, orderStatus, nil
 }
 
 func (s *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {

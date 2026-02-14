@@ -23,14 +23,14 @@ type Order interface {
 	CreateOrder(ctx context.Context,
 		userID uuid.UUID,
 		marketID uuid.UUID,
-		orderType models.Type,
+		orderType models.OrderType,
 		price models.Decimal,
 		quantity int64,
-	) (uuid.UUID, models.Status, error)
+	) (uuid.UUID, models.OrderStatus, error)
 
 	GetOrderStatus(ctx context.Context,
 		orderId, userID uuid.UUID,
-	) (models.Status, error)
+	) (models.OrderStatus, error)
 }
 
 type serverAPI struct {
@@ -54,13 +54,16 @@ func (s *serverAPI) CreateOrder(
 
 	userID, _ := uuid.Parse(req.GetUserId())
 	marketID, _ := uuid.Parse(req.GetMarketId())
+	orderType := mapper.TypeFromProto(req.GetOrderType())
+	orderPrice := req.GetPrice()
+	orderQuantity := req.GetQuantity()
 
 	orderID, stat, err := s.svc.CreateOrder(ctx,
 		userID,
 		marketID,
-		mapper.TypeFromProto(req.GetOrderType()),
-		req.GetPrice(),
-		req.GetQuantity(),
+		orderType,
+		orderPrice,
+		orderQuantity,
 	)
 
 	if err != nil {
