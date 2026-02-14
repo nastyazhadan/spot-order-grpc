@@ -4,8 +4,7 @@ import (
 	"context"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/mapper"
-
+	"github.com/nastyazhadan/spot-order-grpc/shared/models/mapper"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
