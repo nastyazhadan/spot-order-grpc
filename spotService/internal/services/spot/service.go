@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
 type Service struct {

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
 type MarketStore struct {

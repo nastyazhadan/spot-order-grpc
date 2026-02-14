@@ -8,17 +8,17 @@ import (
 func TypeFromProto(orderType proto.OrderType) models.Type {
 	switch orderType {
 	case proto.OrderType_TYPE_LIMIT:
-		return models.TypeLimit
+		return models.OrderTypeLimit
 	default:
-		return models.TypeUnspecified
+		return models.OrderTypeUnspecified
 	}
 }
 
-func StatusToProto(orderStatus models.Status) proto.OrderStatus {
+func StatusToProto(orderStatus models.OrderStatus) proto.OrderStatus {
 	switch orderStatus {
-	case models.StatusCreated:
+	case models.OrderStatusCreated:
 		return proto.OrderStatus_STATUS_CREATED
-	case models.StatusCancelled:
+	case models.OrderStatusCancelled:
 		return proto.OrderStatus_STATUS_CANCELLED
 	default:
 		return proto.OrderStatus_STATUS_UNSPECIFIED

@@ -1,8 +1,7 @@
 package mapper
 
 import (
-	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
-
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

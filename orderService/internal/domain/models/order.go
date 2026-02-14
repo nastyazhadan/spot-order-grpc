@@ -11,26 +11,31 @@ type Order struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID
 	MarketID  uuid.UUID
-	Type      Type
+	Type      OrderType
 	Price     Decimal
 	Quantity  int64
-	Status    Status
+	Status    OrderStatus
 	CreatedAt time.Time
 }
 
-type Type uint8
+type OrderType uint8
 
 const (
-	TypeUnspecified Type = iota
-	TypeLimit
+	OrderTypeUnspecified OrderType = iota
+	OrderTypeLimit
+	OrderTypeMarket
+	OrderTypeStopLoss
+	OrderTypeTakeProfit
 )
 
-type Status uint8
+type OrderStatus uint8
 
 const (
-	StatusUnspecified Status = iota
-	StatusCreated
-	StatusCancelled
+	OrderStatusUnspecified OrderStatus = iota
+	OrderStatusCreated
+	OrderStatusPending
+	OrderStatusFilled
+	OrderStatusCancelled
 )
 
 type Decimal *decimal.Decimal

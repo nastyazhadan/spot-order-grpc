@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 
-	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/mapper"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"

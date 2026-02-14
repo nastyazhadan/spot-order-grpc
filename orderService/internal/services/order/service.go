@@ -9,6 +9,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/storage"
+	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 
 	"github.com/google/uuid"
 )
@@ -28,7 +29,7 @@ type Getter interface {
 }
 
 type MarketViewer interface {
-	ViewMarkets(ctx context.Context, roles []int32) ([]models.Market, error)
+	ViewMarkets(ctx context.Context, roles []int32) ([]sharedModels.Market, error)
 }
 
 func NewService(s Saver, g Getter, mv MarketViewer) *Service {
@@ -46,12 +47,12 @@ func (s *Service) CreateOrder(
 	orderType models.Type,
 	price models.Decimal,
 	quantity int64,
-) (uuid.UUID, models.Status, error) {
+) (uuid.UUID, models.OrderStatus, error) {
 	const op = "Service.CreateOrder"
 
 	markets, err := s.marketViewer.ViewMarkets(ctx, []int32{})
 	if err != nil {
-		return uuid.Nil, models.StatusCancelled, fmt.Errorf("%s: %w", op, err)
+		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
 	found := false
@@ -62,11 +63,11 @@ func (s *Service) CreateOrder(
 		}
 	}
 	if !found {
-		return uuid.Nil, models.StatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrMarketsNotFound)
+		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrMarketsNotFound)
 	}
 
 	orderID := uuid.New()
-	status := models.StatusCreated
+	status := models.OrderStatusCreated
 
 	newOrder := models.Order{
 		ID:        orderID,
@@ -80,29 +81,29 @@ func (s *Service) CreateOrder(
 	}
 	if err := s.saver.SaveOrder(ctx, newOrder); err != nil {
 		if errors.Is(err, storageErrors.ErrOrderAlreadyExists) {
-			return uuid.Nil, models.StatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderAlreadyExists)
+			return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderAlreadyExists)
 		}
 
-		return uuid.Nil, models.StatusCancelled, fmt.Errorf("%s: %w", op, err)
+		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return orderID, status, nil
 }
 
-func (s *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.Status, error) {
+func (s *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
 	const op = "Service.GetOrderStatus"
 
 	result, err := s.getter.GetOrder(ctx, orderID)
 	if err != nil {
 		if errors.Is(err, storageErrors.ErrOrderNotFound) {
-			return models.StatusUnspecified, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderNotFound)
+			return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderNotFound)
 		}
 
-		return models.StatusUnspecified, fmt.Errorf("%s: %w", op, err)
+		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if result.UserID != userID {
-		return models.StatusUnspecified, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderNotFound)
+		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderNotFound)
 	}
 
 	return result.Status, nil
