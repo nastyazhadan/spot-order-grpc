@@ -22,7 +22,7 @@ func NewOrderStore() *OrderStore {
 	}
 }
 
-func (s *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
+func (store *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 	const op = "storage.OrderStore.SaveOrder"
 
 	select {
@@ -31,18 +31,18 @@ func (s *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 	default:
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	store.mu.Lock()
+	defer store.mu.Unlock()
 
-	if _, found := s.order[order.ID]; found {
+	if _, found := store.order[order.ID]; found {
 		return fmt.Errorf("%s: %w", op, storage.ErrOrderAlreadyExists)
 	}
 
-	s.order[order.ID] = order
+	store.order[order.ID] = order
 	return nil
 }
 
-func (s *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, error) {
+func (store *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, error) {
 	const op = "storage.OrderStore.GetOrder"
 
 	select {
@@ -51,9 +51,9 @@ func (s *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 	default:
 	}
 
-	s.mu.RLock()
-	result, found := s.order[id]
-	s.mu.RUnlock()
+	store.mu.RLock()
+	result, found := store.order[id]
+	store.mu.RUnlock()
 
 	if !found {
 		return models.Order{}, fmt.Errorf("%s: %w", op, storage.ErrOrderNotFound)

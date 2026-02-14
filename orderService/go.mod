@@ -4,7 +4,7 @@ go 1.25
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260214204149-f91beccc1dcc
+	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260214214235-cf4c3b59c2af
 	google.golang.org/genproto v0.0.0-20260209200024-4cfbd4190f57
 	google.golang.org/grpc v1.78.0
 )

@@ -40,7 +40,7 @@ func NewService(s Saver, g Getter, mv MarketViewer) *Service {
 	}
 }
 
-func (s *Service) CreateOrder(
+func (service *Service) CreateOrder(
 	ctx context.Context,
 	userID uuid.UUID,
 	marketID uuid.UUID,
@@ -50,14 +50,14 @@ func (s *Service) CreateOrder(
 ) (uuid.UUID, models.OrderStatus, error) {
 	const op = "Service.CreateOrder"
 
-	markets, err := s.marketViewer.ViewMarkets(ctx, []int32{})
+	markets, err := service.marketViewer.ViewMarkets(ctx, []int32{})
 	if err != nil {
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
 	found := false
-	for _, m := range markets {
-		if m.ID == marketID {
+	for _, market := range markets {
+		if market.ID == marketID {
 			found = true
 			break
 		}
@@ -79,7 +79,7 @@ func (s *Service) CreateOrder(
 		Status:    orderStatus,
 		CreatedAt: time.Now().UTC(),
 	}
-	if err := s.saver.SaveOrder(ctx, newOrder); err != nil {
+	if err := service.saver.SaveOrder(ctx, newOrder); err != nil {
 		if errors.Is(err, storageErrors.ErrOrderAlreadyExists) {
 			return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderAlreadyExists)
 		}
@@ -90,10 +90,10 @@ func (s *Service) CreateOrder(
 	return orderID, orderStatus, nil
 }
 
-func (s *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
+func (service *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
 	const op = "Service.GetOrderStatus"
 
-	result, err := s.getter.GetOrder(ctx, orderID)
+	result, err := service.getter.GetOrder(ctx, orderID)
 	if err != nil {
 		if errors.Is(err, storageErrors.ErrOrderNotFound) {
 			return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderNotFound)

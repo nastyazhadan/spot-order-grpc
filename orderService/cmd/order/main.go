@@ -8,10 +8,10 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "127.0.0.1:50051", "order server address")
+	address := flag.String("addr", "127.0.0.1:50051", "order server address")
 	flag.Parse()
 
-	app, err := order.New(*addr)
+	app, err := order.New(*address)
 	if err != nil {
 		log.Fatal(err)
 	}

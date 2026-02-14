@@ -35,30 +35,30 @@ type Order interface {
 
 type serverAPI struct {
 	proto.UnimplementedOrderServiceServer
-	svc Order
+	service Order
 }
 
-func Register(grpc *grpc.Server, svc Order) {
+func Register(grpc *grpc.Server, service Order) {
 	proto.RegisterOrderServiceServer(grpc, &serverAPI{
-		svc: svc,
+		service: service,
 	})
 }
 
-func (s *serverAPI) CreateOrder(
+func (server *serverAPI) CreateOrder(
 	ctx context.Context,
-	req *proto.CreateOrderRequest,
+	request *proto.CreateOrderRequest,
 ) (*proto.CreateOrderResponse, error) {
-	if err := validateError(req); err != nil {
+	if err := validateErrorCreate(request); err != nil {
 		return nil, err
 	}
 
-	userID, _ := uuid.Parse(req.GetUserId())
-	marketID, _ := uuid.Parse(req.GetMarketId())
-	orderType := mapper.TypeFromProto(req.GetOrderType())
-	orderPrice := req.GetPrice()
-	orderQuantity := req.GetQuantity()
+	userID, _ := uuid.Parse(request.GetUserId())
+	marketID, _ := uuid.Parse(request.GetMarketId())
+	orderType := mapper.TypeFromProto(request.GetOrderType())
+	orderPrice := request.GetPrice()
+	orderQuantity := request.GetQuantity()
 
-	orderID, stat, err := s.svc.CreateOrder(ctx,
+	orderID, orderStatus, err := server.service.CreateOrder(ctx,
 		userID,
 		marketID,
 		orderType,
@@ -67,72 +67,54 @@ func (s *serverAPI) CreateOrder(
 	)
 
 	if err != nil {
-		switch {
-		case errors.Is(err, serviceErrors.ErrOrderAlreadyExists):
-			return nil, status.Error(codes.AlreadyExists, err.Error())
-		case errors.Is(err, serviceErrors.ErrMarketsNotFound):
-			return nil, status.Error(codes.NotFound, err.Error())
-		default:
-			return nil, status.Error(codes.Internal, "internal error")
-		}
+		serviceError := validateServiceError(err)
+		return nil, serviceError
 	}
 
 	return &proto.CreateOrderResponse{
 		OrderId: orderID.String(),
-		Status:  mapper.StatusToProto(stat),
+		Status:  mapper.StatusToProto(orderStatus),
 	}, nil
 
 }
 
-func (s *serverAPI) GetOrderStatus(
+func (server *serverAPI) GetOrderStatus(
 	ctx context.Context,
-	req *proto.GetOrderStatusRequest,
+	request *proto.GetOrderStatusRequest,
 ) (*proto.GetOrderStatusResponse, error) {
-	if req.GetOrderId() == "" || req.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "order_id and user_id are required")
+	if err := validateErrorGet(request); err != nil {
+		return nil, err
 	}
 
-	orderID, err := uuid.Parse(req.GetOrderId())
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "order_id must be UUID")
-	}
+	orderID, _ := uuid.Parse(request.GetOrderId())
+	userID, _ := uuid.Parse(request.GetUserId())
+	orderStatus, err := server.service.GetOrderStatus(ctx, orderID, userID)
 
-	userID, err := uuid.Parse(req.GetUserId())
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "user_id must be UUID")
-	}
-
-	stat, err := s.svc.GetOrderStatus(ctx, orderID, userID)
-	if err != nil {
-		switch {
-		case errors.Is(err, serviceErrors.ErrOrderNotFound):
-			return nil, status.Error(codes.NotFound, err.Error())
-		default:
-			return nil, status.Error(codes.Internal, "internal error")
-		}
+		serviceError := validateServiceError(err)
+		return nil, serviceError
 	}
 
 	return &proto.GetOrderStatusResponse{
-		Status: mapper.StatusToProto(stat),
+		Status: mapper.StatusToProto(orderStatus),
 	}, nil
 }
 
-func validateError(req *proto.CreateOrderRequest) error {
-	if req.GetUserId() == "" || req.GetMarketId() == "" {
+func validateErrorCreate(request *proto.CreateOrderRequest) error {
+	if request.GetUserId() == "" || request.GetMarketId() == "" {
 		return status.Error(codes.InvalidArgument, "user_id and market_id are required")
 	}
-	if _, err := uuid.Parse(req.GetUserId()); err != nil {
+	if _, err := uuid.Parse(request.GetUserId()); err != nil {
 		return status.Error(codes.InvalidArgument, "user_id must be UUID")
 	}
-
-	if req.GetOrderType() == proto.OrderType_TYPE_UNSPECIFIED {
+	if request.GetOrderType() == proto.OrderType_TYPE_UNSPECIFIED {
 		return status.Error(codes.InvalidArgument, "order_type is required")
 	}
-	if req.GetPrice() == nil || req.GetPrice().GetValue() == "" {
+
+	if request.GetPrice() == nil || request.GetPrice().GetValue() == "" {
 		return status.Error(codes.InvalidArgument, "price is required")
 	}
-
-	price, err := strconv.ParseFloat(req.GetPrice().GetValue(), 64)
+	price, err := strconv.ParseFloat(request.GetPrice().GetValue(), 64)
 	if err != nil || math.IsNaN(price) || math.IsInf(price, 0) {
 		return status.Error(codes.InvalidArgument, "price must be a number")
 	}
@@ -140,8 +122,39 @@ func validateError(req *proto.CreateOrderRequest) error {
 		return status.Error(codes.InvalidArgument, "price must be > 0")
 	}
 
-	if req.GetQuantity() <= EmptyValue {
+	if request.GetQuantity() <= EmptyValue {
 		return status.Error(codes.InvalidArgument, "quantity must be > 0")
+	}
+
+	return nil
+}
+
+func validateServiceError(err error) error {
+	switch {
+	case errors.Is(err, serviceErrors.ErrOrderAlreadyExists):
+		return status.Error(codes.AlreadyExists, err.Error())
+	case errors.Is(err, serviceErrors.ErrMarketsNotFound):
+		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, serviceErrors.ErrOrderNotFound):
+		return status.Error(codes.NotFound, err.Error())
+	default:
+		return status.Error(codes.Internal, "internal error")
+	}
+}
+
+func validateErrorGet(request *proto.GetOrderStatusRequest) error {
+	if request.GetOrderId() == "" || request.GetUserId() == "" {
+		return status.Error(codes.InvalidArgument, "order_id and user_id are required")
+	}
+
+	_, err := uuid.Parse(request.GetOrderId())
+	if err != nil {
+		return status.Error(codes.InvalidArgument, "order_id must be UUID")
+	}
+
+	_, err = uuid.Parse(request.GetUserId())
+	if err != nil {
+		return status.Error(codes.InvalidArgument, "user_id must be UUID")
 	}
 
 	return nil

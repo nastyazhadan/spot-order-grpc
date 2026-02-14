@@ -8,10 +8,10 @@ import (
 	"os"
 	"time"
 
-	grpcClient "github.com/nastyazhadan/spot-order-grpc/orderService/internal/client/grpc"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	storage "github.com/nastyazhadan/spot-order-grpc/orderService/internal/storage/memory"
+	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 
 	"google.golang.org/grpc"
@@ -23,89 +23,89 @@ type App struct {
 	grpcServer *grpc.Server
 	listener   net.Listener
 
-	addr     string
-	spotAddr string
+	address     string
+	spotAddress string
 
-	spotConn *grpc.ClientConn
+	spotConnection *grpc.ClientConn
 }
 
-func New(addr string) (*App, error) {
-	if addr == "" {
-		addr = "127.0.0.1:50051"
+func New(address string) (*App, error) {
+	if address == "" {
+		address = "127.0.0.1:50051"
 	}
 
-	spotAddr := os.Getenv("SPOT_INSTRUMENT_ADDR")
-	if spotAddr == "" {
-		spotAddr = "127.0.0.1:50052"
+	spotAddress := os.Getenv("SPOT_INSTRUMENT_ADDR")
+	if spotAddress == "" {
+		spotAddress = "127.0.0.1:50052"
 	}
 
 	return &App{
-		addr:     addr,
-		spotAddr: spotAddr,
+		address:     address,
+		spotAddress: spotAddress,
 	}, nil
 }
 
-func (a *App) Start() error {
-	lis, err := net.Listen("tcp", a.addr)
+func (app *App) Start() error {
+	listener, err := net.Listen("tcp", app.address)
 	if err != nil {
-		return fmt.Errorf("listen %s: %w", a.addr, err)
+		return fmt.Errorf("listen %s: %w", app.address, err)
 	}
-	a.listener = lis
+	app.listener = listener
 
-	spotConn, err := grpc.NewClient(
-		a.spotAddr,
+	spotConnection, err := grpc.NewClient(
+		app.spotAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return fmt.Errorf("dial spot instrument %s: %w", a.spotAddr, err)
+		return fmt.Errorf("dial spot instrument %s: %w", app.spotAddress, err)
 	}
-	a.spotConn = spotConn
+	app.spotConnection = spotConnection
 
-	marketClient := grpcClient.New(a.spotConn)
+	marketClient := grpcClient.New(app.spotConnection)
 
-	store := storage.NewOrderStore()
-	useCase := svcOrder.NewService(store, store, marketClient)
+	orderStore := storage.NewOrderStore()
+	useCase := svcOrder.NewService(orderStore, orderStore, marketClient)
 
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return fmt.Errorf("proto validate: %w", err)
 	}
 
-	a.grpcServer = grpc.NewServer(
+	app.grpcServer = grpc.NewServer(
 		grpc.UnaryInterceptor(validator),
 	)
 
-	grpcOrder.Register(a.grpcServer, useCase)
+	grpcOrder.Register(app.grpcServer, useCase)
 
-	reflection.Register(a.grpcServer) // для отладки
+	reflection.Register(app.grpcServer) // для отладки
 
 	{
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
 		if _, err := marketClient.ViewMarkets(ctx, []int32{}); err != nil {
-			return fmt.Errorf("spot instrument not reachable at %s: %w", a.spotAddr, err)
+			return fmt.Errorf("spot instrument not reachable at %s: %w", app.spotAddress, err)
 		}
 	}
 
-	log.Printf("OrderService listening on %s (spot instrument: %s)", a.addr, a.spotAddr)
+	log.Printf("OrderService listening on %s (spot instrument: %s)", app.address, app.spotAddress)
 
-	if err := a.grpcServer.Serve(a.listener); err != nil {
+	if err := app.grpcServer.Serve(app.listener); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}
 
 	return nil
 }
 
-func (a *App) Stop() error {
-	if a.grpcServer != nil {
-		a.grpcServer.GracefulStop()
+func (app *App) Stop() error {
+	if app.grpcServer != nil {
+		app.grpcServer.GracefulStop()
 	}
-	if a.spotConn != nil {
-		_ = a.spotConn.Close()
+	if app.spotConnection != nil {
+		_ = app.spotConnection.Close()
 	}
-	if a.listener != nil {
-		_ = a.listener.Close()
+	if app.listener != nil {
+		_ = app.listener.Close()
 	}
 	return nil
 }
