@@ -1,4 +1,4 @@
-package grpc
+package spot
 
 import (
 	"context"
@@ -39,16 +39,12 @@ func (server *serverAPI) ViewMarkets(
 	request *proto.ViewMarketsRequest,
 ) (*proto.ViewMarketsResponse, error) {
 
-	roles := make([]models.UserRole, 0, len(request.GetUserRoles()))
-	for _, role := range request.GetUserRoles() {
-		if role == proto.UserRole_ROLE_UNSPECIFIED {
-			return nil, status.Error(codes.InvalidArgument, "user role not specified")
-		}
-
-		roles = append(roles, mapper.UserRoleFromProto(role))
+	userRoles, err := server.getUserRoles(request)
+	if err != nil {
+		return nil, err
 	}
 
-	markets, err := server.spotInstrument.ViewMarkets(ctx, roles)
+	markets, err := server.spotInstrument.ViewMarkets(ctx, userRoles)
 	if err != nil {
 		if errors.Is(err, serviceErrors.ErrMarketsNotFound) {
 			return nil, status.Error(codes.NotFound, err.Error())
@@ -68,4 +64,22 @@ func (server *serverAPI) ViewMarkets(
 	return &proto.ViewMarketsResponse{
 		Markets: out,
 	}, nil
+}
+
+func (server *serverAPI) getUserRoles(request *proto.ViewMarketsRequest) ([]models.UserRole, error) {
+	roles := request.GetUserRoles()
+	if len(roles) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "user roles are required")
+	}
+
+	userRoles := make([]models.UserRole, 0, len(roles))
+	for _, role := range roles {
+		if role == proto.UserRole_ROLE_UNSPECIFIED {
+			return nil, status.Error(codes.InvalidArgument, "user role not specified")
+		}
+
+		userRoles = append(userRoles, mapper.UserRoleFromProto(role))
+	}
+
+	return userRoles, nil
 }

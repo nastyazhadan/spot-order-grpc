@@ -6,7 +6,7 @@ import (
 	"net"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
-	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc"
+	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 	storage "github.com/nastyazhadan/spot-order-grpc/spotService/internal/storage/memory"
 

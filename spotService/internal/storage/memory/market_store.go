@@ -33,17 +33,33 @@ func (marketStore *MarketStore) fill() {
 		Enabled:   true,
 		DeletedAt: nil,
 	}
+
 	marketStore.markets["ETH"] = models.Market{
 		ID:        uuid.New(),
 		Name:      "ETH-USDT",
 		Enabled:   false,
 		DeletedAt: nil,
 	}
+
 	marketStore.markets["DOGE"] = models.Market{
 		ID:        uuid.New(),
 		Name:      "DOGE-USDT",
 		Enabled:   true,
 		DeletedAt: &now,
+	}
+
+	marketStore.markets["SOL"] = models.Market{
+		ID:        uuid.New(),
+		Name:      "SOL-USDT",
+		Enabled:   true,
+		DeletedAt: nil,
+	}
+
+	marketStore.markets["ADA"] = models.Market{
+		ID:        uuid.New(),
+		Name:      "ADA-USDT",
+		Enabled:   false,
+		DeletedAt: nil,
 	}
 }
 
