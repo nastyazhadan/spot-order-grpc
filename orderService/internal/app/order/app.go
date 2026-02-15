@@ -14,6 +14,7 @@ import (
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -89,7 +90,7 @@ func (app *App) Start() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
-		if _, err := marketClient.ViewMarkets(ctx, []int32{}); err != nil {
+		if _, err := marketClient.ViewMarkets(ctx, []models.UserRole{}); err != nil {
 			return fmt.Errorf("spot instrument not reachable at %s: %w", app.spotAddress, err)
 		}
 	}

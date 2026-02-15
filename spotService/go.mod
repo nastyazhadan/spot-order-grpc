@@ -2,9 +2,11 @@ module github.com/nastyazhadan/spot-order-grpc/spotService
 
 go 1.25.0
 
+replace github.com/nastyazhadan/spot-order-grpc/shared => ../shared
+
 require (
 	github.com/google/uuid v1.6.0
-	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260215172400-83c1dee8071a
+	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260215175453-bd1b6a4a4743
 	google.golang.org/grpc v1.79.1
 )
 
