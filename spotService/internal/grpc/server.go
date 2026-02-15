@@ -2,7 +2,10 @@ package grpc
 
 import (
 	"context"
+	"errors"
+	"sort"
 
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models/mapper"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
@@ -15,7 +18,7 @@ import (
 type SpotInstrument interface {
 	ViewMarkets(
 		ctx context.Context,
-		userRoles []int32,
+		userRoles []uint8,
 	) ([]models.Market, error)
 }
 
@@ -36,13 +39,20 @@ func (server *serverAPI) ViewMarkets(
 	request *proto.ViewMarketsRequest,
 ) (*proto.ViewMarketsResponse, error) {
 
-	roles := make([]int32, 0, len(request.GetUserRoles()))
+	roles := make([]uint8, 0, len(request.GetUserRoles()))
 	for _, role := range request.GetUserRoles() {
-		roles = append(roles, int32(role))
+		if role == proto.UserRole_ROLE_UNSPECIFIED {
+			return nil, status.Error(codes.InvalidArgument, "user role not specified")
+		}
+
+		roles = append(roles, mapper.UserRoleFromProto(role))
 	}
 
 	markets, err := server.spotInstrument.ViewMarkets(ctx, roles)
 	if err != nil {
+		if errors.Is(err, serviceErrors.ErrMarketsNotFound) {
+			return nil, status.Error(codes.NotFound, err.Error())
+		}
 		return nil, status.Error(codes.Internal, "internal error")
 	}
 
@@ -50,6 +60,10 @@ func (server *serverAPI) ViewMarkets(
 	for _, market := range markets {
 		out = append(out, mapper.MarketToProto(market))
 	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Name < out[j].Name
+	})
 
 	return &proto.ViewMarketsResponse{
 		Markets: out,
