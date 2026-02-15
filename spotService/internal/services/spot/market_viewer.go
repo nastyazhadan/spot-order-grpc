@@ -10,12 +10,12 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
-type Service struct {
-	marketViewer MarketViewer
-}
-
 type MarketViewer interface {
 	ListAll(ctx context.Context) ([]models.Market, error)
+}
+
+type Service struct {
+	marketViewer MarketViewer
 }
 
 func NewService(marketViewer MarketViewer) *Service {
