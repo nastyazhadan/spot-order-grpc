@@ -49,6 +49,7 @@ func (server *serverAPI) ViewMarkets(
 		if errors.Is(err, serviceErrors.ErrMarketsNotFound) {
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
+
 		return nil, status.Error(codes.Internal, "internal error")
 	}
 
@@ -68,11 +69,13 @@ func (server *serverAPI) ViewMarkets(
 
 func (server *serverAPI) getUserRoles(request *proto.ViewMarketsRequest) ([]models.UserRole, error) {
 	roles := request.GetUserRoles()
+
 	if len(roles) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "user roles are required")
 	}
 
 	userRoles := make([]models.UserRole, 0, len(roles))
+
 	for _, role := range roles {
 		if role == proto.UserRole_ROLE_UNSPECIFIED {
 			return nil, status.Error(codes.InvalidArgument, "user role not specified")

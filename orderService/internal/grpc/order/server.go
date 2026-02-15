@@ -104,9 +104,11 @@ func validateErrorCreate(request *proto.CreateOrderRequest) error {
 	if request.GetUserId() == "" || request.GetMarketId() == "" {
 		return status.Error(codes.InvalidArgument, "user_id and market_id are required")
 	}
+
 	if _, err := uuid.Parse(request.GetUserId()); err != nil {
 		return status.Error(codes.InvalidArgument, "user_id must be UUID")
 	}
+
 	if request.GetOrderType() == proto.OrderType_TYPE_UNSPECIFIED {
 		return status.Error(codes.InvalidArgument, "order_type is required")
 	}
@@ -114,10 +116,12 @@ func validateErrorCreate(request *proto.CreateOrderRequest) error {
 	if request.GetPrice() == nil || request.GetPrice().GetValue() == "" {
 		return status.Error(codes.InvalidArgument, "price is required")
 	}
+
 	price, err := strconv.ParseFloat(request.GetPrice().GetValue(), 64)
 	if err != nil || math.IsNaN(price) || math.IsInf(price, 0) {
 		return status.Error(codes.InvalidArgument, "price must be a number")
 	}
+
 	if price <= EmptyValue {
 		return status.Error(codes.InvalidArgument, "price must be > 0")
 	}
@@ -133,12 +137,16 @@ func validateServiceError(err error) error {
 	switch {
 	case errors.Is(err, serviceErrors.ErrCreatingOrderNotRequired):
 		return status.Error(codes.InvalidArgument, err.Error())
+
 	case errors.Is(err, serviceErrors.ErrOrderAlreadyExists):
 		return status.Error(codes.AlreadyExists, err.Error())
+
 	case errors.Is(err, serviceErrors.ErrMarketsNotFound):
 		return status.Error(codes.NotFound, err.Error())
+
 	case errors.Is(err, serviceErrors.ErrOrderNotFound):
 		return status.Error(codes.NotFound, err.Error())
+
 	default:
 		return status.Error(codes.Internal, "internal error")
 	}
