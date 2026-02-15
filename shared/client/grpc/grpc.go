@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"time"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models/mapper"
@@ -10,8 +9,6 @@ import (
 
 	"google.golang.org/grpc"
 )
-
-const timeout = time.Second * 3
 
 type Client struct {
 	api proto.SpotInstrumentServiceClient
@@ -23,17 +20,11 @@ func New(connection *grpc.ClientConn) *Client {
 	}
 }
 
-func (client *Client) ViewMarkets(ctx context.Context, roles []int32) ([]models.Market, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+func (client *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models.Market, error) {
 
 	userRoles := make([]proto.UserRole, 0, len(roles))
 	for _, role := range roles {
-		userRoles = append(userRoles, proto.UserRole(role))
-	}
-
-	if len(userRoles) == 0 {
-		userRoles = []proto.UserRole{proto.UserRole_ROLE_VIEWER}
+		userRoles = append(userRoles, mapper.UserRoleToProto(role))
 	}
 
 	response, err := client.api.ViewMarkets(ctx, &proto.ViewMarketsRequest{

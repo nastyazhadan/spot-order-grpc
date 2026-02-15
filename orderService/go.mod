@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/google/uuid v1.6.0
 	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260215172400-83c1dee8071a
+	github.com/nastyazhadan/spot-order-grpc/spotService v0.0.0-20260215172833-789f5ed3a44a
 	google.golang.org/genproto v0.0.0-20260209200024-4cfbd4190f57
 	google.golang.org/grpc v1.79.1
 )
