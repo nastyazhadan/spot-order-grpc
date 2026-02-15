@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/storage"
@@ -25,7 +24,7 @@ func NewService(marketViewer MarketViewer) *Service {
 	}
 }
 
-func (service *Service) ViewMarkets(ctx context.Context, userRoles []uint8) ([]models.Market, error) {
+func (service *Service) ViewMarkets(ctx context.Context, userRoles []models.UserRole) ([]models.Market, error) {
 	const op = "service.MarketViewer.ViewMarkets"
 
 	markets, err := service.marketViewer.ListAll(ctx)
@@ -41,12 +40,12 @@ func (service *Service) ViewMarkets(ctx context.Context, userRoles []uint8) ([]m
 	isViewer := false
 
 	for _, userRole := range userRoles {
-		switch models.UserRole(userRole) {
-		case models.RoleAdmin:
+		switch userRole {
+		case models.UserRoleAdmin:
 			isAdmin = true
-		case models.RoleUser:
+		case models.UserRoleUser:
 			isUser = true
-		case models.RoleViewer:
+		case models.UserRoleViewer:
 			isViewer = true
 		default:
 		}

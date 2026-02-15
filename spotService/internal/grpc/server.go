@@ -18,7 +18,7 @@ import (
 type SpotInstrument interface {
 	ViewMarkets(
 		ctx context.Context,
-		userRoles []uint8,
+		userRoles []models.UserRole,
 	) ([]models.Market, error)
 }
 
@@ -39,7 +39,7 @@ func (server *serverAPI) ViewMarkets(
 	request *proto.ViewMarketsRequest,
 ) (*proto.ViewMarketsResponse, error) {
 
-	roles := make([]uint8, 0, len(request.GetUserRoles()))
+	roles := make([]models.UserRole, 0, len(request.GetUserRoles()))
 	for _, role := range request.GetUserRoles() {
 		if role == proto.UserRole_ROLE_UNSPECIFIED {
 			return nil, status.Error(codes.InvalidArgument, "user role not specified")
