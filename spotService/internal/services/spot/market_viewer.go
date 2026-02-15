@@ -53,16 +53,19 @@ func (service *Service) ViewMarkets(ctx context.Context, userRoles []models.User
 
 	out := make([]models.Market, 0, len(markets))
 	for _, market := range markets {
+		// Админ видит все рынки (включая disabled и deleted)
 		if isAdmin {
 			out = append(out, market)
 			continue
 		}
 
+		// Viewer видит все неудаленные рынки (включая disabled)
 		if isViewer && market.DeletedAt == nil {
 			out = append(out, market)
 			continue
 		}
 
+		// User видит только enabled и неудаленные рынки
 		if isUser && market.DeletedAt == nil && market.Enabled {
 			out = append(out, market)
 			continue

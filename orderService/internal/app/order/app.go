@@ -12,6 +12,7 @@ import (
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	storage "github.com/nastyazhadan/spot-order-grpc/orderService/internal/storage/memory"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
+	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 
 	"google.golang.org/grpc"
@@ -71,8 +72,13 @@ func (app *App) Start() error {
 		return fmt.Errorf("proto validate: %w", err)
 	}
 
+	logger := logInterceptor.LoggerInterceptor()
+
 	app.grpcServer = grpc.NewServer(
-		grpc.UnaryInterceptor(validator),
+		grpc.ChainUnaryInterceptor(
+			validator,
+			logger,
+		),
 	)
 
 	grpcOrder.Register(app.grpcServer, useCase)

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 
+	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
@@ -47,8 +48,17 @@ func (app *App) Start() error {
 		return fmt.Errorf("proto validate: %w", err)
 	}
 
+	logger := logInterceptor.LoggerInterceptor()
+
 	app.grpcServer = grpc.NewServer(
 		grpc.UnaryInterceptor(validator),
+	)
+
+	app.grpcServer = grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			validator,
+			logger,
+		),
 	)
 
 	grpcSpot.Register(app.grpcServer, useCase)
