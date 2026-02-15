@@ -8,8 +8,8 @@ import (
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
+	storage "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/memory"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
-	storage "github.com/nastyazhadan/spot-order-grpc/spotService/internal/storage/memory"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"

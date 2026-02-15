@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	"github.com/nastyazhadan/spot-order-grpc/shared/errors/storage"
+	"github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 
 	"github.com/google/uuid"
 )
@@ -23,7 +23,7 @@ func NewOrderStore() *OrderStore {
 }
 
 func (store *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
-	const op = "storage.OrderStore.SaveOrder"
+	const op = "repository.OrderStore.SaveOrder"
 
 	select {
 	case <-ctx.Done():
@@ -35,7 +35,7 @@ func (store *OrderStore) SaveOrder(ctx context.Context, order models.Order) erro
 	defer store.mu.Unlock()
 
 	if _, found := store.order[order.ID]; found {
-		return fmt.Errorf("%s: %w", op, storage.ErrOrderAlreadyExists)
+		return fmt.Errorf("%s: %w", op, repository.ErrOrderAlreadyExists)
 	}
 
 	store.order[order.ID] = order
@@ -43,7 +43,7 @@ func (store *OrderStore) SaveOrder(ctx context.Context, order models.Order) erro
 }
 
 func (store *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, error) {
-	const op = "storage.OrderStore.GetOrder"
+	const op = "repository.OrderStore.GetOrder"
 
 	select {
 	case <-ctx.Done():
@@ -56,7 +56,7 @@ func (store *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Ord
 	store.mu.RUnlock()
 
 	if !found {
-		return models.Order{}, fmt.Errorf("%s: %w", op, storage.ErrOrderNotFound)
+		return models.Order{}, fmt.Errorf("%s: %w", op, repository.ErrOrderNotFound)
 	}
 
 	return result, nil

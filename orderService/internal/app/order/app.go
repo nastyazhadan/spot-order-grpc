@@ -9,8 +9,8 @@ import (
 	"time"
 
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
+	storage "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/memory"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
-	storage "github.com/nastyazhadan/spot-order-grpc/orderService/internal/storage/memory"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"

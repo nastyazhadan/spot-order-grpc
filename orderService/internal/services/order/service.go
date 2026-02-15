@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
-	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/storage"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 

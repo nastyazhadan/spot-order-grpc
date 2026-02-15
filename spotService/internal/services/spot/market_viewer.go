@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
-	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/storage"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
