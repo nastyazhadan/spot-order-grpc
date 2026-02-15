@@ -77,7 +77,7 @@ func (marketStore *MarketStore) ListAll(ctx context.Context) ([]models.Market, e
 
 	marketsCount := len(marketStore.markets)
 	if marketsCount == 0 {
-		return []models.Market{}, fmt.Errorf("%s: %w", op, repository.ErrMarketStoreIsEmpty)
+		return nil, fmt.Errorf("%s: %w", op, repository.ErrMarketStoreIsEmpty)
 	}
 
 	out := make([]models.Market, 0, marketsCount)

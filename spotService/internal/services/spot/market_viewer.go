@@ -30,8 +30,9 @@ func (service *Service) ViewMarkets(ctx context.Context, userRoles []models.User
 	markets, err := service.marketViewer.ListAll(ctx)
 	if err != nil {
 		if errors.Is(err, storageErrors.ErrMarketStoreIsEmpty) {
-			return []models.Market{}, serviceErrors.ErrMarketsNotFound
+			return nil, serviceErrors.ErrMarketsNotFound
 		}
+
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
