@@ -131,6 +131,8 @@ func validateErrorCreate(request *proto.CreateOrderRequest) error {
 
 func validateServiceError(err error) error {
 	switch {
+	case errors.Is(err, serviceErrors.ErrCreatingOrderNotRequired):
+		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, serviceErrors.ErrOrderAlreadyExists):
 		return status.Error(codes.AlreadyExists, err.Error())
 	case errors.Is(err, serviceErrors.ErrMarketsNotFound):

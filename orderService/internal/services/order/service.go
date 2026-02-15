@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/storage"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
-
-	"github.com/google/uuid"
 )
 
 type Service struct {
@@ -29,7 +28,7 @@ type Getter interface {
 }
 
 type MarketViewer interface {
-	ViewMarkets(ctx context.Context, roles []int32) ([]sharedModels.Market, error)
+	ViewMarkets(ctx context.Context, roles []sharedModels.UserRole) ([]sharedModels.Market, error)
 }
 
 func NewService(s Saver, g Getter, mv MarketViewer) *Service {
@@ -50,7 +49,12 @@ func (service *Service) CreateOrder(
 ) (uuid.UUID, models.OrderStatus, error) {
 	const op = "Service.CreateOrder"
 
-	markets, err := service.marketViewer.ViewMarkets(ctx, []int32{})
+	currentUserRole := sharedModels.UserRoleUser // Заглушка
+	if currentUserRole != sharedModels.UserRoleUser {
+		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrCreatingOrderNotRequired)
+	}
+
+	markets, err := service.marketViewer.ViewMarkets(ctx, []sharedModels.UserRole{currentUserRole})
 	if err != nil {
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
