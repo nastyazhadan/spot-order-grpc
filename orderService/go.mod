@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260215154931-065a71ab90a1
+	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260215172400-83c1dee8071a
 	google.golang.org/genproto v0.0.0-20260209200024-4cfbd4190f57
 	google.golang.org/grpc v1.79.1
 )
@@ -15,7 +15,6 @@ require (
 	cel.dev/expr v0.25.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/google/cel-go v0.27.0 // indirect
-	github.com/stoewer/go-strcase v1.3.1 // indirect
 	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a // indirect
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
