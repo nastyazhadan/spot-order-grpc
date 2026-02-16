@@ -5,8 +5,10 @@ go 1.25.0
 replace github.com/nastyazhadan/spot-order-grpc/shared => ../shared
 
 require (
+	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/google/uuid v1.6.0
 	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260215175453-bd1b6a4a4743
+	github.com/stretchr/testify v1.11.1
 	google.golang.org/genproto v0.0.0-20260209200024-4cfbd4190f57
 	google.golang.org/grpc v1.79.1
 )
@@ -16,7 +18,10 @@ require (
 	buf.build/go/protovalidate v1.1.2 // indirect
 	cel.dev/expr v0.25.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/cel-go v0.27.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a // indirect
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
@@ -24,4 +29,5 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260209200024-4cfbd4190f57 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

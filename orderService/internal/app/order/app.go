@@ -9,7 +9,7 @@ import (
 	"time"
 
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
-	storage "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/memory"
+	storageOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/memory"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
@@ -65,9 +65,6 @@ func (app *App) Start() error {
 
 	marketClient := grpcClient.New(app.spotConnection)
 
-	orderStore := storage.NewOrderStore()
-	useCase := svcOrder.NewService(orderStore, orderStore, marketClient)
-
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return fmt.Errorf("proto validate: %w", err)
@@ -82,6 +79,8 @@ func (app *App) Start() error {
 		),
 	)
 
+	orderStore := storageOrder.NewOrderStore()
+	useCase := svcOrder.NewService(orderStore, orderStore, marketClient)
 	grpcOrder.Register(app.grpcServer, useCase)
 
 	reflection.Register(app.grpcServer) // для отладки
@@ -95,11 +94,14 @@ func (app *App) Start() error {
 		}
 	}
 
-	log.Printf("OrderService listening on %s (spot instrument: %s)", app.address, app.spotAddress)
+	go func() {
+		log.Printf("OrderService listening on %s (spot instrument: %s)", app.address, app.spotAddress)
 
-	if err := app.grpcServer.Serve(app.listener); err != nil {
-		return fmt.Errorf("serve: %w", err)
-	}
+		if err := app.grpcServer.Serve(app.listener); err != nil {
+			log.Printf("failed to serve: %v\n", err)
+			return
+		}
+	}()
 
 	return nil
 }

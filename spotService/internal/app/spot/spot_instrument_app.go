@@ -8,7 +8,7 @@ import (
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
-	storage "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/memory"
+	storageSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/memory"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 
 	"google.golang.org/grpc"
@@ -38,11 +38,6 @@ func (app *App) Start() error {
 	}
 	app.listener = listener
 
-	marketStore := storage.NewMarketStore()
-	useCase := svcSpot.NewService(marketStore)
-
-	app.grpcServer = grpc.NewServer()
-
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return fmt.Errorf("proto validate: %w", err)
@@ -51,25 +46,26 @@ func (app *App) Start() error {
 	logger := logInterceptor.LoggerInterceptor()
 
 	app.grpcServer = grpc.NewServer(
-		grpc.UnaryInterceptor(validator),
-	)
-
-	app.grpcServer = grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			validator,
 			logger,
 		),
 	)
 
+	marketStore := storageSpot.NewMarketStore()
+	useCase := svcSpot.NewService(marketStore)
 	grpcSpot.Register(app.grpcServer, useCase)
 
 	reflection.Register(app.grpcServer) // для отладки
 
-	log.Printf("SpotInstrumentService listening on %s", app.address)
+	go func() {
+		log.Printf("SpotInstrumentService listening on %s", app.address)
 
-	if err := app.grpcServer.Serve(app.listener); err != nil {
-		return fmt.Errorf("serve: %w", err)
-	}
+		if err := app.grpcServer.Serve(app.listener); err != nil {
+			log.Printf("failed to serve: %v\n", err)
+			return
+		}
+	}()
 
 	return nil
 }

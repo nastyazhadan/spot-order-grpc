@@ -1,0 +1,58 @@
+version: '3'
+
+tasks:
+  test:
+    desc: Запустить все тесты
+    cmds:
+      - echo "{{.BLUE}}Запуск всех тестов...{{.NC}}"
+      - go test ./orderService/... ./spotService/... -v
+
+  test:short:
+    desc: Запустить все тесты (краткий вывод)
+    cmds:
+      - echo "{{.BLUE}}Запуск всех тестов...{{.NC}}"
+      - go test ./orderService/... ./spotService/...
+
+  test:race:
+    desc: Запустить тесты с проверкой race conditions
+    cmds:
+      - echo "{{.BLUE}}Проверка race conditions...{{.NC}}"
+      - go test -race ./orderService/... ./spotService/...
+
+  lint:
+    # TODO: добавить линтер
+
+  mocks:generate:
+    desc: Сгенерировать моки с помощью mockery
+    cmds:
+      - echo "{{.BLUE}}Генерация моков...{{.NC}}"
+      - cmd: which mockery
+        platforms: [linux, darwin]
+        ignore_error: true
+      - cmd: where mockery
+        platforms: [windows]
+        ignore_error: true
+      - mockery --all --dir=./orderService/internal/services/order --output=./orderService/internal/services/mocks --case=underscore
+      - mockery --all --dir=./spotService/internal/services/spot --output=./spotService/internal/services/mocks --case=underscore
+
+      - mockery --all --dir=./orderService/internal/grpc/order --output=./orderService/internal/grpc/mocks --case=underscore
+      - mockery --all --dir=./spotService/internal/grpc/spot --output=./spotService/internal/grpc/mocks --case=underscore
+
+      - echo "{{.GREEN}}Моки успешно сгенерированы{{.NC}}"
+
+  clean:
+    desc: Очистить сгенерированные файлы
+    cmds:
+      - echo "{{.BLUE}}Очистка...{{.NC}}"
+      - cmd: rm -f coverage*.out coverage*.html
+        platforms: [linux, darwin]
+      - cmd: del /f /q coverage*.out coverage*.html 2>nul || echo.
+        platforms: [windows]
+      - echo "{{.GREEN}}Очистка завершена{{.NC}}"
+
+  clean:cache:
+    desc: Очистить кэш тестов
+    cmds:
+      - echo "{{.BLUE}}Очистка кэша тестов...{{.NC}}"
+      - go clean -testcache
+      - echo "{{.GREEN}}Кэш очищен{{.NC}}"
