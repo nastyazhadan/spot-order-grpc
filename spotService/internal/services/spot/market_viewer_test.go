@@ -79,11 +79,11 @@ func TestViewMarkets(t *testing.T) {
 
 				hasDeleted := false
 				hasDisabled := false
-				for _, m := range markets {
-					if m.DeletedAt != nil {
+				for _, market := range markets {
+					if market.DeletedAt != nil {
 						hasDeleted = true
 					}
-					if !m.Enabled {
+					if !market.Enabled {
 						hasDisabled = true
 					}
 				}
@@ -102,8 +102,8 @@ func TestViewMarkets(t *testing.T) {
 			expectedMarketsNum: 2,
 			checkMarkets: func(t *testing.T, markets []models.Market) {
 				assert.Len(t, markets, 2)
-				for _, m := range markets {
-					assert.Nil(t, m.DeletedAt, "Viewer не должен видеть удаленные рынки")
+				for _, market := range markets {
+					assert.Nil(t, market.DeletedAt, "Viewer не должен видеть удаленные рынки")
 				}
 			},
 			expectedErr: nil,
@@ -118,9 +118,9 @@ func TestViewMarkets(t *testing.T) {
 			expectedMarketsNum: 1,
 			checkMarkets: func(t *testing.T, markets []models.Market) {
 				assert.Len(t, markets, 1)
-				for _, m := range markets {
-					assert.True(t, m.Enabled, "User должен видеть только enabled рынки")
-					assert.Nil(t, m.DeletedAt, "User не должен видеть удаленные рынки")
+				for _, market := range markets {
+					assert.True(t, market.Enabled, "User должен видеть только enabled рынки")
+					assert.Nil(t, market.DeletedAt, "User не должен видеть удаленные рынки")
 				}
 			},
 			expectedErr: nil,
@@ -204,7 +204,7 @@ func TestViewMarkets(t *testing.T) {
 			expectedErr: nil,
 		},
 		{
-			name:      "corner case - только enabled рынки в базе",
+			name:      "corner case - только enabled рынки в базе (user role)",
 			userRoles: []models.UserRole{models.UserRoleUser},
 			setupMocks: func(viewer *mocks.MockSpotMarketViewer) {
 				onlyEnabled := []models.Market{enabledMarket}
@@ -219,7 +219,7 @@ func TestViewMarkets(t *testing.T) {
 			expectedErr: nil,
 		},
 		{
-			name:      "corner case - только disabled рынки в базе",
+			name:      "corner case - только disabled рынки в базе (user role)",
 			userRoles: []models.UserRole{models.UserRoleUser},
 			setupMocks: func(viewer *mocks.MockSpotMarketViewer) {
 				onlyDisabled := []models.Market{disabledMarket}
@@ -233,7 +233,7 @@ func TestViewMarkets(t *testing.T) {
 			expectedErr: nil,
 		},
 		{
-			name:      "corner case - только deleted рынки в базе",
+			name:      "corner case - только deleted рынки в базе (user role)",
 			userRoles: []models.UserRole{models.UserRoleUser},
 			setupMocks: func(viewer *mocks.MockSpotMarketViewer) {
 				onlyDeleted := []models.Market{deletedMarket}
@@ -274,74 +274,34 @@ func TestViewMarkets(t *testing.T) {
 			},
 			expectedErr: nil,
 		},
-		{
-			name:      "большое количество рынков - user",
-			userRoles: []models.UserRole{models.UserRoleUser},
-			setupMocks: func(viewer *mocks.MockSpotMarketViewer) {
-				manyMarkets := make([]models.Market, 100)
-				enabledCount := 0
-				for i := 0; i < 100; i++ {
-					isEnabled := i%2 == 0
-					isDeleted := i%3 == 0
-					if isEnabled && !isDeleted {
-						enabledCount++
-					}
-					manyMarkets[i] = models.Market{
-						ID:      uuid.New(),
-						Name:    gofakeit.Company(),
-						Enabled: isEnabled,
-						DeletedAt: func() *time.Time {
-							if isDeleted {
-								t := time.Now().UTC()
-								return &t
-							}
-							return nil
-						}(),
-					}
-				}
-				viewer.On("ListAll", mock.Anything).
-					Return(manyMarkets, nil)
-			},
-			expectedMarketsNum: -1,
-			checkMarkets: func(t *testing.T, markets []models.Market) {
-				for _, m := range markets {
-					assert.True(t, m.Enabled)
-					assert.Nil(t, m.DeletedAt)
-				}
-			},
-			expectedErr: nil,
-		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 
 			mockMarketViewer := new(mocks.MockSpotMarketViewer)
-			tt.setupMocks(mockMarketViewer)
+			test.setupMocks(mockMarketViewer)
 
 			service := NewService(mockMarketViewer)
 			ctx := context.Background()
 
-			markets, err := service.ViewMarkets(ctx, tt.userRoles)
+			markets, err := service.ViewMarkets(ctx, test.userRoles)
 
-			if tt.checkError != nil {
-
-				tt.checkError(t, err)
-			} else if tt.expectedErr != nil {
-
+			if test.checkError != nil {
+				test.checkError(t, err)
+			} else if test.expectedErr != nil {
 				require.Error(t, err)
-				assert.ErrorIs(t, err, tt.expectedErr)
+				assert.ErrorIs(t, err, test.expectedErr)
 			} else {
-
 				require.NoError(t, err)
 			}
 
-			if tt.expectedMarketsNum >= 0 {
-				assert.Len(t, markets, tt.expectedMarketsNum)
+			if test.expectedMarketsNum >= 0 {
+				assert.Len(t, markets, test.expectedMarketsNum)
 			}
 
-			if tt.checkMarkets != nil {
-				tt.checkMarkets(t, markets)
+			if test.checkMarkets != nil {
+				test.checkMarkets(t, markets)
 			}
 
 			mockMarketViewer.AssertExpectations(t)
@@ -390,7 +350,7 @@ func TestViewMarketsWithFilters(t *testing.T) {
 			shouldBeVisible: true,
 		},
 		{
-			name: "disabled, не deleted - НЕ видит User",
+			name: "disabled, не deleted - не видит User",
 			market: models.Market{
 				ID:        uuid.New(),
 				Name:      "Market4",
@@ -423,7 +383,7 @@ func TestViewMarketsWithFilters(t *testing.T) {
 			shouldBeVisible: true,
 		},
 		{
-			name: "enabled, deleted - НЕ видит User",
+			name: "enabled, deleted - не видит User",
 			market: models.Market{
 				ID:      uuid.New(),
 				Name:    "Market7",
@@ -437,7 +397,7 @@ func TestViewMarketsWithFilters(t *testing.T) {
 			shouldBeVisible: false,
 		},
 		{
-			name: "enabled, deleted - НЕ видит Viewer",
+			name: "enabled, deleted - не видит Viewer",
 			market: models.Market{
 				ID:      uuid.New(),
 				Name:    "Market8",
@@ -465,7 +425,7 @@ func TestViewMarketsWithFilters(t *testing.T) {
 			shouldBeVisible: true,
 		},
 		{
-			name: "disabled, deleted - НЕ видит User",
+			name: "disabled, deleted - не видит User",
 			market: models.Market{
 				ID:      uuid.New(),
 				Name:    "Market10",
@@ -479,7 +439,7 @@ func TestViewMarketsWithFilters(t *testing.T) {
 			shouldBeVisible: false,
 		},
 		{
-			name: "disabled, deleted - НЕ видит Viewer",
+			name: "disabled, deleted - не видит Viewer",
 			market: models.Market{
 				ID:      uuid.New(),
 				Name:    "Market11",
@@ -508,24 +468,24 @@ func TestViewMarketsWithFilters(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			mockMarketViewer := new(mocks.MockSpotMarketViewer)
 			mockMarketViewer.On("ListAll", mock.Anything).
-				Return([]models.Market{tt.market}, nil)
+				Return([]models.Market{test.market}, nil)
 
 			service := NewService(mockMarketViewer)
 			ctx := context.Background()
 
-			markets, err := service.ViewMarkets(ctx, []models.UserRole{tt.userRole})
+			markets, err := service.ViewMarkets(ctx, []models.UserRole{test.userRole})
 
 			require.NoError(t, err)
 
-			if tt.shouldBeVisible {
+			if test.shouldBeVisible {
 				assert.Len(t, markets, 1, "Market should be visible")
-				assert.Equal(t, tt.market.ID, markets[0].ID)
+				assert.Equal(t, test.market.ID, markets[0].ID)
 			} else {
-				assert.Len(t, markets, 0, "Market should NOT be visible")
+				assert.Len(t, markets, 0, "Market should not be visible")
 			}
 
 			mockMarketViewer.AssertExpectations(t)

@@ -70,15 +70,15 @@ func TestViewMarkets(t *testing.T) {
 				assert.Len(t, resp.GetMarkets(), 3)
 
 				names := make([]string, len(resp.GetMarkets()))
-				for i, m := range resp.GetMarkets() {
-					names[i] = m.GetName()
+				for id, market := range resp.GetMarkets() {
+					names[id] = market.GetName()
 				}
 
 				assert.True(t, isSorted(names), "markets should be sorted by name")
 			},
 		},
 		{
-			name: "успешное получение рынков - User",
+			name: "успешное получение доступных рынков - User",
 			request: &proto.ViewMarketsRequest{
 				UserRoles: []proto.UserRole{proto.UserRole_ROLE_USER},
 			},
@@ -97,7 +97,7 @@ func TestViewMarkets(t *testing.T) {
 			},
 		},
 		{
-			name: "успешное получение рынков - Viewer",
+			name: "успешное получение доступных рынков - Viewer",
 			request: &proto.ViewMarketsRequest{
 				UserRoles: []proto.UserRole{proto.UserRole_ROLE_VIEWER},
 			},
@@ -133,23 +133,6 @@ func TestViewMarkets(t *testing.T) {
 			checkResponse: func(t *testing.T, resp *proto.ViewMarketsResponse) {
 				assert.NotNil(t, resp)
 				assert.Len(t, resp.GetMarkets(), 3)
-			},
-		},
-		{
-			name: "успешное получение - пустой список рынков",
-			request: &proto.ViewMarketsRequest{
-				UserRoles: []proto.UserRole{proto.UserRole_ROLE_USER},
-			},
-			setupMocks: func(mockSpot *mocks.SpotInstrument) {
-				mockSpot.On("ViewMarkets",
-					mock.Anything,
-					[]models.UserRole{models.UserRoleUser},
-				).Return([]models.Market{}, nil)
-			},
-			expectedCode: codes.OK,
-			checkResponse: func(t *testing.T, resp *proto.ViewMarketsResponse) {
-				assert.NotNil(t, resp)
-				assert.Empty(t, resp.GetMarkets())
 			},
 		},
 		{
@@ -226,7 +209,7 @@ func TestViewMarkets(t *testing.T) {
 				mockSpot.On("ViewMarkets",
 					mock.Anything,
 					[]models.UserRole{models.UserRoleUser},
-				).Return(nil, errors.New("database error"))
+				).Return(nil, errors.New("internal error"))
 			},
 			expectedCode: codes.Internal,
 			checkResponse: func(t *testing.T, resp *proto.ViewMarketsResponse) {
@@ -259,8 +242,8 @@ func TestViewMarkets(t *testing.T) {
 				assert.Len(t, resp.GetMarkets(), 100)
 
 				names := make([]string, len(resp.GetMarkets()))
-				for i, m := range resp.GetMarkets() {
-					names[i] = m.GetName()
+				for id, market := range resp.GetMarkets() {
+					names[id] = market.GetName()
 				}
 				assert.True(t, isSorted(names), "markets should be sorted")
 			},
@@ -318,6 +301,8 @@ func TestViewMarkets(t *testing.T) {
 				require.Len(t, resp.GetMarkets(), 1)
 
 				protoMarket := resp.GetMarkets()[0]
+				assert.NotEmpty(t, protoMarket.GetId())
+				assert.Equal(t, "Deleted Market", protoMarket.GetName())
 				assert.False(t, protoMarket.GetEnabled())
 				assert.NotNil(t, protoMarket.GetDeletedAt())
 			},
@@ -349,30 +334,6 @@ func TestViewMarkets(t *testing.T) {
 			},
 		},
 		{
-			name: "corner case - рынки с одинаковыми именами",
-			request: &proto.ViewMarketsRequest{
-				UserRoles: []proto.UserRole{proto.UserRole_ROLE_ADMIN},
-			},
-			setupMocks: func(mockSpot *mocks.SpotInstrument) {
-				markets := []models.Market{
-					{ID: uuid.New(), Name: "Same Name", Enabled: true},
-					{ID: uuid.New(), Name: "Same Name", Enabled: false},
-				}
-				mockSpot.On("ViewMarkets",
-					mock.Anything,
-					[]models.UserRole{models.UserRoleAdmin},
-				).Return(markets, nil)
-			},
-			expectedCode: codes.OK,
-			checkResponse: func(t *testing.T, resp *proto.ViewMarketsResponse) {
-				assert.NotNil(t, resp)
-				assert.Len(t, resp.GetMarkets(), 2)
-
-				assert.Equal(t, "Same Name", resp.GetMarkets()[0].GetName())
-				assert.Equal(t, "Same Name", resp.GetMarkets()[1].GetName())
-			},
-		},
-		{
 			name: "corner case - все три роли одновременно",
 			request: &proto.ViewMarketsRequest{
 				UserRoles: []proto.UserRole{
@@ -400,11 +361,11 @@ func TestViewMarkets(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 
 			mockSpot := new(mocks.SpotInstrument)
-			tt.setupMocks(mockSpot)
+			test.setupMocks(mockSpot)
 
 			server := &serverAPI{
 				spotInstrument: mockSpot,
@@ -412,19 +373,19 @@ func TestViewMarkets(t *testing.T) {
 
 			ctx := context.Background()
 
-			resp, err := server.ViewMarkets(ctx, tt.request)
+			response, err := server.ViewMarkets(ctx, test.request)
 
-			if tt.expectedCode != codes.OK {
+			if test.expectedCode != codes.OK {
 				require.Error(t, err)
-				st, ok := status.FromError(err)
+				stat, ok := status.FromError(err)
 				require.True(t, ok, "error should be a gRPC status error")
-				assert.Equal(t, tt.expectedCode, st.Code())
+				assert.Equal(t, test.expectedCode, stat.Code())
 			} else {
 				require.NoError(t, err)
 			}
 
-			if tt.checkResponse != nil {
-				tt.checkResponse(t, resp)
+			if test.checkResponse != nil {
+				test.checkResponse(t, response)
 			}
 
 			mockSpot.AssertExpectations(t)

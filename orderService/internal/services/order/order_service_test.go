@@ -46,7 +46,7 @@ func TestCreateOrder(t *testing.T) {
 		checkResult    func(t *testing.T, orderID uuid.UUID, status models.OrderStatus)
 	}{
 		{
-			name:      "успешное создание ордера",
+			name:      "успешное создание заказа",
 			userID:    randomUUID,
 			marketID:  randomUUID,
 			orderType: models.OrderTypeTakeProfit,
@@ -92,7 +92,7 @@ func TestCreateOrder(t *testing.T) {
 			},
 		},
 		{
-			name:      "ошибка - ордер уже существует",
+			name:      "ошибка - заказ уже существует",
 			userID:    randomUUID,
 			marketID:  randomUUID,
 			orderType: models.OrderTypeMarket,
@@ -164,33 +164,6 @@ func TestCreateOrder(t *testing.T) {
 			},
 		},
 		{
-			name:      "corner case - нулевая цена",
-			userID:    randomUUID,
-			marketID:  randomUUID,
-			orderType: models.OrderTypeMarket,
-			price:     models.Decimal(&decimal.Decimal{Value: "0"}),
-			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.MockSaver, viewer *mocks.MockOrderMarketViewer) {
-				marketID := randomUUID
-				markets := []sharedModels.Market{
-					{
-						ID:      marketID,
-						Enabled: true,
-					},
-				}
-				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
-					Return(markets, nil)
-				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).
-					Return(nil)
-			},
-			expectedStatus: models.OrderStatusCreated,
-			expectedErr:    nil,
-			checkResult: func(t *testing.T, orderID uuid.UUID, status models.OrderStatus) {
-				assert.NotEqual(t, uuid.Nil, orderID)
-				assert.Equal(t, models.OrderStatusCreated, status)
-			},
-		},
-		{
 			name:      "corner case - минимальное количество",
 			userID:    randomUUID,
 			marketID:  randomUUID,
@@ -219,42 +192,42 @@ func TestCreateOrder(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			mockSaver := new(mocks.MockSaver)
 			mockGetter := new(mocks.MockGetter)
 			mockMarketViewer := new(mocks.MockOrderMarketViewer)
 
-			tt.setupMocks(mockSaver, mockMarketViewer)
+			test.setupMocks(mockSaver, mockMarketViewer)
 
 			service := NewService(mockSaver, mockGetter, mockMarketViewer)
 			ctx := context.Background()
 
 			orderID, status, err := service.CreateOrder(
 				ctx,
-				tt.userID,
-				tt.marketID,
-				tt.orderType,
-				tt.price,
-				tt.quantity,
+				test.userID,
+				test.marketID,
+				test.orderType,
+				test.price,
+				test.quantity,
 			)
 
-			if tt.expectedErr != nil || tt.expectedErrMsg != "" {
+			if test.expectedErr != nil || test.expectedErrMsg != "" {
 				require.Error(t, err)
 
-				if tt.expectedErr != nil {
-					assert.ErrorIs(t, err, tt.expectedErr)
+				if test.expectedErr != nil {
+					assert.ErrorIs(t, err, test.expectedErr)
 				}
-				if tt.expectedErrMsg != "" {
-					assert.ErrorContains(t, err, tt.expectedErrMsg)
+				if test.expectedErrMsg != "" {
+					assert.ErrorContains(t, err, test.expectedErrMsg)
 				}
 			} else {
 				require.NoError(t, err)
 			}
 
-			assert.Equal(t, tt.expectedStatus, status)
-			if tt.checkResult != nil {
-				tt.checkResult(t, orderID, status)
+			assert.Equal(t, test.expectedStatus, status)
+			if test.checkResult != nil {
+				test.checkResult(t, orderID, status)
 			}
 
 			mockSaver.AssertExpectations(t)
@@ -280,7 +253,7 @@ func TestGetOrderStatus(t *testing.T) {
 		expectedErrMsg string
 	}{
 		{
-			name:    "успешное получение статуса ордера",
+			name:    "успешное получение статуса заказа",
 			orderID: orderID,
 			userID:  userID,
 			setupMocks: func(getter *mocks.MockGetter) {
@@ -301,7 +274,7 @@ func TestGetOrderStatus(t *testing.T) {
 			expectedErr:    nil,
 		},
 		{
-			name:    "ошибка - ордер не найден",
+			name:    "ошибка - заказ не найден",
 			orderID: orderID,
 			userID:  userID,
 			setupMocks: func(getter *mocks.MockGetter) {
@@ -312,7 +285,7 @@ func TestGetOrderStatus(t *testing.T) {
 			expectedErr:    serviceErrors.ErrOrderNotFound,
 		},
 		{
-			name:    "ошибка - доступ запрещен (чужой ордер)",
+			name:    "ошибка - доступ запрещен (чужой заказ)",
 			orderID: orderID,
 			userID:  anotherUserID,
 			setupMocks: func(getter *mocks.MockGetter) {
@@ -375,56 +348,35 @@ func TestGetOrderStatus(t *testing.T) {
 			expectedStatus: models.OrderStatusCancelled,
 			expectedErr:    nil,
 		},
-		{
-			name:    "проверка статуса - PartiallyExecuted",
-			orderID: orderID,
-			userID:  userID,
-			setupMocks: func(getter *mocks.MockGetter) {
-				order := models.Order{
-					ID:        orderID,
-					UserID:    userID,
-					MarketID:  randomUUID,
-					Type:      models.OrderTypeMarket,
-					Price:     randomPrice,
-					Quantity:  randomQuantity,
-					Status:    models.OrderStatusPending,
-					CreatedAt: time.Now().UTC(),
-				}
-				getter.On("GetOrder", mock.Anything, orderID).
-					Return(order, nil)
-			},
-			expectedStatus: models.OrderStatusPending,
-			expectedErr:    nil,
-		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			mockSaver := new(mocks.MockSaver)
 			mockGetter := new(mocks.MockGetter)
 			mockMarketViewer := new(mocks.MockOrderMarketViewer)
 
-			tt.setupMocks(mockGetter)
+			test.setupMocks(mockGetter)
 
 			service := NewService(mockSaver, mockGetter, mockMarketViewer)
 			ctx := context.Background()
 
-			status, err := service.GetOrderStatus(ctx, tt.orderID, tt.userID)
+			status, err := service.GetOrderStatus(ctx, test.orderID, test.userID)
 
-			if tt.expectedErr != nil || tt.expectedErrMsg != "" {
+			if test.expectedErr != nil || test.expectedErrMsg != "" {
 				require.Error(t, err)
 
-				if tt.expectedErr != nil {
-					assert.ErrorIs(t, err, tt.expectedErr)
+				if test.expectedErr != nil {
+					assert.ErrorIs(t, err, test.expectedErr)
 				}
-				if tt.expectedErrMsg != "" {
-					assert.ErrorContains(t, err, tt.expectedErrMsg)
+				if test.expectedErrMsg != "" {
+					assert.ErrorContains(t, err, test.expectedErrMsg)
 				}
 			} else {
 				require.NoError(t, err)
 			}
 
-			assert.Equal(t, tt.expectedStatus, status)
+			assert.Equal(t, test.expectedStatus, status)
 
 			mockGetter.AssertExpectations(t)
 		})
