@@ -2,16 +2,20 @@ package order
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
-	storageOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/memory"
+	storageOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/postgres"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infra/postgres"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infra/postgres/migrator"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
@@ -48,6 +52,13 @@ func New(address string) (*App, error) {
 }
 
 func (app *App) Start() error {
+	ctx := context.Background()
+
+	pool, err := app.setupDB(ctx)
+	if err != nil {
+		return fmt.Errorf("setupDB: %w", err)
+	}
+
 	listener, err := net.Listen("tcp", app.address)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", app.address, err)
@@ -79,18 +90,18 @@ func (app *App) Start() error {
 		),
 	)
 
-	orderStore := storageOrder.NewOrderStore()
+	orderStore := storageOrder.NewOrderStore(pool)
 	useCase := svcOrder.NewService(orderStore, orderStore, marketClient)
 	grpcOrder.Register(app.grpcServer, useCase)
 
 	reflection.Register(app.grpcServer) // для отладки
 
 	{
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
 
 		if _, err := marketClient.ViewMarkets(ctx, []models.UserRole{}); err != nil {
-			return fmt.Errorf("spot instrument not reachable at %s: %w", app.spotAddress, err)
+			return fmt.Errorf("spot instrument is not reachable at %s: %w", app.spotAddress, err)
 		}
 	}
 
@@ -99,11 +110,35 @@ func (app *App) Start() error {
 
 		if err := app.grpcServer.Serve(app.listener); err != nil {
 			log.Printf("failed to serve: %v\n", err)
-			return
 		}
 	}()
 
 	return nil
+}
+
+func (app *App) setupDB(ctx context.Context) (*pgxpool.Pool, error) {
+	dbURI := os.Getenv("ORDER_DB_URI")
+	if dbURI == "" {
+		return nil, fmt.Errorf("ORDER_DB_URI environment variable is not set")
+	}
+
+	pool, err := postgres.NewPgxPool(ctx, dbURI)
+	if err != nil {
+		return nil, fmt.Errorf("storage.NewPgxPool: %w", err)
+	}
+
+	sqlDB, err := sql.Open("pgx", dbURI)
+	if err != nil {
+		return nil, fmt.Errorf("sql.Open: %w", err)
+	}
+	defer sqlDB.Close()
+
+	dbMigrator := migrator.NewMigrator(sqlDB, os.Getenv("MIGRATION_DIR"))
+	if err := dbMigrator.Up(); err != nil {
+		return nil, fmt.Errorf("migrator.Up: %w", err)
+	}
+
+	return pool, nil
 }
 
 func (app *App) Stop() error {

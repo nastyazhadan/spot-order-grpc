@@ -1,4 +1,2 @@
-/serviceErrors/
 .idea/
-/spotService/serviceErrors/
-/orderService/serviceErrors/
+../.env.spot-service
