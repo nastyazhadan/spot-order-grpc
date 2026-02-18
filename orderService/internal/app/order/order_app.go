@@ -33,6 +33,7 @@ type App struct {
 	spotAddress string
 
 	spotConnection *grpc.ClientConn
+	pool           *pgxpool.Pool
 }
 
 func New(address string) (*App, error) {
@@ -58,6 +59,7 @@ func (app *App) Start() error {
 	if err != nil {
 		return fmt.Errorf("setupDB: %w", err)
 	}
+	app.pool = pool
 
 	listener, err := net.Listen("tcp", app.address)
 	if err != nil {
@@ -145,11 +147,16 @@ func (app *App) Stop() error {
 	if app.grpcServer != nil {
 		app.grpcServer.GracefulStop()
 	}
+
 	if app.spotConnection != nil {
-		_ = app.spotConnection.Close()
+		if err := app.spotConnection.Close(); err != nil {
+			log.Printf("failed to close spot connection: %v", err)
+		}
 	}
-	if app.listener != nil {
-		_ = app.listener.Close()
+
+	if app.pool != nil {
+		app.pool.Close()
 	}
+
 	return nil
 }

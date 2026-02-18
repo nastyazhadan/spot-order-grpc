@@ -17,6 +17,7 @@ import (
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -25,6 +26,7 @@ type App struct {
 	grpcServer *grpc.Server
 	listener   net.Listener
 	address    string
+	pool       *pgxpool.Pool
 }
 
 func New(address string) (*App, error) {
@@ -44,6 +46,7 @@ func (app *App) Start() error {
 	if err != nil {
 		return fmt.Errorf("setupDB: %w", err)
 	}
+	app.pool = pool
 
 	listener, err := net.Listen("tcp", app.address)
 	if err != nil {
@@ -111,5 +114,10 @@ func (app *App) Stop() error {
 	if app.grpcServer != nil {
 		app.grpcServer.GracefulStop()
 	}
+
+	if app.pool != nil {
+		app.pool.Close()
+	}
+
 	return nil
 }
