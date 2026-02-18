@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,6 +50,15 @@ func (service *Service) CreateOrder(
 ) (uuid.UUID, models.OrderStatus, error) {
 	const op = "Service.CreateOrder"
 
+	timeout := 0 * time.Second
+	if value := os.Getenv("ORDER_CREATE_TIMEOUT"); value != "" {
+		if parsed, err := time.ParseDuration(value); err == nil {
+			timeout = parsed
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	currentUserRole := sharedModels.UserRoleUser // Заглушка
 	if currentUserRole != sharedModels.UserRoleUser {
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrCreatingOrderNotRequired)
@@ -83,6 +93,7 @@ func (service *Service) CreateOrder(
 		Status:    orderStatus,
 		CreatedAt: time.Now().UTC(),
 	}
+
 	if err := service.saver.SaveOrder(ctx, newOrder); err != nil {
 		if errors.Is(err, storageErrors.ErrOrderAlreadyExists) {
 			return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderAlreadyExists)
