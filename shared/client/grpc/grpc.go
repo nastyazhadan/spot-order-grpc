@@ -3,11 +3,12 @@ package grpc
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models/mapper"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
+
 	"github.com/sony/gobreaker/v2"
 	"google.golang.org/grpc"
 )
@@ -17,14 +18,14 @@ type Client struct {
 	circuitBreaker *gobreaker.CircuitBreaker[interface{}]
 }
 
-func New(connection *grpc.ClientConn) *Client {
+func New(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig) *Client {
 	circuitBreaker := gobreaker.NewCircuitBreaker[interface{}](gobreaker.Settings{
 		Name:        "spotService",
-		MaxRequests: 3,
-		Interval:    10 * time.Second,
-		Timeout:     5 * time.Second,
+		MaxRequests: cfg.MaxRequests,
+		Interval:    cfg.Interval,
+		Timeout:     cfg.Timeout,
 		ReadyToTrip: func(counts gobreaker.Counts) bool {
-			return counts.ConsecutiveFailures >= 5
+			return counts.ConsecutiveFailures >= cfg.MaxFailures
 		},
 	})
 

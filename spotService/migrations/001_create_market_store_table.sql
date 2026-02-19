@@ -12,8 +12,7 @@ INSERT INTO market_store (id, name, enabled, deleted_at) VALUES
     (gen_random_uuid(), 'ETH-USDT', false, NULL),
     (gen_random_uuid(), 'DOGE-USDT', true, NOW()),
     (gen_random_uuid(), 'SOL-USDT', true,  NULL),
-    (gen_random_uuid(), 'ADA-USDT', false, NULL)
-ON CONFLICT (name) DO NOTHING;
+    (gen_random_uuid(), 'ADA-USDT', false, NULL);
 
 -- +goose Down
 DROP TABLE if EXISTS market_store;

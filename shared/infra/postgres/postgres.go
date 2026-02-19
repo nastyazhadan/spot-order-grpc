@@ -2,12 +2,38 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/nastyazhadan/spot-order-grpc/shared/infra/postgres/migrator"
 )
 
-func NewPgxPool(ctx context.Context, dbURI string) (*pgxpool.Pool, error) {
+func SetupDB(ctx context.Context, dbURI, migrationDir string) (*pgxpool.Pool, error) {
+	pool, err := newPgxPool(ctx, dbURI)
+	if err != nil {
+		return nil, fmt.Errorf("NewPgxPool: %w", err)
+	}
+
+	sqlDB, err := sql.Open("pgx", dbURI)
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("sql.Open: %w", err)
+	}
+	defer sqlDB.Close()
+
+	dbMigrator := migrator.NewMigrator(sqlDB, migrationDir)
+	if err := dbMigrator.Up(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("migrator.Up: %w", err)
+	}
+
+	return pool, nil
+}
+
+func newPgxPool(ctx context.Context, dbURI string) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.New(ctx, dbURI)
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool.New: %w", err)

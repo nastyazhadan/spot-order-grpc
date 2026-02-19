@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,9 +14,10 @@ import (
 )
 
 type Service struct {
-	saver        Saver
-	getter       Getter
-	marketViewer MarketViewer
+	saver         Saver
+	getter        Getter
+	marketViewer  MarketViewer
+	createTimeout time.Duration
 }
 
 type Saver interface {
@@ -32,11 +32,12 @@ type MarketViewer interface {
 	ViewMarkets(ctx context.Context, roles []sharedModels.UserRole) ([]sharedModels.Market, error)
 }
 
-func NewService(s Saver, g Getter, mv MarketViewer) *Service {
+func NewService(s Saver, g Getter, mv MarketViewer, t time.Duration) *Service {
 	return &Service{
-		saver:        s,
-		getter:       g,
-		marketViewer: mv,
+		saver:         s,
+		getter:        g,
+		marketViewer:  mv,
+		createTimeout: t,
 	}
 }
 
@@ -50,13 +51,7 @@ func (service *Service) CreateOrder(
 ) (uuid.UUID, models.OrderStatus, error) {
 	const op = "Service.CreateOrder"
 
-	timeout := 0 * time.Second
-	if value := os.Getenv("ORDER_CREATE_TIMEOUT"); value != "" {
-		if parsed, err := time.ParseDuration(value); err == nil {
-			timeout = parsed
-		}
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, service.createTimeout)
 	defer cancel()
 
 	currentUserRole := sharedModels.UserRoleUser // Заглушка

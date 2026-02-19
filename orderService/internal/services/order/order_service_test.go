@@ -21,6 +21,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const CreateTimeout = 5 * time.Second
+
 var randomUUID = uuid.New()
 
 var randomPrice = models.Decimal(&decimal.Decimal{
@@ -200,7 +202,7 @@ func TestCreateOrder(t *testing.T) {
 
 			test.setupMocks(mockSaver, mockMarketViewer)
 
-			service := NewService(mockSaver, mockGetter, mockMarketViewer)
+			service := NewService(mockSaver, mockGetter, mockMarketViewer, CreateTimeout)
 			ctx := context.Background()
 
 			orderID, status, err := service.CreateOrder(
@@ -358,7 +360,7 @@ func TestGetOrderStatus(t *testing.T) {
 
 			test.setupMocks(mockGetter)
 
-			service := NewService(mockSaver, mockGetter, mockMarketViewer)
+			service := NewService(mockSaver, mockGetter, mockMarketViewer, CreateTimeout)
 			ctx := context.Background()
 
 			status, err := service.GetOrderStatus(ctx, test.orderID, test.userID)

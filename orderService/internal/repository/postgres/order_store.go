@@ -15,6 +15,8 @@ import (
 	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 )
 
+const PostgresErrorCode = "23505"
+
 type OrderStore struct {
 	pool *pgxpool.Pool
 }
@@ -85,7 +87,7 @@ func isDuplicateKey(err error) bool {
 	var postgresErr *pgconn.PgError
 
 	if errors.As(err, &postgresErr) {
-		return postgresErr.Code == "23505"
+		return postgresErr.Code == PostgresErrorCode
 	}
 
 	return false

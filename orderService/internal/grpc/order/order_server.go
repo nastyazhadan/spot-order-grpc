@@ -48,7 +48,7 @@ func (server *serverAPI) CreateOrder(
 	ctx context.Context,
 	request *proto.CreateOrderRequest,
 ) (*proto.CreateOrderResponse, error) {
-	if err := validateErrorCreate(request); err != nil {
+	if err := validateCreateError(request); err != nil {
 		return nil, err
 	}
 
@@ -82,7 +82,7 @@ func (server *serverAPI) GetOrderStatus(
 	ctx context.Context,
 	request *proto.GetOrderStatusRequest,
 ) (*proto.GetOrderStatusResponse, error) {
-	if err := validateErrorGet(request); err != nil {
+	if err := validateGetError(request); err != nil {
 		return nil, err
 	}
 
@@ -100,13 +100,17 @@ func (server *serverAPI) GetOrderStatus(
 	}, nil
 }
 
-func validateErrorCreate(request *proto.CreateOrderRequest) error {
+func validateCreateError(request *proto.CreateOrderRequest) error {
 	if request.GetUserId() == "" || request.GetMarketId() == "" {
 		return status.Error(codes.InvalidArgument, "user_id and market_id are required")
 	}
 
 	if _, err := uuid.Parse(request.GetUserId()); err != nil {
 		return status.Error(codes.InvalidArgument, "user_id must be UUID")
+	}
+
+	if _, err := uuid.Parse(request.GetMarketId()); err != nil {
+		return status.Error(codes.InvalidArgument, "market_id must be UUID")
 	}
 
 	if request.GetOrderType() == proto.OrderType_TYPE_UNSPECIFIED {
@@ -152,7 +156,7 @@ func validateServiceError(err error) error {
 	}
 }
 
-func validateErrorGet(request *proto.GetOrderStatusRequest) error {
+func validateGetError(request *proto.GetOrderStatusRequest) error {
 	if request.GetOrderId() == "" || request.GetUserId() == "" {
 		return status.Error(codes.InvalidArgument, "order_id and user_id are required")
 	}
