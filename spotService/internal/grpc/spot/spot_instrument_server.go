@@ -6,10 +6,12 @@ import (
 	"sort"
 
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models/mapper"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -50,6 +52,8 @@ func (server *serverAPI) ViewMarkets(
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
 
+		zapLogger.Error(ctx, "failed to view markets",
+			zap.Error(err))
 		return nil, status.Error(codes.Internal, "internal error")
 	}
 

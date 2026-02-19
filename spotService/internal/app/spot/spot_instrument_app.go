@@ -3,18 +3,21 @@ package spot
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infra/postgres"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 	storageSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/postgres"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -33,6 +36,10 @@ func New(cfg config.SpotConfig) *App {
 func (app *App) Start() (<-chan error, error) {
 	ctx := context.Background()
 
+	if err := zapLogger.Init("info", false); err != nil {
+		return nil, fmt.Errorf("zapLogger.Init: %w", err)
+	}
+
 	if err := app.setupDB(ctx); err != nil {
 		return nil, fmt.Errorf("setupDB: %w", err)
 	}
@@ -48,7 +55,9 @@ func (app *App) Start() (<-chan error, error) {
 	errChan := make(chan error, 1)
 
 	go func() {
-		log.Printf("SpotInstrumentService listening on %s", app.config.Address)
+		zapLogger.Info(context.Background(), "Spot service started",
+			zap.String("address", app.config.Address),
+		)
 
 		if err := app.grpcServer.Serve(app.listener); err != nil {
 			errChan <- err
@@ -84,10 +93,13 @@ func (app *App) setupGRPCServer() error {
 		return fmt.Errorf("validate.ProtovalidateUnary: %w", err)
 	}
 
-	logger := logInterceptor.LoggerInterceptor()
-
 	app.grpcServer = grpc.NewServer(
-		grpc.ChainUnaryInterceptor(validator, logger),
+		grpc.ChainUnaryInterceptor(
+			xrequestid.Server,
+			logInterceptor.LoggerInterceptor(),
+			recovery.Unary,
+			validator,
+		),
 	)
 
 	marketStore := storageSpot.NewMarketStore(app.dbPool)
@@ -99,6 +111,8 @@ func (app *App) setupGRPCServer() error {
 }
 
 func (app *App) Stop() error {
+	defer zapLogger.Sync()
+
 	if app.grpcServer != nil {
 		app.grpcServer.GracefulStop()
 	}

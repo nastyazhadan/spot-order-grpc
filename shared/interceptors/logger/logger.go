@@ -2,10 +2,12 @@ package logger
 
 import (
 	"context"
-	"log"
 	"path"
 	"time"
 
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 )
@@ -18,20 +20,29 @@ func LoggerInterceptor() grpc.UnaryServerInterceptor {
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
 		method := path.Base(info.FullMethod)
-
-		log.Printf("Started gRPC method %s\n", method)
 		startTime := time.Now()
+
+		zapLogger.Info(ctx, "gRPC request started",
+			zap.String("method", method),
+		)
 
 		response, err := handler(ctx, request)
 
 		duration := time.Since(startTime)
 
 		if err != nil {
-			responseStatus, _ := status.FromError(err)
-			log.Printf("Finished gRPC method %s with code %s: %v (took: %v)\n",
-				method, responseStatus.Code(), err, duration)
+			stat, _ := status.FromError(err)
+			zapLogger.Error(ctx, "gRPC request failed",
+				zap.String("method", method),
+				zap.String("code", stat.Code().String()),
+				zap.Duration("duration", duration),
+				zap.Error(err),
+			)
 		} else {
-			log.Printf("Finished gRPC method %s successfully (took: %v)\n", method, duration)
+			zapLogger.Info(ctx, "gRPC request completed",
+				zap.String("method", method),
+				zap.Duration("duration", duration),
+			)
 		}
 
 		return response, err

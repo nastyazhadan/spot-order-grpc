@@ -5,9 +5,11 @@ import (
 	"fmt"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models/mapper"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
+	"go.uber.org/zap"
 
 	"github.com/sony/gobreaker/v2"
 	"google.golang.org/grpc"
@@ -46,6 +48,9 @@ func (client *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) 
 			UserRoles: userRoles,
 		})
 		if err != nil {
+			zapLogger.Error(ctx, "ViewMarkets failed",
+				zap.Error(err))
+
 			return nil, err
 		}
 
@@ -53,6 +58,9 @@ func (client *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) 
 		for _, market := range response.GetMarkets() {
 			mappedMarket, err := mapper.MarketFromProto(market)
 			if err != nil {
+				zapLogger.Error(ctx, "ViewMarkets failed",
+					zap.Error(err))
+
 				return nil, err
 			}
 			out = append(out, mappedMarket)
@@ -60,6 +68,7 @@ func (client *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) 
 
 		return out, nil
 	})
+
 	if err != nil {
 		return nil, fmt.Errorf("circuit breaker: %w", err)
 	}

@@ -6,9 +6,11 @@ require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260209202127-80ab13bee0bf.1
 	buf.build/go/protovalidate v1.1.2
 	github.com/google/uuid v1.6.0
+	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/sony/gobreaker/v2 v2.4.0
+	go.uber.org/zap v1.27.1
 	google.golang.org/genproto v0.0.0-20260209200024-4cfbd4190f57
 	google.golang.org/grpc v1.79.1
 	google.golang.org/protobuf v1.36.11
@@ -19,7 +21,6 @@ require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/google/cel-go v0.27.0 // indirect
-	github.com/ilyakaznacheev/cleanenv v1.5.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
