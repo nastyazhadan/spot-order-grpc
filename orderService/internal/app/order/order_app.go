@@ -17,9 +17,9 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	"go.uber.org/zap"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
@@ -34,42 +34,41 @@ type App struct {
 }
 
 func New(cfg config.OrderConfig) *App {
-	return &App{config: cfg}
+	return &App{
+		config: cfg,
+	}
 }
 
-func (app *App) Start() (<-chan error, error) {
-	ctx := context.Background()
-
-	if err := zapLogger.Init("info", false); err != nil {
-		return nil, fmt.Errorf("zapLogger.Init: %w", err)
-	}
+func (app *App) Start(ctx context.Context) error {
+	zapLogger.Init(app.config.LogLevel, app.config.LogFormat == "json")
+	defer zapLogger.Sync()
 
 	if err := app.setupDB(ctx); err != nil {
-		return nil, fmt.Errorf("setupDB: %w", err)
+		return fmt.Errorf("setupDB: %w", err)
 	}
 
 	if err := app.setupListener(); err != nil {
-		return nil, fmt.Errorf("setupListener: %w", err)
+		return fmt.Errorf("setupListener: %w", err)
 	}
 
 	if err := app.setupSpotConnection(); err != nil {
-		return nil, fmt.Errorf("setupSpotConnection: %w", err)
+		return fmt.Errorf("setupSpotConnection: %w", err)
 	}
 
 	marketClient := grpcClient.New(app.spotConnection, app.config.CircuitBreaker)
 
 	if err := app.checkSpotReachable(ctx, marketClient); err != nil {
-		return nil, fmt.Errorf("checkSpotReachable: %w", err)
+		return fmt.Errorf("checkSpotReachable: %w", err)
 	}
 
-	if err := app.setupGRPCServer(marketClient); err != nil {
-		return nil, fmt.Errorf("setupGRPCServer: %w", err)
+	if err := app.setupGRPCServer(ctx, marketClient); err != nil {
+		return fmt.Errorf("setupGRPCServer: %w", err)
 	}
 
 	errChan := make(chan error, 1)
 
 	go func() {
-		zapLogger.Info(context.Background(), "OrderService started",
+		zapLogger.Info(ctx, "OrderService started",
 			zap.String("address", app.config.Address),
 		)
 
@@ -78,7 +77,7 @@ func (app *App) Start() (<-chan error, error) {
 		}
 	}()
 
-	return errChan, nil
+	return nil
 }
 
 func (app *App) setupDB(ctx context.Context) error {
@@ -127,47 +126,29 @@ func (app *App) checkSpotReachable(ctx context.Context, client *grpcClient.Clien
 	return nil
 }
 
-func (app *App) setupGRPCServer(marketClient *grpcClient.Client) error {
+func (app *App) setupGRPCServer(ctx context.Context, client *grpcClient.Client) error {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return fmt.Errorf("validate.ProtovalidateUnary: %w", err)
 	}
 
+	tracer := xrequestid.Server
+	logger := logInterceptor.LoggerInterceptor()
+	recoverer := recovery.PanicRecoveryInterceptor
+
 	app.grpcServer = grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
-			xrequestid.Server,
-			logInterceptor.LoggerInterceptor(),
-			recovery.Unary,
+			tracer,
+			logger,
+			recoverer,
 			validator,
 		),
 	)
 
 	orderStore := storageOrder.NewOrderStore(app.dbPool)
-	useCase := svcOrder.NewService(orderStore, orderStore, marketClient, app.config.CreateTimeout)
+	useCase := svcOrder.NewService(orderStore, orderStore, client, app.config.CreateTimeout)
 	grpcOrder.Register(app.grpcServer, useCase)
 	reflection.Register(app.grpcServer)
-
-	return nil
-}
-
-func (app *App) Stop() error {
-	defer zapLogger.Sync()
-
-	if app.grpcServer != nil {
-		app.grpcServer.GracefulStop()
-	}
-
-	if app.spotConnection != nil {
-		if err := app.spotConnection.Close(); err != nil {
-			zapLogger.Error(context.Background(), "failed to close spot connection",
-				zap.Error(err),
-			)
-		}
-	}
-
-	if app.dbPool != nil {
-		app.dbPool.Close()
-	}
 
 	return nil
 }

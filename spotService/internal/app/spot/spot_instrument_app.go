@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infra/health"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infra/postgres"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
@@ -30,32 +31,31 @@ type App struct {
 }
 
 func New(cfg config.SpotConfig) *App {
-	return &App{config: cfg}
+	return &App{
+		config: cfg,
+	}
 }
 
-func (app *App) Start() (<-chan error, error) {
-	ctx := context.Background()
-
-	if err := zapLogger.Init("info", false); err != nil {
-		return nil, fmt.Errorf("zapLogger.Init: %w", err)
-	}
+func (app *App) Start(ctx context.Context) error {
+	zapLogger.Init(app.config.LogLevel, app.config.LogFormat == "json")
+	defer zapLogger.Sync()
 
 	if err := app.setupDB(ctx); err != nil {
-		return nil, fmt.Errorf("setupDB: %w", err)
+		return fmt.Errorf("setupDB: %w", err)
 	}
 
 	if err := app.setupListener(); err != nil {
-		return nil, fmt.Errorf("setupListener: %w", err)
+		return fmt.Errorf("setupListener: %w", err)
 	}
 
-	if err := app.setupGRPCServer(); err != nil {
-		return nil, fmt.Errorf("setupGRPCServer: %w", err)
+	if err := app.setupGRPCServer(ctx); err != nil {
+		return fmt.Errorf("setupGRPCServer: %w", err)
 	}
 
 	errChan := make(chan error, 1)
 
 	go func() {
-		zapLogger.Info(context.Background(), "Spot service started",
+		zapLogger.Info(ctx, "Spot service started",
 			zap.String("address", app.config.Address),
 		)
 
@@ -64,7 +64,7 @@ func (app *App) Start() (<-chan error, error) {
 		}
 	}()
 
-	return errChan, nil
+	return nil
 }
 
 func (app *App) setupDB(ctx context.Context) error {
@@ -87,39 +87,32 @@ func (app *App) setupListener() error {
 	return nil
 }
 
-func (app *App) setupGRPCServer() error {
+func (app *App) setupGRPCServer(ctx context.Context) error {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return fmt.Errorf("validate.ProtovalidateUnary: %w", err)
 	}
 
+	tracer := xrequestid.Server
+	logger := logInterceptor.LoggerInterceptor()
+	recoverer := recovery.PanicRecoveryInterceptor
+
 	app.grpcServer = grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
-			xrequestid.Server,
-			logInterceptor.LoggerInterceptor(),
-			recovery.Unary,
+			tracer,
+			logger,
+			recoverer,
 			validator,
 		),
 	)
 
+	reflection.Register(app.grpcServer)
+
+	health.RegisterService(app.grpcServer)
+
 	marketStore := storageSpot.NewMarketStore(app.dbPool)
 	useCase := svcSpot.NewService(marketStore)
 	grpcSpot.Register(app.grpcServer, useCase)
-	reflection.Register(app.grpcServer)
-
-	return nil
-}
-
-func (app *App) Stop() error {
-	defer zapLogger.Sync()
-
-	if app.grpcServer != nil {
-		app.grpcServer.GracefulStop()
-	}
-
-	if app.dbPool != nil {
-		app.dbPool.Close()
-	}
 
 	return nil
 }

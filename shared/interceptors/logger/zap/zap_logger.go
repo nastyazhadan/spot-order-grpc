@@ -27,7 +27,7 @@ type logger struct {
 	zapLogger *zap.Logger
 }
 
-func Init(levelStr string, asJSON bool) error {
+func Init(levelStr string, asJSON bool) {
 	initOnce.Do(func() {
 		dynamicLevel = zap.NewAtomicLevelAt(parseLevel(levelStr))
 
@@ -47,10 +47,11 @@ func Init(levelStr string, asJSON bool) error {
 		)
 
 		zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(2))
-		globalLogger = &logger{zapLogger: zapLogger}
-	})
 
-	return nil
+		globalLogger = &logger{
+			zapLogger: zapLogger,
+		}
+	})
 }
 
 func buildEncoderConfig() zapcore.EncoderConfig {
@@ -62,7 +63,6 @@ func buildEncoderConfig() zapcore.EncoderConfig {
 		MessageKey:     "message",
 		StacktraceKey:  "stacktrace",
 		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.CapitalLevelEncoder,
 		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.SecondsDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
@@ -70,10 +70,15 @@ func buildEncoderConfig() zapcore.EncoderConfig {
 	}
 }
 
+func Logger() *logger {
+	return globalLogger
+}
+
 func SetLevel(levelStr string) {
 	if dynamicLevel == (zap.AtomicLevel{}) {
 		return
 	}
+
 	dynamicLevel.SetLevel(parseLevel(levelStr))
 }
 

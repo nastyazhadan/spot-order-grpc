@@ -11,9 +11,9 @@ import (
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v6"
-	"go.uber.org/zap"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -72,7 +72,10 @@ func (server *serverAPI) CreateOrder(
 		if !errors.Is(err, serviceErrors.ErrMarketsNotFound) &&
 			!errors.Is(err, serviceErrors.ErrOrderAlreadyExists) &&
 			!errors.Is(err, serviceErrors.ErrCreatingOrderNotRequired) {
-			zapLogger.Error(ctx, "failed to create order", zap.Error(err))
+			zapLogger.Error(ctx, "failed to create order",
+				zap.String("userId", userID.String()),
+				zap.Error(err),
+			)
 		}
 
 		return nil, validateServiceError(err)
@@ -99,7 +102,11 @@ func (server *serverAPI) GetOrderStatus(
 	orderStatus, err := server.service.GetOrderStatus(ctx, orderID, userID)
 	if err != nil {
 		if !errors.Is(err, serviceErrors.ErrOrderNotFound) {
-			zapLogger.Error(ctx, "failed to get order status", zap.Error(err))
+			zapLogger.Error(ctx, "failed to get order status",
+				zap.String("orderId", orderID.String()),
+				zap.String("userId", userID.String()),
+				zap.Error(err),
+			)
 		}
 
 		return nil, validateServiceError(err)

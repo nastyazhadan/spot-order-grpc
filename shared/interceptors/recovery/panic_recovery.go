@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func Unary(
+func PanicRecoveryInterceptor(
 	ctx context.Context,
 	request interface{},
 	_ *grpc.UnaryServerInfo,

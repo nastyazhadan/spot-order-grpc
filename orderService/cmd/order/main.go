@@ -3,50 +3,53 @@ package main
 import (
 	"context"
 	"flag"
-	"os"
+	"log"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/app/order"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/closer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+
 	"go.uber.org/zap"
 )
 
+const envFilePath = "../../../.env"
+
 func main() {
-	envPath := flag.String("env", ".env", "../../../.env")
+	envPath := flag.String("env", ".env", envFilePath)
 	flag.Parse()
 
 	cfg, err := config.Load(*envPath)
 	if err != nil {
-		zapLogger.Fatal(context.Background(), "failed to load config file",
-			zap.Error(err))
+		log.Fatalf("failed to load config file: %v", err)
 	}
+
+	appCtx, appCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer appCancel()
+	defer gracefulShutdown(cfg.Order.GraceShutTimeout)
+
+	closer.Configure(syscall.SIGINT, syscall.SIGTERM)
 
 	app := order.New(cfg.Order)
 
-	errChan, err := app.Start()
+	err = app.Start(appCtx)
 	if err != nil {
-		zapLogger.Fatal(context.Background(), "failed to start app",
+		zapLogger.Fatal(appCtx, "failed to start app",
+			zap.Error(err))
+	}
+}
+
+func gracefulShutdown(timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	if err := closer.CloseAll(ctx); err != nil {
+		zapLogger.Error(ctx, "failed to close all processes in order server",
 			zap.Error(err))
 	}
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case <-quit:
-		zapLogger.Info(context.Background(), "Received signal, shutting down order server...")
-	case err := <-errChan:
-		zapLogger.Fatal(context.Background(), "Order server failed",
-			zap.Error(err),
-		)
-	}
-
-	if err := app.Stop(); err != nil {
-		zapLogger.Error(context.Background(), "failed to stop order server",
-			zap.Error(err),
-		)
-	}
-	zapLogger.Info(context.Background(), "Order server stopped")
+	zapLogger.Info(ctx, "Order server stopped")
 }

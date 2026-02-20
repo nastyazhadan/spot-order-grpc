@@ -3,49 +3,53 @@ package main
 import (
 	"context"
 	"flag"
-	"os"
+	"log"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/closer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/app/spot"
+
 	"go.uber.org/zap"
 )
 
+const envFilePath = "../../../.env"
+
 func main() {
-	envPath := flag.String("env", ".env", "../../../.env")
+	envPath := flag.String("env", ".env", envFilePath)
 	flag.Parse()
 
 	cfg, err := config.Load(*envPath)
 	if err != nil {
-		zapLogger.Fatal(context.Background(), "failed to load config",
-			zap.Error(err))
+		log.Fatalf("failed to load config file: %v", err)
 	}
+
+	appCtx, appCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer appCancel()
+	defer gracefulShutdown(cfg.Spot.GraceShutTimeout)
+
+	closer.Configure(syscall.SIGINT, syscall.SIGTERM)
 
 	app := spot.New(cfg.Spot)
 
-	errChan, err := app.Start()
+	err = app.Start(appCtx)
 	if err != nil {
-		zapLogger.Fatal(context.Background(), "failed to start spot service",
+		zapLogger.Fatal(appCtx, "failed to start spot service",
+			zap.Error(err))
+	}
+}
+
+func gracefulShutdown(timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	if err := closer.CloseAll(ctx); err != nil {
+		zapLogger.Error(ctx, "failed to close all processes in spot server",
 			zap.Error(err))
 	}
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case <-quit:
-		zapLogger.Info(context.Background(), "Shutting down spot server...")
-	case err := <-errChan:
-		zapLogger.Fatal(context.Background(), "Spot server failed",
-			zap.Error(err))
-	}
-
-	if err := app.Stop(); err != nil {
-		zapLogger.Error(context.Background(), "failed to stop spot server",
-			zap.Error(err))
-	}
-
-	zapLogger.Info(context.Background(), "Spot server stopped")
+	zapLogger.Info(ctx, "Spot server stopped")
 }

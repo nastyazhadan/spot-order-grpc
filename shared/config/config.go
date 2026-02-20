@@ -12,19 +12,25 @@ type Config struct {
 }
 
 type OrderConfig struct {
-	Address        string        `env:"ORDER_ADDRESS" env-default:":50051"`
-	DBURI          string        `env:"ORDER_DB_URI" env-required:"true"`
-	MigrationDir   string        `env:"ORDER_MIGRATION_DIR" env-default:"./orderService/migrations"`
-	SpotAddress    string        `env:"SPOT_INSTRUMENT_ADDRESS" env-default:":50052"`
-	CreateTimeout  time.Duration `env:"ORDER_CREATE_TIMEOUT" env-default:"5s"`
-	CheckTimeout   time.Duration `env:"ORDER_CHECK_TIMEOUT" env-default:"2s"`
-	CircuitBreaker CircuitBreakerConfig
+	Address          string        `env:"ORDER_ADDRESS" env-default:":50051"`
+	DBURI            string        `env:"ORDER_DB_URI" env-required:"true"`
+	MigrationDir     string        `env:"ORDER_MIGRATION_DIR" env-default:"./orderService/migrations"`
+	SpotAddress      string        `env:"SPOT_INSTRUMENT_ADDRESS" env-default:":50052"`
+	CreateTimeout    time.Duration `env:"ORDER_CREATE_TIMEOUT" env-default:"5s"`
+	CheckTimeout     time.Duration `env:"ORDER_CHECK_TIMEOUT" env-default:"2s"`
+	LogLevel         string        `env:"LOG_LEVEL"  env-default:"info"`
+	LogFormat        string        `env:"LOG_FORMAT" env-default:"console"`
+	GraceShutTimeout time.Duration `env:"GRACEFUL_SHUTDOWN_TIMEOUT" env-default:"5s"`
+	CircuitBreaker   CircuitBreakerConfig
 }
 
 type SpotConfig struct {
-	Address      string `env:"SPOT_INSTRUMENT_ADDRESS" env-default:":50052"`
-	DBURI        string `env:"SPOT_DB_URI" env-required:"true"`
-	MigrationDir string `env:"SPOT_MIGRATION_DIR" env-default:"./spotService/migrations"`
+	Address          string        `env:"SPOT_INSTRUMENT_ADDRESS" env-default:":50052"`
+	DBURI            string        `env:"SPOT_DB_URI" env-required:"true"`
+	MigrationDir     string        `env:"SPOT_MIGRATION_DIR" env-default:"./spotService/migrations"`
+	LogLevel         string        `env:"LOG_LEVEL"  env-default:"info"`
+	LogFormat        string        `env:"LOG_FORMAT" env-default:"console"`
+	GraceShutTimeout time.Duration `env:"GRACEFUL_SHUTDOWN_TIMEOUT" env-default:"5s"`
 }
 
 type CircuitBreakerConfig struct {
