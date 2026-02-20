@@ -73,5 +73,14 @@ func (client *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) 
 		return nil, fmt.Errorf("circuit breaker: %w", err)
 	}
 
-	return result.([]models.Market), nil
+	markets, ok := result.([]models.Market)
+	if !ok {
+		zapLogger.Error(ctx, "unexpected result type",
+			zap.Any("result", result),
+		)
+
+		return nil, fmt.Errorf("internal server error")
+	}
+
+	return markets, nil
 }

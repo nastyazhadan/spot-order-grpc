@@ -6,8 +6,8 @@ import (
 	"net"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	postgres "github.com/nastyazhadan/spot-order-grpc/shared/infra/db"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infra/health"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/postgres"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
@@ -16,6 +16,7 @@ import (
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 	storageSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/postgres"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/migrations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -52,15 +53,14 @@ func (app *App) Start(ctx context.Context) error {
 		return fmt.Errorf("setupGRPCServer: %w", err)
 	}
 
-	errChan := make(chan error, 1)
-
 	go func() {
 		zapLogger.Info(ctx, "Spot service started",
 			zap.String("address", app.config.Address),
 		)
 
 		if err := app.grpcServer.Serve(app.listener); err != nil {
-			errChan <- err
+			zapLogger.Fatal(ctx, "grpcServer.Serve:",
+				zap.Error(err))
 		}
 	}()
 
@@ -68,7 +68,7 @@ func (app *App) Start(ctx context.Context) error {
 }
 
 func (app *App) setupDB(ctx context.Context) error {
-	pool, err := postgres.SetupDB(ctx, app.config.DBURI, app.config.MigrationDir)
+	pool, err := postgres.SetupDB(ctx, app.config.DBURI, migrations.Migrations)
 	if err != nil {
 		return err
 	}

@@ -8,3 +8,5 @@ tasklist /FI "PID eq 6900"
 tasklist /FI "PID eq 19900"
 
 taskkill /PID 8352 /F
+
+git filter-repo --path .env --invert-paths

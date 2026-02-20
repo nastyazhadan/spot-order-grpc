@@ -29,7 +29,7 @@ func main() {
 
 	appCtx, appCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer appCancel()
-	defer gracefulShutdown(cfg.Spot.GraceShutTimeout)
+	defer gracefulShutdown(cfg.Spot.GSTimeout)
 
 	closer.Configure(syscall.SIGINT, syscall.SIGTERM)
 

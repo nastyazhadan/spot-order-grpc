@@ -8,9 +8,11 @@ import (
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	storageOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/postgres"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/postgres"
+	postgres "github.com/nastyazhadan/spot-order-grpc/shared/infra/db"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infra/health"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
@@ -65,15 +67,14 @@ func (app *App) Start(ctx context.Context) error {
 		return fmt.Errorf("setupGRPCServer: %w", err)
 	}
 
-	errChan := make(chan error, 1)
-
 	go func() {
 		zapLogger.Info(ctx, "OrderService started",
 			zap.String("address", app.config.Address),
 		)
 
 		if err := app.grpcServer.Serve(app.listener); err != nil {
-			errChan <- err
+			zapLogger.Fatal(ctx, "grpcServer.Serve:",
+				zap.Error(err))
 		}
 	}()
 
@@ -81,7 +82,7 @@ func (app *App) Start(ctx context.Context) error {
 }
 
 func (app *App) setupDB(ctx context.Context) error {
-	pool, err := postgres.SetupDB(ctx, app.config.DBURI, app.config.MigrationDir)
+	pool, err := postgres.SetupDB(ctx, app.config.DBURI, migrations.Migrations)
 	if err != nil {
 		return err
 	}
@@ -145,10 +146,13 @@ func (app *App) setupGRPCServer(ctx context.Context, client *grpcClient.Client) 
 		),
 	)
 
+	reflection.Register(app.grpcServer)
+
+	health.RegisterService(app.grpcServer)
+
 	orderStore := storageOrder.NewOrderStore(app.dbPool)
 	useCase := svcOrder.NewService(orderStore, orderStore, client, app.config.CreateTimeout)
 	grpcOrder.Register(app.grpcServer, useCase)
-	reflection.Register(app.grpcServer)
 
 	return nil
 }

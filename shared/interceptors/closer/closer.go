@@ -2,7 +2,6 @@ package closer
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -84,13 +83,13 @@ func (closer *Closer) handleSignals(signals ...os.Signal) {
 
 	select {
 	case <-channel:
-		closer.logger.Info(context.Background(), "Получен системный сигнал, начинаем graceful shutdown...")
+		closer.logger.Info(context.Background(), "received shutdown signal")
 
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer shutdownCancel()
 
 		if err := closer.CloseAll(shutdownCtx); err != nil {
-			closer.logger.Error(context.Background(), "Ошибка при закрытии ресурсов: %v",
+			closer.logger.Error(context.Background(), "shutdown error",
 				zap.Error(err))
 		}
 
@@ -101,15 +100,15 @@ func (closer *Closer) handleSignals(signals ...os.Signal) {
 func (closer *Closer) AddNamed(name string, function func(context.Context) error) {
 	closer.Add(func(ctx context.Context) error {
 		start := time.Now()
-		closer.logger.Info(ctx, fmt.Sprintf("Закрываем %s...", name))
+		closer.logger.Info(ctx, fmt.Sprintf("closing %s...", name))
 
 		err := function(ctx)
 
 		duration := time.Since(start)
 		if err != nil {
-			closer.logger.Error(ctx, fmt.Sprintf("Ошибка при закрытии %s: %v (заняло %s)", name, err, duration))
+			closer.logger.Error(ctx, fmt.Sprintf("failed to close %s (took %s)", name, duration))
 		} else {
-			closer.logger.Info(ctx, fmt.Sprintf("%s успешно закрыт за %s", name, duration))
+			closer.logger.Info(ctx, fmt.Sprintf("%s closed (took %s)", name, duration))
 		}
 		return err
 	})
@@ -134,59 +133,46 @@ func (closer *Closer) CloseAll(ctx context.Context) error {
 		closer.mutex.Unlock()
 
 		if len(funcs) == 0 {
-			closer.logger.Info(ctx, "Нет функций для закрытия.")
+			closer.logger.Info(ctx, "no functions to close")
 			return
 		}
 
-		closer.logger.Info(ctx, "Начинаем процесс graceful shutdown...")
-
-		errChannel := make(chan error, len(funcs))
-		var wg sync.WaitGroup
+		closer.logger.Info(ctx, "starting graceful shutdown...")
 
 		for i := len(funcs) - 1; i >= 0; i-- {
-			function := funcs[i]
-			wg.Add(1)
-			go func(function func(context.Context) error) {
-				defer wg.Done()
-
-				defer func() {
-					if r := recover(); r != nil {
-						errChannel <- errors.New("panic recovered in closer")
-						closer.logger.Error(ctx, "Panic в функции закрытия", zap.Any("error", r))
-					}
-				}()
-
-				if err := function(ctx); err != nil {
-					errChannel <- err
-				}
-			}(function)
-		}
-
-		go func() {
-			wg.Wait()
-			close(errChannel)
-		}()
-
-		for {
-			select {
-			case <-ctx.Done():
-				closer.logger.Info(ctx, "Контекст отменён во время закрытия", zap.Error(ctx.Err()))
+			if ctx.Err() != nil {
+				closer.logger.Info(ctx, "context canceled during shutdown",
+					zap.Error(ctx.Err()))
 				if result == nil {
 					result = ctx.Err()
 				}
 				return
-			case err, ok := <-errChannel:
-				if !ok {
-					closer.logger.Info(ctx, "Все ресурсы успешно закрыты")
-					return
-				}
-				closer.logger.Error(ctx, "Ошибка при закрытии", zap.Error(err))
+			}
+
+			if err := closer.safeRun(ctx, funcs[i]); err != nil {
+				closer.logger.Error(ctx, "error closing resource",
+					zap.Error(err),
+				)
 				if result == nil {
 					result = err
 				}
 			}
 		}
+		closer.logger.Info(ctx, "all resources closed")
 	})
 
 	return result
+}
+
+func (closer *Closer) safeRun(ctx context.Context, function func(context.Context) error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic in close function: %v", r)
+			closer.logger.Error(ctx, "panic recovered during shutdown",
+				zap.Any("panic", r),
+			)
+		}
+	}()
+
+	return function(ctx)
 }
