@@ -9,19 +9,19 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models/mapper"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
-	"go.uber.org/zap"
 
 	"github.com/sony/gobreaker/v2"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
 type Client struct {
 	api            proto.SpotInstrumentServiceClient
-	circuitBreaker *gobreaker.CircuitBreaker[interface{}]
+	circuitBreaker *gobreaker.CircuitBreaker[[]models.Market]
 }
 
 func New(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig) *Client {
-	circuitBreaker := gobreaker.NewCircuitBreaker[interface{}](gobreaker.Settings{
+	circuitBreaker := gobreaker.NewCircuitBreaker[[]models.Market](gobreaker.Settings{
 		Name:        "spotService",
 		MaxRequests: cfg.MaxRequests,
 		Interval:    cfg.Interval,
@@ -38,7 +38,7 @@ func New(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig) *Client {
 }
 
 func (client *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models.Market, error) {
-	result, err := client.circuitBreaker.Execute(func() (interface{}, error) {
+	markets, err := client.circuitBreaker.Execute(func() ([]models.Market, error) {
 		userRoles := make([]proto.UserRole, 0, len(roles))
 		for _, role := range roles {
 			userRoles = append(userRoles, mapper.UserRoleToProto(role))
@@ -48,8 +48,7 @@ func (client *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) 
 			UserRoles: userRoles,
 		})
 		if err != nil {
-			zapLogger.Error(ctx, "ViewMarkets failed",
-				zap.Error(err))
+			zapLogger.Error(ctx, "ViewMarkets failed", zap.Error(err))
 
 			return nil, err
 		}
@@ -58,8 +57,7 @@ func (client *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) 
 		for _, market := range response.GetMarkets() {
 			mappedMarket, err := mapper.MarketFromProto(market)
 			if err != nil {
-				zapLogger.Error(ctx, "ViewMarkets failed",
-					zap.Error(err))
+				zapLogger.Error(ctx, "ViewMarkets failed", zap.Error(err))
 
 				return nil, err
 			}
@@ -71,15 +69,6 @@ func (client *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) 
 
 	if err != nil {
 		return nil, fmt.Errorf("circuit breaker: %w", err)
-	}
-
-	markets, ok := result.([]models.Market)
-	if !ok {
-		zapLogger.Error(ctx, "unexpected result type",
-			zap.Any("result", result),
-		)
-
-		return nil, fmt.Errorf("internal server error")
 	}
 
 	return markets, nil

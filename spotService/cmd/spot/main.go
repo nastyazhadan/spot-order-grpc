@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/closer"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infra/closer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/app/spot"
 
@@ -30,9 +30,6 @@ func main() {
 	appCtx, appCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer appCancel()
 	defer gracefulShutdown(cfg.Spot.GSTimeout)
-
-	// Возможно убрать
-	closer.Configure(syscall.SIGINT, syscall.SIGTERM)
 
 	app, err := spot.New(appCtx, cfg.Spot)
 	if err != nil {

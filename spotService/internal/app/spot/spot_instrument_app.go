@@ -11,9 +11,9 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infra/closer"
 	postgres "github.com/nastyazhadan/spot-order-grpc/shared/infra/db"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infra/health"
-	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/closer"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"

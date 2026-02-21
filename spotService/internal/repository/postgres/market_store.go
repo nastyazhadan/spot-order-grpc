@@ -29,7 +29,6 @@ func (store *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) 
 	if err != nil {
 		return nil, fmt.Errorf("%s: query: %w", op, err)
 	}
-	defer rows.Close()
 
 	marketsDTO, err := pgx.CollectRows(rows, pgx.RowToStructByName[dto.Market])
 	if err != nil {

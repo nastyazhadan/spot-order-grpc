@@ -3,6 +3,7 @@ package order
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
 
@@ -54,8 +55,15 @@ func (server *serverAPI) CreateOrder(
 		return nil, err
 	}
 
-	userID, _ := uuid.Parse(request.GetUserId())
-	marketID, _ := uuid.Parse(request.GetMarketId())
+	userID, err := mustParseUUID(request.GetUserId())
+	if err != nil {
+		return nil, err
+	}
+	marketID, err := mustParseUUID(request.GetMarketId())
+	if err != nil {
+		return nil, err
+	}
+
 	orderType := mapper.TypeFromProto(request.GetOrderType())
 	orderPrice := request.GetPrice()
 	orderQuantity := request.GetQuantity()
@@ -92,12 +100,18 @@ func (server *serverAPI) GetOrderStatus(
 	ctx context.Context,
 	request *proto.GetOrderStatusRequest,
 ) (*proto.GetOrderStatusResponse, error) {
-	if err := validateGetError(request); err != nil {
-		return nil, err
+	if request.GetOrderId() == "" || request.GetUserId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "order_id and user_id are required")
 	}
 
-	orderID, _ := uuid.Parse(request.GetOrderId())
-	userID, _ := uuid.Parse(request.GetUserId())
+	orderID, err := mustParseUUID(request.GetOrderId())
+	if err != nil {
+		return nil, err
+	}
+	userID, err := mustParseUUID(request.GetUserId())
+	if err != nil {
+		return nil, err
+	}
 
 	orderStatus, err := server.service.GetOrderStatus(ctx, orderID, userID)
 	if err != nil {
@@ -120,14 +134,6 @@ func (server *serverAPI) GetOrderStatus(
 func validateCreateError(request *proto.CreateOrderRequest) error {
 	if request.GetUserId() == "" || request.GetMarketId() == "" {
 		return status.Error(codes.InvalidArgument, "user_id and market_id are required")
-	}
-
-	if _, err := uuid.Parse(request.GetUserId()); err != nil {
-		return status.Error(codes.InvalidArgument, "user_id must be UUID")
-	}
-
-	if _, err := uuid.Parse(request.GetMarketId()); err != nil {
-		return status.Error(codes.InvalidArgument, "market_id must be UUID")
 	}
 
 	if request.GetOrderType() == proto.OrderType_TYPE_UNSPECIFIED {
@@ -173,20 +179,11 @@ func validateServiceError(err error) error {
 	}
 }
 
-func validateGetError(request *proto.GetOrderStatusRequest) error {
-	if request.GetOrderId() == "" || request.GetUserId() == "" {
-		return status.Error(codes.InvalidArgument, "order_id and user_id are required")
-	}
-
-	_, err := uuid.Parse(request.GetOrderId())
+func mustParseUUID(s string) (uuid.UUID, error) {
+	id, err := uuid.Parse(s)
 	if err != nil {
-		return status.Error(codes.InvalidArgument, "order_id must be UUID")
+		return uuid.Nil, status.Error(codes.InvalidArgument, fmt.Sprintf("%q must be a valid UUID", s))
 	}
 
-	_, err = uuid.Parse(request.GetUserId())
-	if err != nil {
-		return status.Error(codes.InvalidArgument, "user_id must be UUID")
-	}
-
-	return nil
+	return id, nil
 }

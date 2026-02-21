@@ -106,7 +106,7 @@ func (closer *Closer) AddNamed(name string, function func(context.Context) error
 
 		duration := time.Since(start)
 		if err != nil {
-			closer.logger.Error(ctx, fmt.Sprintf("failed to close %s (took %s)", name, duration))
+			closer.logger.Error(ctx, fmt.Sprintf("failed to close %s (took %s)", name, duration), zap.Error(err))
 		} else {
 			closer.logger.Info(ctx, fmt.Sprintf("%s closed (took %s)", name, duration))
 		}
