@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
@@ -90,7 +91,7 @@ func (service *Service) CreateOrder(
 	}
 
 	if err := service.saver.SaveOrder(ctx, newOrder); err != nil {
-		if errors.Is(err, storageErrors.ErrOrderAlreadyExists) {
+		if errors.Is(err, repositoryErrors.ErrOrderAlreadyExists) {
 			return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderAlreadyExists)
 		}
 
@@ -105,7 +106,7 @@ func (service *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid
 
 	result, err := service.getter.GetOrder(ctx, orderID)
 	if err != nil {
-		if errors.Is(err, storageErrors.ErrOrderNotFound) {
+		if errors.Is(err, repositoryErrors.ErrOrderNotFound) {
 			return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderNotFound)
 		}
 

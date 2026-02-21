@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/postgres/dto"
 )
@@ -37,7 +37,7 @@ func (store *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) 
 	}
 
 	if len(marketsDTO) == 0 {
-		return nil, fmt.Errorf("%s: %w", op, storageErrors.ErrMarketStoreIsEmpty)
+		return nil, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketStoreIsEmpty)
 	}
 
 	out := make([]models.Market, 0, len(marketsDTO))

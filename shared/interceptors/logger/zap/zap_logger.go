@@ -27,7 +27,7 @@ type logger struct {
 	zapLogger *zap.Logger
 }
 
-func Init(levelStr string, asJSON bool) {
+func Init(levelStr string, asJSON bool) error {
 	initOnce.Do(func() {
 		dynamicLevel = zap.NewAtomicLevelAt(parseLevel(levelStr))
 
@@ -52,6 +52,8 @@ func Init(levelStr string, asJSON bool) {
 			zapLogger: zapLogger,
 		}
 	})
+
+	return nil
 }
 
 func buildEncoderConfig() zapcore.EncoderConfig {

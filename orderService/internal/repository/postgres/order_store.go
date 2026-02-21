@@ -12,7 +12,7 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/postgres/dto"
-	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 )
 
 const PostgresErrorCode = "23505"
@@ -47,7 +47,7 @@ func (store *OrderStore) SaveOrder(ctx context.Context, order models.Order) erro
 
 	if err != nil {
 		if isDuplicateKey(err) {
-			return fmt.Errorf("%s: %w", op, storageErrors.ErrOrderAlreadyExists)
+			return fmt.Errorf("%s: %w", op, repositoryErrors.ErrOrderAlreadyExists)
 		}
 
 		return fmt.Errorf("%s: exec: %w", op, err)
@@ -74,7 +74,7 @@ func (store *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Ord
 	orderDTO, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[dto.Order])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return models.Order{}, fmt.Errorf("%s: %w", op, storageErrors.ErrOrderNotFound)
+			return models.Order{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrOrderNotFound)
 		}
 
 		return models.Order{}, fmt.Errorf("%s: collect: %w", op, err)

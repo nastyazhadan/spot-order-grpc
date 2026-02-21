@@ -19,7 +19,7 @@ import (
 const envFilePath = "../../../.env"
 
 func main() {
-	envPath := flag.String("env", ".env", envFilePath)
+	envPath := flag.String("env", envFilePath, "path to .env file")
 	flag.Parse()
 
 	cfg, err := config.Load(*envPath)
@@ -31,14 +31,19 @@ func main() {
 	defer appCancel()
 	defer gracefulShutdown(cfg.Spot.GSTimeout)
 
+	// Возможно убрать
 	closer.Configure(syscall.SIGINT, syscall.SIGTERM)
 
-	app := spot.New(cfg.Spot)
+	app, err := spot.New(appCtx, cfg.Spot)
+	if err != nil {
+		zapLogger.Error(appCtx, "failed to initialize spot service", zap.Error(err))
+		return
+	}
 
 	err = app.Start(appCtx)
 	if err != nil {
-		zapLogger.Fatal(appCtx, "failed to start spot service",
-			zap.Error(err))
+		zapLogger.Error(appCtx, "failed to start spot service", zap.Error(err))
+		return
 	}
 }
 
@@ -47,9 +52,6 @@ func gracefulShutdown(timeout time.Duration) {
 	defer cancel()
 
 	if err := closer.CloseAll(ctx); err != nil {
-		zapLogger.Error(ctx, "failed to close all processes in spot server",
-			zap.Error(err))
+		zapLogger.Error(ctx, "failed to close all processes in spot service", zap.Error(err))
 	}
-
-	zapLogger.Info(ctx, "Spot server stopped")
 }

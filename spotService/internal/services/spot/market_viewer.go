@@ -5,31 +5,31 @@ import (
 	"errors"
 	"fmt"
 
-	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
-type MarketViewer interface {
+type MarketRepository interface {
 	ListAll(ctx context.Context) ([]models.Market, error)
 }
 
 type Service struct {
-	marketViewer MarketViewer
+	marketRepository MarketRepository
 }
 
-func NewService(marketViewer MarketViewer) *Service {
+func NewService(repository MarketRepository) *Service {
 	return &Service{
-		marketViewer: marketViewer,
+		marketRepository: repository,
 	}
 }
 
 func (service *Service) ViewMarkets(ctx context.Context, userRoles []models.UserRole) ([]models.Market, error) {
-	const op = "service.MarketViewer.ViewMarkets"
+	const op = "service.MarketRepository.ViewMarkets"
 
-	markets, err := service.marketViewer.ListAll(ctx)
+	markets, err := service.marketRepository.ListAll(ctx)
 	if err != nil {
-		if errors.Is(err, storageErrors.ErrMarketStoreIsEmpty) {
+		if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
 			return nil, serviceErrors.ErrMarketsNotFound
 		}
 
