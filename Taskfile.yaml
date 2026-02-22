@@ -2,22 +2,84 @@ version: '3'
 
 tasks:
   test:
-    desc: Запустить все тесты
+    desc: Запустить все юнит тесты
     cmds:
       - echo "{{.BLUE}}Запуск всех тестов...{{.NC}}"
       - go test ./orderService/... ./spotService/... -v
 
   test:short:
-    desc: Запустить все тесты (краткий вывод)
+    desc: Запустить все юнит тесты (краткий вывод)
     cmds:
       - echo "{{.BLUE}}Запуск всех тестов...{{.NC}}"
       - go test ./orderService/... ./spotService/...
 
   test:race:
-    desc: Запустить тесты с проверкой race conditions
+    desc: Запустить юнит тесты с проверкой race conditions
     cmds:
       - echo "{{.BLUE}}Проверка race conditions...{{.NC}}"
       - go test -race ./orderService/... ./spotService/...
+
+  test:integration:
+    desc: Запустить интеграционные тесты (требуется Docker)
+    cmds:
+      - echo "{{.BLUE}}Проверка Docker...{{.NC}}"
+      - cmd: docker info > /dev/null 2>&1 || (echo "Docker не запущен" && exit 1)
+        platforms: [ linux, darwin ]
+      - cmd: docker info > nul 2>&1 || (echo "Docker не запущен" && exit 1)
+        platforms: [ windows ]
+      - echo "{{.BLUE}}Запуск интеграционных тестов...{{.NC}}"
+      - go test -tags=integration ./orderService/tests/... -v -timeout 10m -count=1
+      - go test -tags=integration ./spotService/tests/... -v -timeout 5m -count=1
+      - echo "{{.GREEN}}Интеграционные тесты завершены{{.NC}}"
+
+  test:integration:race:
+    desc: Запустить интеграционные тесты с проверкой race conditions (требуется Docker)
+    cmds:
+      - echo "{{.BLUE}}Проверка Docker...{{.NC}}"
+      - cmd: docker info > /dev/null 2>&1 || (echo "Docker не запущен" && exit 1)
+        platforms: [ linux, darwin ]
+      - cmd: docker info > nul 2>&1 || (echo "Docker не запущен" && exit 1)
+        platforms: [ windows ]
+      - echo "{{.BLUE}}Запуск интеграционных тестов...{{.NC}}"
+      - go test -tags=integration -race ./orderService/tests/... -v -timeout 10m -count=1
+      - go test -tags=integration -race ./spotService/tests/... -v -timeout 5m -count=1
+      - echo "{{.GREEN}}Интеграционные тесты завершены{{.NC}}"
+
+  test:all:
+    desc: Прогнать все тесты (юнит + интеграционные, требуется Docker для integration)
+    cmds:
+      - echo "{{.BLUE}}Запуск юнит тестов...{{.NC}}"
+      - go test ./orderService/... ./spotService/... -v -count=1
+
+      - echo "{{.BLUE}}Проверка Docker...{{.NC}}"
+      - cmd: docker info > /dev/null 2>&1 || (echo "Docker не запущен" && exit 1)
+        platforms: [ linux, darwin ]
+      - cmd: docker info > nul 2>&1 || (echo "Docker не запущен" && exit 1)
+        platforms: [ windows ]
+
+      - echo "{{.BLUE}}Запуск интеграционных тестов...{{.NC}}"
+      - go test -tags=integration ./orderService/tests/... -v -timeout 10m -count=1
+      - go test -tags=integration ./spotService/tests/... -v -timeout 5m -count=1
+
+      - echo "{{.GREEN}}Все тесты завершены{{.NC}}"
+
+  test:all:race:
+    desc: Прогнать все тесты с race (юнит + интеграционные, требуется Docker для integration)
+    cmds:
+      - echo "{{.BLUE}}Запуск юнит тестов (race)...{{.NC}}"
+      - go test -race ./orderService/... ./spotService/... -v -count=1
+
+      - echo "{{.BLUE}}Проверка Docker...{{.NC}}"
+      - cmd: docker info > /dev/null 2>&1 || (echo "Docker не запущен" && exit 1)
+        platforms: [ linux, darwin ]
+      - cmd: docker info > nul 2>&1 || (echo "Docker не запущен" && exit 1)
+        platforms: [ windows ]
+
+      - echo "{{.BLUE}}Запуск интеграционных тестов (race)...{{.NC}}"
+      - go test -tags=integration -race ./orderService/tests/... -v -timeout 10m -count=1
+      - go test -tags=integration -race ./spotService/tests/... -v -timeout m -count=1
+
+      - echo "{{.GREEN}}Все тесты (race) завершены{{.NC}}"
 
   lint:
     # TODO: добавить линтер

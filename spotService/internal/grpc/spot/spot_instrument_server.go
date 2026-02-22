@@ -78,12 +78,18 @@ func (server *serverAPI) getUserRoles(request *proto.ViewMarketsRequest) ([]mode
 		return nil, status.Error(codes.InvalidArgument, "user roles are required")
 	}
 
+	seen := make(map[proto.UserRole]struct{}, len(roles))
 	userRoles := make([]models.UserRole, 0, len(roles))
 
 	for _, role := range roles {
 		if role == proto.UserRole_ROLE_UNSPECIFIED {
 			return nil, status.Error(codes.InvalidArgument, "user role not specified")
 		}
+
+		if _, found := seen[role]; found {
+			return nil, status.Error(codes.InvalidArgument, "duplicate user role found")
+		}
+		seen[role] = struct{}{}
 
 		userRoles = append(userRoles, mapper.UserRoleFromProto(role))
 	}
