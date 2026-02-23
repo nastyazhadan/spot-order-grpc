@@ -1,14 +1,15 @@
-module github.com/nastyazhadan/spot-order-grpc/spotService
+module github.com/nastyazhadan/spot-o-grpc/spotService
 
 go 1.25.0
 
-replace github.com/nastyazhadan/spot-order-grpc/shared => ../shared
+replace github.com/nastyazhadan/spot-o-grpc/shared => ../shared
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.28.0
+	github.com/gomodule/redigo v1.9.3
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260215175453-bd1b6a4a4743
+	github.com/nastyazhadan/spot-o-grpc/shared v0.0.0-20260215175453-bd1b6a4a4743
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0

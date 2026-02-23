@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
@@ -29,6 +30,7 @@ type SpotConfig struct {
 	LogLevel  string        `env:"LOG_LEVEL"  env-default:"info"`
 	LogFormat string        `env:"LOG_FORMAT" env-default:"console"`
 	GSTimeout time.Duration `env:"GS_TIMEOUT" env-default:"5s"`
+	Redis     RedisConfig
 }
 
 type CircuitBreakerConfig struct {
@@ -36,6 +38,19 @@ type CircuitBreakerConfig struct {
 	Interval    time.Duration `env:"CB_INTERVAL"                 env-default:"10s"`
 	Timeout     time.Duration `env:"CB_TIMEOUT"                  env-default:"5s"`
 	MaxFailures uint32        `env:"CB_MAX_FAILURES" env-default:"5"`
+}
+
+type RedisConfig struct {
+	Host              string        `env:"REDIS_HOST" env-default:"localhost"`
+	Port              int           `env:"REDIS_PORT" env-default:"6379"`
+	ConnectionTimeout time.Duration `env:"REDIS_CONNECTION_TIMEOUT" env-default:"10s"`
+	MaxIdle           int           `env:"REDIS_MAX_IDLE" env-default:"10"`
+	IdleTimeout       time.Duration `env:"REDIS_IDLE_TIMEOUT" env-default:"10s"`
+	CacheTTL          time.Duration `env:"SPOT_REDIS_CACHE_TTL" env-default:"24h"`
+}
+
+func (r RedisConfig) Address() string {
+	return fmt.Sprintf("%s:%d", r.Host, r.Port)
 }
 
 func Load(path string) (*Config, error) {

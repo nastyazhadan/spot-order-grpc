@@ -77,7 +77,7 @@ tasks:
 
       - echo "{{.BLUE}}Запуск интеграционных тестов (race)...{{.NC}}"
       - go test -tags=integration -race ./orderService/tests/... -v -timeout 10m -count=1
-      - go test -tags=integration -race ./spotService/tests/... -v -timeout m -count=1
+      - go test -tags=integration -race ./spotService/tests/... -v -timeout 5m -count=1
 
       - echo "{{.GREEN}}Все тесты (race) завершены{{.NC}}"
 
@@ -101,16 +101,6 @@ tasks:
       - mockery --all --dir=./spotService/internal/grpc/spot --output=./spotService/internal/grpc/mocks --case=underscore
 
       - echo "{{.GREEN}}Моки успешно сгенерированы{{.NC}}"
-
-  clean:
-    desc: Очистить сгенерированные файлы
-    cmds:
-      - echo "{{.BLUE}}Очистка...{{.NC}}"
-      - cmd: rm -f coverage*.out coverage*.html
-        platforms: [linux, darwin]
-      - cmd: del /f /q coverage*.out coverage*.html 2>nul || echo.
-        platforms: [windows]
-      - echo "{{.GREEN}}Очистка завершена{{.NC}}"
 
   clean:cache:
     desc: Очистить кэш тестов

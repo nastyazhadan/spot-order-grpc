@@ -4,8 +4,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"google.golang.org/genproto/googleapis/type/decimal"
+
+	"github.com/nastyazhadan/spot-o-grpc/orderService/internal/domain/models"
 )
 
 type Order struct {
@@ -19,16 +20,16 @@ type Order struct {
 	CreatedAt time.Time `db:"created_at"`
 }
 
-func (order Order) ToDomain() models.Order {
+func (o Order) ToDomain() models.Order {
 	return models.Order{
-		ID:        order.ID,
-		UserID:    order.UserID,
-		MarketID:  order.MarketID,
-		Type:      models.OrderType(order.Type),
-		Price:     &decimal.Decimal{Value: order.Price},
-		Quantity:  order.Quantity,
-		Status:    models.OrderStatus(order.Status),
-		CreatedAt: order.CreatedAt,
+		ID:        o.ID,
+		UserID:    o.UserID,
+		MarketID:  o.MarketID,
+		Type:      models.OrderType(o.Type),
+		Price:     &decimal.Decimal{Value: o.Price},
+		Quantity:  o.Quantity,
+		Status:    models.OrderStatus(o.Status),
+		CreatedAt: o.CreatedAt,
 	}
 }
 

@@ -23,15 +23,23 @@ services:
     networks:
       - microservices-net
 
-  order-service:
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  spot-service:
-    depends_on:
-      postgres:
-        condition: service_healthy
+  redis:
+    image: redis:7.2.5-alpine3.20
+    container_name: myredis
+    env_file:
+      - .env
+    ports:
+      - "${EXTERNAL_REDIS_PORT}:6379"
+    command: client-server --save "" --appendonly no --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: [ "CMD", "client-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - microservices-net
 
 networks:
   microservices-net:

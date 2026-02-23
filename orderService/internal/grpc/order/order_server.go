@@ -47,7 +47,7 @@ func Register(grpc *grpc.Server, service Order) {
 	})
 }
 
-func (server *serverAPI) CreateOrder(
+func (s *serverAPI) CreateOrder(
 	ctx context.Context,
 	request *proto.CreateOrderRequest,
 ) (*proto.CreateOrderResponse, error) {
@@ -68,7 +68,7 @@ func (server *serverAPI) CreateOrder(
 	orderPrice := request.GetPrice()
 	orderQuantity := request.GetQuantity()
 
-	orderID, orderStatus, err := server.service.CreateOrder(ctx,
+	orderID, orderStatus, err := s.service.CreateOrder(ctx,
 		userID,
 		marketID,
 		orderType,
@@ -96,7 +96,7 @@ func (server *serverAPI) CreateOrder(
 
 }
 
-func (server *serverAPI) GetOrderStatus(
+func (s *serverAPI) GetOrderStatus(
 	ctx context.Context,
 	request *proto.GetOrderStatusRequest,
 ) (*proto.GetOrderStatusResponse, error) {
@@ -113,7 +113,7 @@ func (server *serverAPI) GetOrderStatus(
 		return nil, err
 	}
 
-	orderStatus, err := server.service.GetOrderStatus(ctx, orderID, userID)
+	orderStatus, err := s.service.GetOrderStatus(ctx, orderID, userID)
 	if err != nil {
 		if !errors.Is(err, serviceErrors.ErrOrderNotFound) {
 			zapLogger.Error(ctx, "failed to get order status",

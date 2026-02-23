@@ -1,4 +1,4 @@
-go run ./orderService/cmd/order/main.go -env .env
+go run ./orderService/cmd/o/main.go -env .env
 go run ./spotService/cmd/spot/main.go -env .env
 
 // Проверить порт 5432

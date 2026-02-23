@@ -7,18 +7,18 @@ import (
 	"testing"
 	"time"
 
-	fakeValue "github.com/brianvoe/gofakeit/v6"
-	"github.com/google/uuid"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/mocks"
 	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
-	"google.golang.org/genproto/googleapis/type/decimal"
 
+	fakeValue "github.com/brianvoe/gofakeit/v6"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/type/decimal"
 )
 
 const CreateTimeout = 5 * time.Second

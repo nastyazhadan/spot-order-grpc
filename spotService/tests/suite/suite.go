@@ -17,9 +17,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infra/db/migrator"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
-	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
+	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 	repoSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/postgres"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/migrations"
@@ -32,12 +34,23 @@ const (
 
 	longTimeout    = 2 * time.Minute
 	startupTimeout = 30 * time.Second
+	cacheTTL       = 5 * time.Minute
 )
 
 type Suite struct {
 	Test       *testing.T
 	SpotClient proto.SpotInstrumentServiceClient
 	Pool       *pgxpool.Pool
+}
+
+type NoopMarketCache struct{}
+
+func (c *NoopMarketCache) GetAll(ctx context.Context) ([]models.Market, error) {
+	return nil, repositoryErrors.ErrMarketCacheNotFound
+}
+
+func (c *NoopMarketCache) SetAll(ctx context.Context, m []models.Market, ttl time.Duration) error {
+	return nil
 }
 
 func New(test *testing.T) (context.Context, *Suite) {
@@ -91,10 +104,11 @@ func New(test *testing.T) (context.Context, *Suite) {
 	}
 
 	marketRepo := repoSpot.NewMarketStore(pool)
-	marketSvc := svcSpot.NewService(marketRepo)
+	cacheRepo := &NoopMarketCache{} // пока заглушка
+	marketSvc := svcSpot.NewService(marketRepo, cacheRepo, cacheTTL)
 
 	grpcServer := grpc.NewServer()
-	spot.Register(grpcServer, marketSvc)
+	grpcSpot.Register(grpcServer, marketSvc)
 
 	listener, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
@@ -137,6 +151,7 @@ func (suite *Suite) InsertMarket(ctx context.Context, id, name string, enabled b
 		`INSERT INTO market_store (id, name, enabled, deleted_at) VALUES ($1, $2, $3, $4)`,
 		id, name, enabled, deletedAt,
 	)
+
 	if err != nil {
 		suite.Test.Fatalf("failed to insert market: %v", err)
 	}

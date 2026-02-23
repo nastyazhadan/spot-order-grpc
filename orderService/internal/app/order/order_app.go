@@ -52,20 +52,20 @@ func New(ctx context.Context, cfg config.OrderConfig) (*App, error) {
 	return app, nil
 }
 
-func (app *App) Start(ctx context.Context) error {
-	return app.runGRPCServer(ctx)
+func (a *App) Start(ctx context.Context) error {
+	return a.runGRPCServer(ctx)
 }
 
-func (app *App) setupDeps(ctx context.Context) error {
+func (a *App) setupDeps(ctx context.Context) error {
 	setups := []func(ctx context.Context) error{
-		app.setupLogger,
-		app.setupCloser,
-		app.setupDB,
-		app.setupSpotConnection,
-		app.setupMarketClient,
-		app.setupDI,
-		app.setupListener,
-		app.setupGRPCServer,
+		a.setupLogger,
+		a.setupCloser,
+		a.setupDB,
+		a.setupSpotConnection,
+		a.setupMarketClient,
+		a.setupDI,
+		a.setupListener,
+		a.setupGRPCServer,
 	}
 
 	for _, init := range setups {
@@ -77,14 +77,14 @@ func (app *App) setupDeps(ctx context.Context) error {
 	return nil
 }
 
-func (app *App) setupLogger(_ context.Context) error {
+func (a *App) setupLogger(_ context.Context) error {
 	return zapLogger.Init(
-		app.config.LogLevel,
-		app.config.LogFormat == "json",
+		a.config.LogLevel,
+		a.config.LogFormat == "json",
 	)
 }
 
-func (app *App) setupCloser(_ context.Context) error {
+func (a *App) setupCloser(_ context.Context) error {
 	closer.SetLogger(zapLogger.Logger())
 
 	closer.AddNamed("zap logger sync", func(ctx context.Context) error {
@@ -95,25 +95,25 @@ func (app *App) setupCloser(_ context.Context) error {
 	return nil
 }
 
-func (app *App) setupDB(ctx context.Context) error {
-	pool, err := postgres.SetupDB(ctx, app.config.DBURI, migrations.Migrations)
+func (a *App) setupDB(ctx context.Context) error {
+	pool, err := postgres.SetupDB(ctx, a.config.DBURI, migrations.Migrations)
 	if err != nil {
 		return fmt.Errorf("postgres.SetupDB: %w", err)
 	}
 
-	app.dbPool = pool
+	a.dbPool = pool
 
 	closer.AddNamed("Postgres pool", func(ctx context.Context) error {
-		app.dbPool.Close()
+		a.dbPool.Close()
 		return nil
 	})
 
 	return nil
 }
 
-func (app *App) setupSpotConnection(_ context.Context) error {
+func (a *App) setupSpotConnection(_ context.Context) error {
 	connection, err := grpc.NewClient(
-		app.config.SpotAddress,
+		a.config.SpotAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(xrequestid.Client),
 	)
@@ -122,38 +122,38 @@ func (app *App) setupSpotConnection(_ context.Context) error {
 		return fmt.Errorf("grpc.NewClient: %w", err)
 	}
 
-	app.spotConnection = connection
+	a.spotConnection = connection
 
 	closer.AddNamed("Spot gRPC connection", func(ctx context.Context) error {
-		return app.spotConnection.Close()
+		return a.spotConnection.Close()
 	})
 
 	return nil
 }
 
-func (app *App) setupMarketClient(ctx context.Context) error {
-	app.marketClient = grpcClient.New(app.spotConnection, app.config.CircuitBreaker)
+func (a *App) setupMarketClient(ctx context.Context) error {
+	a.marketClient = grpcClient.New(a.spotConnection, a.config.CircuitBreaker)
 
-	if err := app.checkSpotConnection(ctx, app.marketClient); err != nil {
+	if err := a.checkSpotConnection(ctx, a.marketClient); err != nil {
 		return fmt.Errorf("checkSpotConnection: %w", err)
 	}
 
 	return nil
 }
 
-func (app *App) setupDI(_ context.Context) error {
-	app.diContainer = NewDIContainer(app.dbPool, app.marketClient, app.config.CreateTimeout)
+func (a *App) setupDI(_ context.Context) error {
+	a.diContainer = NewDIContainer(a.dbPool, a.marketClient, a.config.CreateTimeout)
 
 	return nil
 }
 
-func (app *App) setupListener(_ context.Context) error {
-	listener, err := net.Listen("tcp", app.config.Address)
+func (a *App) setupListener(_ context.Context) error {
+	listener, err := net.Listen("tcp", a.config.Address)
 	if err != nil {
 		return fmt.Errorf("net.Listen: %w", err)
 	}
 
-	app.listener = listener
+	a.listener = listener
 
 	closer.AddNamed("TCP listener", func(ctx context.Context) error {
 		l := listener.Close()
@@ -167,18 +167,18 @@ func (app *App) setupListener(_ context.Context) error {
 	return nil
 }
 
-func (app *App) checkSpotConnection(ctx context.Context, client *grpcClient.Client) error {
-	ctx, cancel := context.WithTimeout(ctx, app.config.CheckTimeout)
+func (a *App) checkSpotConnection(ctx context.Context, client *grpcClient.Client) error {
+	ctx, cancel := context.WithTimeout(ctx, a.config.CheckTimeout)
 	defer cancel()
 
 	if _, err := client.ViewMarkets(ctx, []models.UserRole{models.UserRoleUser}); err != nil {
-		return fmt.Errorf("spot instrument is not reachable at %s: %w", app.config.SpotAddress, err)
+		return fmt.Errorf("spot instrument is not reachable at %s: %w", a.config.SpotAddress, err)
 	}
 
 	return nil
 }
 
-func (app *App) setupGRPCServer(ctx context.Context) error {
+func (a *App) setupGRPCServer(ctx context.Context) error {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return fmt.Errorf("validate.ProtovalidateUnary: %w", err)
@@ -188,7 +188,7 @@ func (app *App) setupGRPCServer(ctx context.Context) error {
 	logger := logInterceptor.LoggerInterceptor()
 	recoverer := recovery.PanicRecoveryInterceptor
 
-	app.grpcServer = grpc.NewServer(
+	a.grpcServer = grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			tracer,
 			logger,
@@ -198,23 +198,21 @@ func (app *App) setupGRPCServer(ctx context.Context) error {
 	)
 
 	closer.AddNamed("gRPC Server", func(ctx context.Context) error {
-		app.grpcServer.GracefulStop()
+		a.grpcServer.GracefulStop()
 		return nil
 	})
 
-	reflection.Register(app.grpcServer)
-
-	health.RegisterService(app.grpcServer)
-
-	grpcOrder.Register(app.grpcServer, app.diContainer.OrderService(ctx))
+	reflection.Register(a.grpcServer)
+	health.RegisterService(a.grpcServer)
+	grpcOrder.Register(a.grpcServer, a.diContainer.OrderService(ctx))
 
 	return nil
 }
 
-func (app *App) runGRPCServer(ctx context.Context) error {
-	zapLogger.Info(ctx, fmt.Sprintf("Starting gRPC Order Server on %s", app.config.Address))
+func (a *App) runGRPCServer(ctx context.Context) error {
+	zapLogger.Info(ctx, fmt.Sprintf("Starting gRPC Order Server on %s", a.config.Address))
 
-	err := app.grpcServer.Serve(app.listener)
+	err := a.grpcServer.Serve(a.listener)
 	if err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 		return fmt.Errorf("grpcServer.Serve: %w", err)
 	}

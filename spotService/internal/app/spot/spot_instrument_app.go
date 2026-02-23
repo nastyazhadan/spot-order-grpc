@@ -70,7 +70,7 @@ func (app *App) setupDeps(ctx context.Context) error {
 }
 
 func (app *App) setupDI(_ context.Context) error {
-	app.diContainer = NewDIContainer(app.dbPool)
+	app.diContainer = NewDIContainer(app.dbPool, app.config.Redis)
 
 	return nil
 }
@@ -154,9 +154,7 @@ func (app *App) setupGRPCServer(ctx context.Context) error {
 	})
 
 	reflection.Register(app.grpcServer)
-
 	health.RegisterService(app.grpcServer)
-
 	grpcSpot.Register(app.grpcServer, app.diContainer.SpotService(ctx))
 
 	return nil
