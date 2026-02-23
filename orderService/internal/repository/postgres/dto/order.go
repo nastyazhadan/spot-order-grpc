@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/type/decimal"
 
-	"github.com/nastyazhadan/spot-o-grpc/orderService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 )
 
 type Order struct {

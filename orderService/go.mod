@@ -1,14 +1,13 @@
-module github.com/nastyazhadan/spot-o-grpc/orderService
+module github.com/nastyazhadan/spot-order-grpc/orderService
 
 go 1.25.0
 
-replace github.com/nastyazhadan/spot-o-grpc/shared => ../shared
+replace github.com/nastyazhadan/spot-order-grpc/shared => ../shared
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/nastyazhadan/spot-order-grpc/orderService v0.0.0-20260222220611-4619ef6cd946
 	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260222220611-4619ef6cd946
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0
@@ -45,6 +44,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/cel-go v0.27.0 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
 	github.com/ilyakaznacheev/cleanenv v1.5.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

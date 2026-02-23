@@ -1,4 +1,4 @@
-module github.com/nastyazhadan/spot-o-grpc/shared
+module github.com/nastyazhadan/spot-order-grpc/shared
 
 go 1.25.0
 
@@ -9,7 +9,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260222220611-4619ef6cd946
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/sony/gobreaker/v2 v2.4.0
 	go.uber.org/zap v1.27.1
@@ -29,9 +28,8 @@ require (
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
-	go.opentelemetry.io/otel/metric v1.40.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.40.0 // indirect
-	go.opentelemetry.io/otel/trace v1.40.0 // indirect
+	go.opentelemetry.io/otel v1.40.0 // indirect
+	go.opentelemetry.io/otel/sdk/metric v1.40.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a // indirect
 	golang.org/x/net v0.50.0 // indirect
