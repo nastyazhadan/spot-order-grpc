@@ -36,17 +36,17 @@ func Register(gRPC *grpc.Server, spotInstrument SpotInstrument) {
 		})
 }
 
-func (server *serverAPI) ViewMarkets(
+func (s *serverAPI) ViewMarkets(
 	ctx context.Context,
 	request *proto.ViewMarketsRequest,
 ) (*proto.ViewMarketsResponse, error) {
 
-	userRoles, err := server.getUserRoles(request)
+	userRoles, err := s.getUserRoles(request)
 	if err != nil {
 		return nil, err
 	}
 
-	markets, err := server.spotInstrument.ViewMarkets(ctx, userRoles)
+	markets, err := s.spotInstrument.ViewMarkets(ctx, userRoles)
 	if err != nil {
 		if errors.Is(err, serviceErrors.ErrMarketsNotFound) {
 			return nil, status.Error(codes.NotFound, err.Error())
@@ -71,7 +71,7 @@ func (server *serverAPI) ViewMarkets(
 	}, nil
 }
 
-func (server *serverAPI) getUserRoles(request *proto.ViewMarketsRequest) ([]models.UserRole, error) {
+func (s *serverAPI) getUserRoles(request *proto.ViewMarketsRequest) ([]models.UserRole, error) {
 	roles := request.GetUserRoles()
 
 	if len(roles) == 0 {

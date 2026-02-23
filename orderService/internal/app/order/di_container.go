@@ -36,19 +36,19 @@ func NewDIContainer(dbPool *pgxpool.Pool, marketViewer svcOrder.MarketViewer, cr
 	}
 }
 
-func (c *DiContainer) OrderRepository(_ context.Context) *repoOrder.OrderStore {
-	if c.orderRepository == nil {
-		c.orderRepository = repoOrder.NewOrderStore(c.dbPool)
+func (d *DiContainer) OrderRepository(_ context.Context) *repoOrder.OrderStore {
+	if d.orderRepository == nil {
+		d.orderRepository = repoOrder.NewOrderStore(d.dbPool)
 	}
 
-	return c.orderRepository
+	return d.orderRepository
 }
 
-func (c *DiContainer) OrderService(ctx context.Context) grpcOrder.Order {
-	if c.orderService == nil {
-		store := c.OrderRepository(ctx)
-		c.orderService = svcOrder.NewService(store, store, c.marketViewer, c.createTimeout)
+func (d *DiContainer) OrderService(ctx context.Context) grpcOrder.Order {
+	if d.orderService == nil {
+		store := d.OrderRepository(ctx)
+		d.orderService = svcOrder.NewService(store, store, d.marketViewer, d.createTimeout)
 	}
 
-	return c.orderService
+	return d.orderService
 }

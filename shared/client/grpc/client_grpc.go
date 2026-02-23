@@ -37,14 +37,14 @@ func New(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig) *Client {
 	}
 }
 
-func (client *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models.Market, error) {
-	markets, err := client.circuitBreaker.Execute(func() ([]models.Market, error) {
+func (c *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models.Market, error) {
+	markets, err := c.circuitBreaker.Execute(func() ([]models.Market, error) {
 		userRoles := make([]proto.UserRole, 0, len(roles))
 		for _, role := range roles {
 			userRoles = append(userRoles, mapper.UserRoleToProto(role))
 		}
 
-		response, err := client.api.ViewMarkets(ctx, &proto.ViewMarketsRequest{
+		response, err := c.api.ViewMarkets(ctx, &proto.ViewMarketsRequest{
 			UserRoles: userRoles,
 		})
 		if err != nil {

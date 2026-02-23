@@ -27,12 +27,12 @@ func NewOrderStore(pool *pgxpool.Pool) *OrderStore {
 	}
 }
 
-func (store *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
+func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 	const op = "repository.OrderStore.SaveOrder"
 
 	orderDTO := dto.FromDomain(order)
 
-	_, err := store.pool.Exec(ctx,
+	_, err := o.pool.Exec(ctx,
 		`INSERT INTO orders (id, user_id, market_id, type, price, quantity, status, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		orderDTO.ID,
@@ -56,10 +56,10 @@ func (store *OrderStore) SaveOrder(ctx context.Context, order models.Order) erro
 	return nil
 }
 
-func (store *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, error) {
+func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, error) {
 	const op = "repository.OrderStore.GetOrder"
 
-	rows, err := store.pool.Query(ctx,
+	rows, err := o.pool.Query(ctx,
 		`SELECT id, user_id, market_id, type, price, quantity, status, created_at
 		 FROM orders
 		 WHERE id = $1

@@ -14,22 +14,22 @@ type MarketRedisView struct {
 	DeletedAtNs *int64 `redis:"deleted_at"  json:"deleted_at,omitempty"`
 }
 
-func (r MarketRedisView) ToDomainView() (models.Market, error) {
-	id, err := uuid.Parse(r.ID)
+func (m MarketRedisView) ToDomainView() (models.Market, error) {
+	id, err := uuid.Parse(m.ID)
 	if err != nil {
 		return models.Market{}, err
 	}
 
 	var deletedAt *time.Time
-	if r.DeletedAtNs != nil {
-		t := time.Unix(0, *r.DeletedAtNs)
+	if m.DeletedAtNs != nil {
+		t := time.Unix(0, *m.DeletedAtNs)
 		deletedAt = &t
 	}
 
 	return models.Market{
 		ID:        id,
-		Name:      r.Name,
-		Enabled:   r.Enabled,
+		Name:      m.Name,
+		Enabled:   m.Enabled,
 		DeletedAt: deletedAt,
 	}, nil
 }

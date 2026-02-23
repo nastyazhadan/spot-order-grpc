@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-
-	logger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 )
 
 const shutdownTimeout = 5 * time.Second
@@ -30,17 +28,13 @@ type Closer struct {
 
 type NoopLogger struct{}
 
-func (logger *NoopLogger) Info(ctx context.Context, message string, fields ...zap.Field)  {}
-func (logger *NoopLogger) Error(ctx context.Context, message string, fields ...zap.Field) {}
+func (n *NoopLogger) Info(ctx context.Context, message string, fields ...zap.Field)  {}
+func (n *NoopLogger) Error(ctx context.Context, message string, fields ...zap.Field) {}
 
 var globalCloser = NewWithLogger(&NoopLogger{})
 
 func AddNamed(name string, function func(context.Context) error) {
 	globalCloser.AddNamed(name, function)
-}
-
-func Add(functions ...func(context.Context) error) {
-	globalCloser.Add(functions...)
 }
 
 func CloseAll(ctx context.Context) error {
@@ -53,10 +47,6 @@ func SetLogger(logger Logger) {
 
 func Configure(signals ...os.Signal) {
 	go globalCloser.handleSignals(signals...)
-}
-
-func New(signals ...os.Signal) *Closer {
-	return NewWithLogger(logger.Logger(), signals...)
 }
 
 func NewWithLogger(logger Logger, signals ...os.Signal) *Closer {
@@ -72,76 +62,76 @@ func NewWithLogger(logger Logger, signals ...os.Signal) *Closer {
 	return closer
 }
 
-func (closer *Closer) SetLogger(logger Logger) {
-	closer.logger = logger
+func (c *Closer) SetLogger(logger Logger) {
+	c.logger = logger
 }
 
-func (closer *Closer) handleSignals(signals ...os.Signal) {
+func (c *Closer) handleSignals(signals ...os.Signal) {
 	channel := make(chan os.Signal, 1)
 	signal.Notify(channel, signals...)
 	defer signal.Stop(channel)
 
 	select {
 	case <-channel:
-		closer.logger.Info(context.Background(), "received shutdown signal")
+		c.logger.Info(context.Background(), "received shutdown signal")
 
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer shutdownCancel()
 
-		if err := closer.CloseAll(shutdownCtx); err != nil {
-			closer.logger.Error(context.Background(), "shutdown error",
+		if err := c.CloseAll(shutdownCtx); err != nil {
+			c.logger.Error(context.Background(), "shutdown error",
 				zap.Error(err))
 		}
 
-	case <-closer.done:
+	case <-c.done:
 	}
 }
 
-func (closer *Closer) AddNamed(name string, function func(context.Context) error) {
-	closer.Add(func(ctx context.Context) error {
+func (c *Closer) AddNamed(name string, function func(context.Context) error) {
+	c.Add(func(ctx context.Context) error {
 		start := time.Now()
-		closer.logger.Info(ctx, fmt.Sprintf("closing %s...", name))
+		c.logger.Info(ctx, fmt.Sprintf("closing %s...", name))
 
 		err := function(ctx)
 
 		duration := time.Since(start)
 		if err != nil {
-			closer.logger.Error(ctx, fmt.Sprintf("failed to close %s (took %s)", name, duration), zap.Error(err))
+			c.logger.Error(ctx, fmt.Sprintf("failed to close %s (took %s)", name, duration), zap.Error(err))
 		} else {
-			closer.logger.Info(ctx, fmt.Sprintf("%s closed (took %s)", name, duration))
+			c.logger.Info(ctx, fmt.Sprintf("%s closed (took %s)", name, duration))
 		}
 		return err
 	})
 }
 
-func (closer *Closer) Add(functions ...func(context.Context) error) {
-	closer.mutex.Lock()
-	defer closer.mutex.Unlock()
+func (c *Closer) Add(functions ...func(context.Context) error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-	closer.funcs = append(closer.funcs, functions...)
+	c.funcs = append(c.funcs, functions...)
 }
 
-func (closer *Closer) CloseAll(ctx context.Context) error {
+func (c *Closer) CloseAll(ctx context.Context) error {
 	var result error
 
-	closer.once.Do(func() {
-		defer close(closer.done)
+	c.once.Do(func() {
+		defer close(c.done)
 
-		closer.mutex.Lock()
-		funcs := closer.funcs
-		closer.funcs = nil
-		closer.mutex.Unlock()
+		c.mutex.Lock()
+		funcs := c.funcs
+		c.funcs = nil
+		c.mutex.Unlock()
 
 		if len(funcs) == 0 {
-			closer.logger.Info(ctx, "no functions to close")
+			c.logger.Info(ctx, "no functions to close")
 			return
 		}
 
-		closer.logger.Info(ctx, "starting graceful shutdown...")
+		c.logger.Info(ctx, "starting graceful shutdown...")
 
 		for i := len(funcs) - 1; i >= 0; i-- {
 			if ctx.Err() != nil {
-				closer.logger.Info(ctx, "context canceled during shutdown",
+				c.logger.Info(ctx, "context canceled during shutdown",
 					zap.Error(ctx.Err()))
 				if result == nil {
 					result = ctx.Err()
@@ -149,8 +139,8 @@ func (closer *Closer) CloseAll(ctx context.Context) error {
 				return
 			}
 
-			if err := closer.safeRun(ctx, funcs[i]); err != nil {
-				closer.logger.Error(ctx, "error closing resource",
+			if err := c.safeRun(ctx, funcs[i]); err != nil {
+				c.logger.Error(ctx, "error closing resource",
 					zap.Error(err),
 				)
 				if result == nil {
@@ -158,17 +148,17 @@ func (closer *Closer) CloseAll(ctx context.Context) error {
 				}
 			}
 		}
-		closer.logger.Info(ctx, "all resources closed")
+		c.logger.Info(ctx, "all resources closed")
 	})
 
 	return result
 }
 
-func (closer *Closer) safeRun(ctx context.Context, function func(context.Context) error) (err error) {
+func (c *Closer) safeRun(ctx context.Context, function func(context.Context) error) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic in close function: %v", r)
-			closer.logger.Error(ctx, "panic recovered during shutdown",
+			c.logger.Error(ctx, "panic recovered during shutdown",
 				zap.Any("panic", r),
 			)
 		}

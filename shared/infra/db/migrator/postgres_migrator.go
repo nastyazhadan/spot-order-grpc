@@ -20,9 +20,9 @@ func NewMigrator(db *sql.DB, migrationsFS fs.FS) *Migrator {
 	}
 }
 
-func (migrator *Migrator) Up(ctx context.Context) error {
-	goose.SetBaseFS(migrator.migrationsFS)
+func (m *Migrator) Up(ctx context.Context) error {
+	goose.SetBaseFS(m.migrationsFS)
 	defer goose.SetBaseFS(nil)
 
-	return goose.UpContext(ctx, migrator.db, ".")
+	return goose.UpContext(ctx, m.db, ".")
 }

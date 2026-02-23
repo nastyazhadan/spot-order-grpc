@@ -46,18 +46,18 @@ func New(ctx context.Context, cfg config.SpotConfig) (*App, error) {
 	return app, nil
 }
 
-func (app *App) Start(ctx context.Context) error {
-	return app.runGRPCServer(ctx)
+func (a *App) Start(ctx context.Context) error {
+	return a.runGRPCServer(ctx)
 }
 
-func (app *App) setupDeps(ctx context.Context) error {
+func (a *App) setupDeps(ctx context.Context) error {
 	setups := []func(ctx context.Context) error{
-		app.setupLogger,
-		app.setupCloser,
-		app.setupDB,
-		app.setupDI,
-		app.setupListener,
-		app.setupGRPCServer,
+		a.setupLogger,
+		a.setupCloser,
+		a.setupDB,
+		a.setupDI,
+		a.setupListener,
+		a.setupGRPCServer,
 	}
 
 	for _, init := range setups {
@@ -69,36 +69,36 @@ func (app *App) setupDeps(ctx context.Context) error {
 	return nil
 }
 
-func (app *App) setupDI(_ context.Context) error {
-	app.diContainer = NewDIContainer(app.dbPool, app.config.Redis)
+func (a *App) setupDI(_ context.Context) error {
+	a.diContainer = NewDIContainer(a.dbPool, a.config.Redis)
 
 	return nil
 }
 
-func (app *App) setupLogger(_ context.Context) error {
+func (a *App) setupLogger(_ context.Context) error {
 	return zapLogger.Init(
-		app.config.LogLevel,
-		app.config.LogFormat == "json",
+		a.config.LogLevel,
+		a.config.LogFormat == "json",
 	)
 }
 
-func (app *App) setupDB(ctx context.Context) error {
-	pool, err := postgres.SetupDB(ctx, app.config.DBURI, migrations.Migrations)
+func (a *App) setupDB(ctx context.Context) error {
+	pool, err := postgres.SetupDB(ctx, a.config.DBURI, migrations.Migrations)
 	if err != nil {
 		return fmt.Errorf("postgres.SetupDB: %w", err)
 	}
 
-	app.dbPool = pool
+	a.dbPool = pool
 
 	closer.AddNamed("Postgres pool", func(ctx context.Context) error {
-		app.dbPool.Close()
+		a.dbPool.Close()
 		return nil
 	})
 
 	return nil
 }
 
-func (app *App) setupCloser(_ context.Context) error {
+func (a *App) setupCloser(_ context.Context) error {
 	closer.SetLogger(zapLogger.Logger())
 
 	closer.AddNamed("zap logger sync", func(ctx context.Context) error {
@@ -109,13 +109,13 @@ func (app *App) setupCloser(_ context.Context) error {
 	return nil
 }
 
-func (app *App) setupListener(_ context.Context) error {
-	listener, err := net.Listen("tcp", app.config.Address)
+func (a *App) setupListener(_ context.Context) error {
+	listener, err := net.Listen("tcp", a.config.Address)
 	if err != nil {
 		return fmt.Errorf("net.Listen: %w", err)
 	}
 
-	app.listener = listener
+	a.listener = listener
 
 	closer.AddNamed("TCP listener", func(ctx context.Context) error {
 		l := listener.Close()
@@ -129,7 +129,7 @@ func (app *App) setupListener(_ context.Context) error {
 	return nil
 }
 
-func (app *App) setupGRPCServer(ctx context.Context) error {
+func (a *App) setupGRPCServer(ctx context.Context) error {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return fmt.Errorf("validate.ProtovalidateUnary: %w", err)
@@ -139,7 +139,7 @@ func (app *App) setupGRPCServer(ctx context.Context) error {
 	logger := logInterceptor.LoggerInterceptor()
 	recoverer := recovery.PanicRecoveryInterceptor
 
-	app.grpcServer = grpc.NewServer(
+	a.grpcServer = grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			tracer,
 			logger,
@@ -149,21 +149,21 @@ func (app *App) setupGRPCServer(ctx context.Context) error {
 	)
 
 	closer.AddNamed("gRPC Server", func(ctx context.Context) error {
-		app.grpcServer.GracefulStop()
+		a.grpcServer.GracefulStop()
 		return nil
 	})
 
-	reflection.Register(app.grpcServer)
-	health.RegisterService(app.grpcServer)
-	grpcSpot.Register(app.grpcServer, app.diContainer.SpotService(ctx))
+	reflection.Register(a.grpcServer)
+	health.RegisterService(a.grpcServer)
+	grpcSpot.Register(a.grpcServer, a.diContainer.SpotService(ctx))
 
 	return nil
 }
 
-func (app *App) runGRPCServer(ctx context.Context) error {
-	zapLogger.Info(ctx, fmt.Sprintf("Starting gRPC Spot Server on %s", app.config.Address))
+func (a *App) runGRPCServer(ctx context.Context) error {
+	zapLogger.Info(ctx, fmt.Sprintf("Starting gRPC Spot Server on %s", a.config.Address))
 
-	err := app.grpcServer.Serve(app.listener)
+	err := a.grpcServer.Serve(a.listener)
 	if err != nil && !errors.Is(err, net.ErrClosed) {
 		return fmt.Errorf("grpcServer.Serve: %w", err)
 	}

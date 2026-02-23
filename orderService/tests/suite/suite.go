@@ -43,12 +43,12 @@ type MockMarketViewer struct {
 	Err     error
 }
 
-func (mock *MockMarketViewer) ViewMarkets(_ context.Context, _ []models.UserRole) ([]models.Market, error) {
-	if mock.Err != nil {
-		return nil, mock.Err
+func (m *MockMarketViewer) ViewMarkets(_ context.Context, _ []models.UserRole) ([]models.Market, error) {
+	if m.Err != nil {
+		return nil, m.Err
 	}
 
-	return mock.Markets, nil
+	return m.Markets, nil
 }
 
 type Suite struct {
@@ -147,44 +147,44 @@ func New(test *testing.T) (context.Context, *Suite) {
 	}
 }
 
-func (suite *Suite) SetAvailableMarkets(markets ...models.Market) {
-	suite.MarketViewer.Markets = markets
-	suite.MarketViewer.Err = nil
+func (s *Suite) SetAvailableMarkets(markets ...models.Market) {
+	s.MarketViewer.Markets = markets
+	s.MarketViewer.Err = nil
 }
 
-func (suite *Suite) SetMarketViewerError(err error) {
-	suite.MarketViewer.Err = err
+func (s *Suite) SetMarketViewerError(err error) {
+	s.MarketViewer.Err = err
 }
 
-func (suite *Suite) ClearOrders(ctx context.Context) {
-	suite.Test.Helper()
+func (s *Suite) ClearOrders(ctx context.Context) {
+	s.Test.Helper()
 
-	if _, err := suite.Pool.Exec(ctx, "DELETE FROM orders"); err != nil {
-		suite.Test.Fatalf("failed to clear orders: %v", err)
+	if _, err := s.Pool.Exec(ctx, "DELETE FROM orders"); err != nil {
+		s.Test.Fatalf("failed to clear orders: %v", err)
 	}
 }
 
-func (suite *Suite) CountOrders(ctx context.Context) int {
-	suite.Test.Helper()
+func (s *Suite) CountOrders(ctx context.Context) int {
+	s.Test.Helper()
 
 	var count int
-	if err := suite.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM orders").Scan(&count); err != nil {
-		suite.Test.Fatalf("failed to count orders: %v", err)
+	if err := s.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM orders").Scan(&count); err != nil {
+		s.Test.Fatalf("failed to count orders: %v", err)
 	}
 
 	return count
 }
 
-func (suite *Suite) OrderExistsInDB(ctx context.Context, orderID string) bool {
-	suite.Test.Helper()
+func (s *Suite) OrderExistsInDB(ctx context.Context, orderID string) bool {
+	s.Test.Helper()
 
 	var exists bool
-	err := suite.Pool.QueryRow(ctx,
+	err := s.Pool.QueryRow(ctx,
 		"SELECT EXISTS(SELECT 1 FROM orders WHERE id = $1)", orderID,
 	).Scan(&exists)
 
 	if err != nil {
-		suite.Test.Fatalf("failed to check order existence: %v", err)
+		s.Test.Fatalf("failed to check order existence: %v", err)
 	}
 
 	return exists

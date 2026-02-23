@@ -45,11 +45,11 @@ type Suite struct {
 
 type NoopMarketCache struct{}
 
-func (c *NoopMarketCache) GetAll(ctx context.Context) ([]models.Market, error) {
+func (n *NoopMarketCache) GetAll(ctx context.Context) ([]models.Market, error) {
 	return nil, repositoryErrors.ErrMarketCacheNotFound
 }
 
-func (c *NoopMarketCache) SetAll(ctx context.Context, m []models.Market, ttl time.Duration) error {
+func (n *NoopMarketCache) SetAll(ctx context.Context, m []models.Market, ttl time.Duration) error {
 	return nil
 }
 
@@ -138,21 +138,21 @@ func New(test *testing.T) (context.Context, *Suite) {
 	}
 }
 
-func (suite *Suite) ClearMarkets(ctx context.Context) {
-	suite.Test.Helper()
-	if _, err := suite.Pool.Exec(ctx, "DELETE FROM market_store"); err != nil {
-		suite.Test.Fatalf("failed to clear market_store: %v", err)
+func (s *Suite) ClearMarkets(ctx context.Context) {
+	s.Test.Helper()
+	if _, err := s.Pool.Exec(ctx, "DELETE FROM market_store"); err != nil {
+		s.Test.Fatalf("failed to clear market_store: %v", err)
 	}
 }
 
-func (suite *Suite) InsertMarket(ctx context.Context, id, name string, enabled bool, deletedAt *time.Time) {
-	suite.Test.Helper()
-	_, err := suite.Pool.Exec(ctx,
+func (s *Suite) InsertMarket(ctx context.Context, id, name string, enabled bool, deletedAt *time.Time) {
+	s.Test.Helper()
+	_, err := s.Pool.Exec(ctx,
 		`INSERT INTO market_store (id, name, enabled, deleted_at) VALUES ($1, $2, $3, $4)`,
 		id, name, enabled, deletedAt,
 	)
 
 	if err != nil {
-		suite.Test.Fatalf("failed to insert market: %v", err)
+		s.Test.Fatalf("failed to insert market: %v", err)
 	}
 }

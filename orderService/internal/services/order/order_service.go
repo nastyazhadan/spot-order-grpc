@@ -42,7 +42,7 @@ func NewService(s Saver, g Getter, mv MarketViewer, t time.Duration) *Service {
 	}
 }
 
-func (service *Service) CreateOrder(
+func (s *Service) CreateOrder(
 	ctx context.Context,
 	userID uuid.UUID,
 	marketID uuid.UUID,
@@ -52,15 +52,18 @@ func (service *Service) CreateOrder(
 ) (uuid.UUID, models.OrderStatus, error) {
 	const op = "Service.CreateOrder"
 
-	ctx, cancel := context.WithTimeout(ctx, service.createTimeout)
+	ctx, cancel := context.WithTimeout(ctx, s.createTimeout)
 	defer cancel()
 
-	currentUserRole := sharedModels.UserRoleUser // Заглушка
-	if currentUserRole != sharedModels.UserRoleUser {
-		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrCreatingOrderNotRequired)
-	}
+	/*
+		currentUserRole := sharedModels.UserRoleUser
+		if currentUserRole != sharedModels.UserRoleUser {
+			return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrCreatingOrderNotRequired)
+		}
+	*/
 
-	markets, err := service.marketViewer.ViewMarkets(ctx, []sharedModels.UserRole{currentUserRole})
+	// Заглушка
+	markets, err := s.marketViewer.ViewMarkets(ctx, []sharedModels.UserRole{sharedModels.UserRoleUser})
 	if err != nil {
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
@@ -90,7 +93,7 @@ func (service *Service) CreateOrder(
 		CreatedAt: time.Now().UTC(),
 	}
 
-	if err := service.saver.SaveOrder(ctx, newOrder); err != nil {
+	if err := s.saver.SaveOrder(ctx, newOrder); err != nil {
 		if errors.Is(err, repositoryErrors.ErrOrderAlreadyExists) {
 			return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderAlreadyExists)
 		}
@@ -101,10 +104,10 @@ func (service *Service) CreateOrder(
 	return orderID, orderStatus, nil
 }
 
-func (service *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
+func (s *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
 	const op = "Service.GetOrderStatus"
 
-	result, err := service.getter.GetOrder(ctx, orderID)
+	result, err := s.getter.GetOrder(ctx, orderID)
 	if err != nil {
 		if errors.Is(err, repositoryErrors.ErrOrderNotFound) {
 			return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderNotFound)

@@ -11,7 +11,7 @@ type Server struct {
 	grpc_health_v1.UnimplementedHealthServer
 }
 
-func (server *Server) Check(
+func (s *Server) Check(
 	ctx context.Context,
 	request *grpc_health_v1.HealthCheckRequest,
 ) (*grpc_health_v1.HealthCheckResponse, error) {
@@ -20,7 +20,7 @@ func (server *Server) Check(
 	}, nil
 }
 
-func (server *Server) Watch(
+func (s *Server) Watch(
 	request *grpc_health_v1.HealthCheckRequest,
 	stream grpc_health_v1.Health_WatchServer) error {
 	return stream.Send(&grpc_health_v1.HealthCheckResponse{

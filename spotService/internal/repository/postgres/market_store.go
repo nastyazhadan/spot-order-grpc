@@ -22,10 +22,10 @@ func NewMarketStore(pool *pgxpool.Pool) *MarketStore {
 	}
 }
 
-func (store *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
+func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 	const op = "repository.MarketStore.ListAll"
 
-	rows, err := store.pool.Query(ctx, `SELECT id, name, enabled, deleted_at FROM market_store`)
+	rows, err := m.pool.Query(ctx, `SELECT id, name, enabled, deleted_at FROM market_store`)
 	if err != nil {
 		return nil, fmt.Errorf("%s: query: %w", op, err)
 	}
