@@ -54,7 +54,6 @@ func TestAllOrderTypesHappyPath(test *testing.T) {
 	}
 
 	for _, orderType := range orderTypes {
-		// orderType := orderType
 		test.Run(orderType.String(), func(test *testing.T) {
 			request := suite.ValidCreateRequest(uuid.New().String(), market.ID.String())
 			request.OrderType = orderType
