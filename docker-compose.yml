@@ -26,13 +26,11 @@ services:
   redis:
     image: redis:7.2.5-alpine3.20
     container_name: myredis
-    env_file:
-      - .env
     ports:
       - "${EXTERNAL_REDIS_PORT}:6379"
-    command: client-server --save "" --appendonly no --maxmemory-policy allkeys-lru
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "allkeys-lru"]
     healthcheck:
-      test: [ "CMD", "client-cli", "ping" ]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5

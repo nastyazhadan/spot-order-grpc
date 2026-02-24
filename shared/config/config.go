@@ -15,7 +15,7 @@ type Config struct {
 type OrderConfig struct {
 	Address        string        `env:"ORDER_ADDRESS" env-default:":50051"`
 	DBURI          string        `env:"ORDER_DB_URI" env-required:"true"`
-	SpotAddress    string        `env:"SPOT_INSTRUMENT_ADDRESS" env-default:":50052"`
+	SpotAddress    string        `env:"SPOT_INSTRUMENT_DIAL_ADDRESS" env-default:"localhost:50052"`
 	CreateTimeout  time.Duration `env:"ORDER_CREATE_TIMEOUT" env-default:"5s"`
 	CheckTimeout   time.Duration `env:"ORDER_CHECK_TIMEOUT" env-default:"2s"`
 	LogLevel       string        `env:"LOG_LEVEL"  env-default:"info"`
@@ -27,7 +27,7 @@ type OrderConfig struct {
 }
 
 type SpotConfig struct {
-	Address   string        `env:"SPOT_INSTRUMENT_ADDRESS" env-default:":50052"`
+	Address   string        `env:"SPOT_INSTRUMENT_LISTEN_ADDRESS" env-default:":50052"`
 	DBURI     string        `env:"SPOT_DB_URI" env-required:"true"`
 	LogLevel  string        `env:"LOG_LEVEL"  env-default:"info"`
 	LogFormat string        `env:"LOG_FORMAT" env-default:"console"`
@@ -53,7 +53,7 @@ type RedisConfig struct {
 
 type RateLimiterConfig struct {
 	Orders int64         `env:"RATE_LIMIT_ORDERS" env-default:"5"`
-	Window time.Duration `env:"WINDOW" env-default:"1h"`
+	Window time.Duration `env:"RATE_LIMIT_WINDOW" env-default:"1h"`
 }
 
 func (r RedisConfig) Address() string {
