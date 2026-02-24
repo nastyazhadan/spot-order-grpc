@@ -23,13 +23,13 @@ import (
 
 const CreateTimeout = 5 * time.Second
 
-var randomUUID = uuid.New()
-
-var randomPrice = models.Decimal(&decimal.Decimal{
-	Value: fmt.Sprintf("%.2f", fakeValue.Float64Range(1, 1000)),
-})
-
-var randomQuantity = int64(fakeValue.IntRange(1, 1000))
+var (
+	randomUUID  = uuid.New()
+	randomPrice = models.Decimal(&decimal.Decimal{
+		Value: fmt.Sprintf("%.2f", fakeValue.Float64Range(1, 1000)),
+	})
+	randomQuantity = int64(fakeValue.IntRange(1, 1000))
+)
 
 func TestCreateOrder(t *testing.T) {
 	fakeValue.Seed(time.Now().UnixNano())
@@ -41,7 +41,7 @@ func TestCreateOrder(t *testing.T) {
 		orderType      models.OrderType
 		price          models.Decimal
 		quantity       int64
-		setupMocks     func(*mocks.MockSaver, *mocks.MockOrderMarketViewer)
+		setupMocks     func(*mocks.Saver, *mocks.MarketViewer, *mocks.RateLimiter)
 		expectedStatus models.OrderStatus
 		expectedErr    error
 		expectedErrMsg string
@@ -54,7 +54,7 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeTakeProfit,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.MockSaver, viewer *mocks.MockOrderMarketViewer) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
 				marketID := randomUUID
 				markets := []sharedModels.Market{
 					{
@@ -62,6 +62,8 @@ func TestCreateOrder(t *testing.T) {
 						Enabled: true,
 					},
 				}
+
+				limiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
 				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
 					Return(markets, nil)
 				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).
@@ -75,23 +77,48 @@ func TestCreateOrder(t *testing.T) {
 			},
 		},
 		{
-			name:      "ошибка - рынок не найден",
-			userID:    uuid.New(),
-			marketID:  uuid.New(),
+			name:      "ошибка - превышен rate limit",
+			userID:    randomUUID,
+			marketID:  randomUUID,
 			orderType: models.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.MockSaver, viewer *mocks.MockOrderMarketViewer) {
-
-				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
-					Return([]sharedModels.Market{}, nil)
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
+				limiter.On("Allow", mock.Anything, randomUUID).Return(false, nil)
 			},
 			expectedStatus: models.OrderStatusCancelled,
-			expectedErr:    serviceErrors.ErrMarketsNotFound,
+			expectedErr:    serviceErrors.ErrRateLimitExceeded,
 			checkResult: func(t *testing.T, orderID uuid.UUID, status models.OrderStatus) {
 				assert.Equal(t, uuid.Nil, orderID)
 				assert.Equal(t, models.OrderStatusCancelled, status)
 			},
+		},
+		{
+			name:      "ошибка - rate limiter недоступен",
+			userID:    randomUUID,
+			marketID:  randomUUID,
+			orderType: models.OrderTypeMarket,
+			price:     randomPrice,
+			quantity:  randomQuantity,
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
+				limiter.On("Allow", mock.Anything, randomUUID).Return(false, errors.New("redis down"))
+			},
+			expectedStatus: models.OrderStatusCancelled,
+			expectedErrMsg: "Service.CreateOrder: redis down",
+		},
+		{
+			name:      "ошибка - рынок не найден",
+			userID:    randomUUID,
+			marketID:  randomUUID,
+			orderType: models.OrderTypeMarket,
+			price:     randomPrice,
+			quantity:  randomQuantity,
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
+				limiter.On("Allow", mock.Anything, mock.Anything).Return(true, nil)
+				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).Return([]sharedModels.Market{}, nil)
+			},
+			expectedStatus: models.OrderStatusCancelled,
+			expectedErr:    serviceErrors.ErrMarketsNotFound,
 		},
 		{
 			name:      "ошибка - заказ уже существует",
@@ -100,18 +127,16 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.MockSaver, viewer *mocks.MockOrderMarketViewer) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
 				marketID := randomUUID
-				markets := []sharedModels.Market{
-					{
-						ID:      marketID,
-						Enabled: true,
-					},
-				}
-				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
-					Return(markets, nil)
-				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).
-					Return(storageErrors.ErrOrderAlreadyExists)
+				markets := []sharedModels.Market{{
+					ID:      marketID,
+					Enabled: true,
+				}}
+
+				limiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
+				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).Return(markets, nil)
+				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).Return(storageErrors.ErrOrderAlreadyExists)
 			},
 			expectedStatus: models.OrderStatusCancelled,
 			expectedErr:    serviceErrors.ErrOrderAlreadyExists,
@@ -127,9 +152,9 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.MockSaver, viewer *mocks.MockOrderMarketViewer) {
-				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
-					Return(nil, errors.New("internal error"))
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
+				limiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
+				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).Return(nil, errors.New("internal error"))
 			},
 			expectedStatus: models.OrderStatusCancelled,
 			expectedErrMsg: "Service.CreateOrder: internal error",
@@ -145,18 +170,16 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.MockSaver, viewer *mocks.MockOrderMarketViewer) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
 				marketID := randomUUID
-				markets := []sharedModels.Market{
-					{
-						ID:      marketID,
-						Enabled: true,
-					},
-				}
-				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
-					Return(markets, nil)
-				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).
-					Return(errors.New("internal error"))
+				markets := []sharedModels.Market{{
+					ID:      marketID,
+					Enabled: true,
+				}}
+
+				limiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
+				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).Return(markets, nil)
+				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).Return(errors.New("internal error"))
 			},
 			expectedStatus: models.OrderStatusCancelled,
 			expectedErrMsg: "Service.CreateOrder: internal error",
@@ -172,18 +195,16 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeTakeProfit,
 			price:     randomPrice,
 			quantity:  1,
-			setupMocks: func(saver *mocks.MockSaver, viewer *mocks.MockOrderMarketViewer) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
 				marketID := randomUUID
-				markets := []sharedModels.Market{
-					{
-						ID:      marketID,
-						Enabled: true,
-					},
-				}
-				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
-					Return(markets, nil)
-				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).
-					Return(nil)
+				markets := []sharedModels.Market{{
+					ID:      marketID,
+					Enabled: true,
+				}}
+
+				limiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
+				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).Return(markets, nil)
+				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).Return(nil)
 			},
 			expectedStatus: models.OrderStatusCreated,
 			expectedErr:    nil,
@@ -196,13 +217,16 @@ func TestCreateOrder(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			mockSaver := new(mocks.MockSaver)
-			mockGetter := new(mocks.MockGetter)
-			mockMarketViewer := new(mocks.MockOrderMarketViewer)
+			mockSaver := mocks.NewSaver(t)
+			mockGetter := mocks.NewGetter(t)
+			mockMarketViewer := mocks.NewMarketViewer(t)
+			mockLimiter := mocks.NewRateLimiter(t)
 
-			test.setupMocks(mockSaver, mockMarketViewer)
+			if test.setupMocks != nil {
+				test.setupMocks(mockSaver, mockMarketViewer, mockLimiter)
+			}
 
-			service := NewService(mockSaver, mockGetter, mockMarketViewer, CreateTimeout)
+			service := NewService(mockSaver, mockGetter, mockMarketViewer, mockLimiter, CreateTimeout)
 			ctx := context.Background()
 
 			orderID, status, err := service.CreateOrder(
@@ -249,7 +273,7 @@ func TestGetOrderStatus(t *testing.T) {
 		name           string
 		orderID        uuid.UUID
 		userID         uuid.UUID
-		setupMocks     func(*mocks.MockGetter)
+		setupMocks     func(*mocks.Getter)
 		expectedStatus models.OrderStatus
 		expectedErr    error
 		expectedErrMsg string
@@ -258,7 +282,7 @@ func TestGetOrderStatus(t *testing.T) {
 			name:    "успешное получение статуса заказа",
 			orderID: orderID,
 			userID:  userID,
-			setupMocks: func(getter *mocks.MockGetter) {
+			setupMocks: func(getter *mocks.Getter) {
 				order := models.Order{
 					ID:        orderID,
 					UserID:    userID,
@@ -279,7 +303,7 @@ func TestGetOrderStatus(t *testing.T) {
 			name:    "ошибка - заказ не найден",
 			orderID: orderID,
 			userID:  userID,
-			setupMocks: func(getter *mocks.MockGetter) {
+			setupMocks: func(getter *mocks.Getter) {
 				getter.On("GetOrder", mock.Anything, orderID).
 					Return(models.Order{}, storageErrors.ErrOrderNotFound)
 			},
@@ -290,7 +314,7 @@ func TestGetOrderStatus(t *testing.T) {
 			name:    "ошибка - доступ запрещен (чужой заказ)",
 			orderID: orderID,
 			userID:  anotherUserID,
-			setupMocks: func(getter *mocks.MockGetter) {
+			setupMocks: func(getter *mocks.Getter) {
 				order := models.Order{
 					ID:        orderID,
 					UserID:    userID,
@@ -311,7 +335,7 @@ func TestGetOrderStatus(t *testing.T) {
 			name:    "ошибка - база данных недоступна",
 			orderID: orderID,
 			userID:  userID,
-			setupMocks: func(getter *mocks.MockGetter) {
+			setupMocks: func(getter *mocks.Getter) {
 				getter.On("GetOrder", mock.Anything, orderID).
 					Return(models.Order{}, errors.New("internal error"))
 			},
@@ -322,7 +346,7 @@ func TestGetOrderStatus(t *testing.T) {
 			name:    "corner case - несуществующий UUID",
 			orderID: uuid.Nil,
 			userID:  userID,
-			setupMocks: func(getter *mocks.MockGetter) {
+			setupMocks: func(getter *mocks.Getter) {
 				getter.On("GetOrder", mock.Anything, uuid.Nil).
 					Return(models.Order{}, storageErrors.ErrOrderNotFound)
 			},
@@ -333,7 +357,7 @@ func TestGetOrderStatus(t *testing.T) {
 			name:    "проверка статуса - Cancelled",
 			orderID: orderID,
 			userID:  userID,
-			setupMocks: func(getter *mocks.MockGetter) {
+			setupMocks: func(getter *mocks.Getter) {
 				order := models.Order{
 					ID:        orderID,
 					UserID:    userID,
@@ -354,13 +378,16 @@ func TestGetOrderStatus(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			mockSaver := new(mocks.MockSaver)
-			mockGetter := new(mocks.MockGetter)
-			mockMarketViewer := new(mocks.MockOrderMarketViewer)
+			mockSaver := mocks.NewSaver(t)
+			mockGetter := mocks.NewGetter(t)
+			mockMarketViewer := mocks.NewMarketViewer(t)
+			mockLimiter := mocks.NewRateLimiter(t)
 
-			test.setupMocks(mockGetter)
+			if test.setupMocks != nil {
+				test.setupMocks(mockGetter)
+			}
 
-			service := NewService(mockSaver, mockGetter, mockMarketViewer, CreateTimeout)
+			service := NewService(mockSaver, mockGetter, mockMarketViewer, mockLimiter, CreateTimeout)
 			ctx := context.Background()
 
 			status, err := service.GetOrderStatus(ctx, test.orderID, test.userID)

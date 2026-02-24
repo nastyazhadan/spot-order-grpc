@@ -93,29 +93,43 @@ func TestCreateOrderUUIDCornerCases(test *testing.T) {
 	st.SetAvailableMarkets(market)
 
 	tests := []struct {
-		name     string
-		userID   string
-		marketID string
+		name         string
+		userID       string
+		marketID     string
+		shouldPass   bool
+		expectedCode codes.Code
 	}{
 		{
-			name:     "uuid без дефисов",
-			userID:   "550e8400e29b41d4a716446655440000",
-			marketID: market.ID.String(),
+			name:         "uuid без дефисов",
+			userID:       "550e8400e29b41d4a716446655440000",
+			marketID:     market.ID.String(),
+			shouldPass:   false,
+			expectedCode: codes.InvalidArgument,
 		},
 		{
-			name:     "uuid в верхнем регистре",
-			userID:   "550E8400-E29B-41D4-A716-446655440000",
-			marketID: market.ID.String(),
+			name:       "uuid в верхнем регистре",
+			userID:     "550E8400-E29B-41D4-A716-446655440000",
+			marketID:   market.ID.String(),
+			shouldPass: true,
 		},
 	}
 
 	for _, tt := range tests {
 		test.Run(tt.name, func(t *testing.T) {
 			request := suite.ValidCreateRequest(tt.userID, tt.marketID)
-			response, err := st.OrderClient.CreateOrder(ctx, request)
 
-			require.NoError(t, err)
-			assert.NotEmpty(t, response.GetOrderId())
+			response, err := st.OrderClient.CreateOrder(ctx, request)
+			if tt.shouldPass {
+				require.NoError(t, err)
+				require.NotNil(t, response)
+				assert.NotEmpty(t, response.GetOrderId())
+				return
+			}
+
+			assert.Nil(t, response)
+			stat, ok := status.FromError(err)
+			require.True(t, ok)
+			assert.Equal(t, tt.expectedCode, stat.Code())
 		})
 	}
 }

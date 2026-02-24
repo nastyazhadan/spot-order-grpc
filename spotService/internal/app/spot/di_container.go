@@ -17,8 +17,8 @@ import (
 )
 
 type DiContainer struct {
-	dbPool      *pgxpool.Pool
-	redisConfig config.RedisConfig
+	dbPool     *pgxpool.Pool
+	spotConfig config.SpotConfig
 
 	spotRepository     svcSpot.MarketRepository
 	spotRepositoryOnce sync.Once
@@ -36,10 +36,10 @@ type DiContainer struct {
 	redisClientOnce sync.Once
 }
 
-func NewDIContainer(pool *pgxpool.Pool, redisCfg config.RedisConfig) *DiContainer {
+func NewDIContainer(pool *pgxpool.Pool, spotCfg config.SpotConfig) *DiContainer {
 	return &DiContainer{
-		dbPool:      pool,
-		redisConfig: redisCfg,
+		dbPool:     pool,
+		spotConfig: spotCfg,
 	}
 }
 
@@ -64,7 +64,7 @@ func (d *DiContainer) SpotService(ctx context.Context) grpcSpot.SpotInstrument {
 		d.spotService = svcSpot.NewService(
 			d.SpotRepository(ctx),
 			d.SpotCacheRepository(),
-			d.redisConfig.CacheTTL,
+			d.spotConfig.Redis.CacheTTL,
 		)
 	})
 
@@ -74,10 +74,10 @@ func (d *DiContainer) SpotService(ctx context.Context) grpcSpot.SpotInstrument {
 func (d *DiContainer) RedisPool() *redigo.Pool {
 	d.redisPoolOnce.Do(func() {
 		d.redisPool = &redigo.Pool{
-			MaxIdle:     d.redisConfig.MaxIdle,
-			IdleTimeout: d.redisConfig.IdleTimeout,
+			MaxIdle:     d.spotConfig.Redis.MaxIdle,
+			IdleTimeout: d.spotConfig.Redis.IdleTimeout,
 			DialContext: func(ctx context.Context) (redigo.Conn, error) {
-				return redigo.DialContext(ctx, "tcp", d.redisConfig.Address())
+				return redigo.DialContext(ctx, "tcp", d.spotConfig.Redis.Address())
 			},
 		}
 	})
@@ -90,7 +90,7 @@ func (d *DiContainer) RedisClient() redis.RedisClient {
 		d.redisClient = redis.NewClient(
 			d.RedisPool(),
 			zapLogger.Logger(),
-			d.redisConfig.ConnectionTimeout,
+			d.spotConfig.Redis.ConnectionTimeout,
 		)
 	})
 

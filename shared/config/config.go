@@ -22,6 +22,8 @@ type OrderConfig struct {
 	LogFormat      string        `env:"LOG_FORMAT" env-default:"console"`
 	GSTimeout      time.Duration `env:"GS_TIMEOUT" env-default:"5s"`
 	CircuitBreaker CircuitBreakerConfig
+	RateLimiter    RateLimiterConfig
+	Redis          RedisConfig
 }
 
 type SpotConfig struct {
@@ -47,6 +49,11 @@ type RedisConfig struct {
 	MaxIdle           int           `env:"REDIS_MAX_IDLE" env-default:"10"`
 	IdleTimeout       time.Duration `env:"REDIS_IDLE_TIMEOUT" env-default:"10s"`
 	CacheTTL          time.Duration `env:"SPOT_REDIS_CACHE_TTL" env-default:"24h"`
+}
+
+type RateLimiterConfig struct {
+	Orders int64         `env:"RATE_LIMIT_ORDERS" env-default:"5"`
+	Window time.Duration `env:"WINDOW" env-default:"1h"`
 }
 
 func (r RedisConfig) Address() string {

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	redigo "github.com/gomodule/redigo/redis"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -20,10 +21,15 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
-	repoOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/postgres"
+	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/postgres"
+	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/redis"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infra/db/migrator"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infra/redis"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v6"
 )
@@ -36,6 +42,11 @@ const (
 	DefaultCreateTimeout = 5 * time.Second
 	LongTimeout          = 2 * time.Minute
 	StartupTimeout       = 30 * time.Second
+
+	CreateRateLimit  int64         = 1_000_000
+	CreateRateWindow time.Duration = 1 * time.Hour
+
+	redisConnectionTimeout = 3 * time.Second
 )
 
 type MockMarketViewer struct {
@@ -108,14 +119,70 @@ func New(test *testing.T) (context.Context, *Suite) {
 		test.Fatalf("failed to run migrations: %v", err)
 	}
 
+	redisC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		Started: true,
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "redis:7-alpine",
+			ExposedPorts: []string{"6379/tcp"},
+			WaitingFor: wait.ForListeningPort("6379/tcp").
+				WithStartupTimeout(StartupTimeout),
+		},
+	})
+	if err != nil {
+		test.Fatalf("failed to start redis container: %v", err)
+	}
+	test.Cleanup(func() {
+		if err := redisC.Terminate(context.Background()); err != nil {
+			test.Logf("failed to terminate redis container: %v", err)
+		}
+	})
+
+	redisHost, err := redisC.Host(ctx)
+	if err != nil {
+		test.Fatalf("failed to get redis host: %v", err)
+	}
+	redisPort, err := redisC.MappedPort(ctx, "6379/tcp")
+	if err != nil {
+		test.Fatalf("failed to get redis port: %v", err)
+	}
+	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
+
+	redisPool := &redigo.Pool{
+		MaxIdle:     3,
+		IdleTimeout: 240 * time.Second,
+		Dial: func() (redigo.Conn, error) {
+			return redigo.Dial("tcp", redisAddr)
+		},
+		TestOnBorrow: func(c redigo.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
+	}
+	test.Cleanup(func() {
+		_ = redisPool.Close()
+	})
+
+	redisClient := redis.NewClient(redisPool, zapLogger.With(), redisConnectionTimeout)
+	rateLimiter := repoRedis.NewOrderRateLimiter(redisClient, CreateRateLimit, CreateRateWindow)
+
 	marketViewer := &MockMarketViewer{
 		Markets: []models.Market{},
 	}
 
-	orderRepo := repoOrder.NewOrderStore(pool)
-	orderSvc := svcOrder.NewService(orderRepo, orderRepo, marketViewer, DefaultCreateTimeout)
+	orderRepo := repoPostgres.NewOrderStore(pool)
+	orderSvc := svcOrder.NewService(orderRepo, orderRepo, marketViewer, rateLimiter, DefaultCreateTimeout)
 
-	grpcServer := grpc.NewServer()
+	validator, err := validate.ProtovalidateUnary()
+	if err != nil {
+		test.Fatalf("validate.ProtovalidateUnary: %v", err)
+	}
+
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			recovery.PanicRecoveryInterceptor,
+			validator,
+		),
+	)
 	grpcOrder.Register(grpcServer, orderSvc)
 
 	listener, err := net.Listen("tcp", "localhost:0")

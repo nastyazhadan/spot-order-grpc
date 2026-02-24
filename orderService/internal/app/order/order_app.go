@@ -142,7 +142,15 @@ func (a *App) setupMarketClient(ctx context.Context) error {
 }
 
 func (a *App) setupDI(_ context.Context) error {
-	a.diContainer = NewDIContainer(a.dbPool, a.marketClient, a.config.CreateTimeout)
+	a.diContainer = NewDIContainer(
+		a.dbPool,
+		a.marketClient,
+		a.config,
+	)
+
+	closer.AddNamed("Redis pool", func(ctx context.Context) error {
+		return a.diContainer.RedisPool().Close()
+	})
 
 	return nil
 }

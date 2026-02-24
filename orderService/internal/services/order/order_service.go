@@ -22,10 +22,6 @@ type Service struct {
 	createTimeout time.Duration
 }
 
-type RateLimiter interface {
-	Allow(ctx context.Context, userID uuid.UUID) (bool, error)
-}
-
 type Saver interface {
 	SaveOrder(ctx context.Context, order models.Order) error
 }
@@ -36,6 +32,10 @@ type Getter interface {
 
 type MarketViewer interface {
 	ViewMarkets(ctx context.Context, roles []sharedModels.UserRole) ([]sharedModels.Market, error)
+}
+
+type RateLimiter interface {
+	Allow(ctx context.Context, userID uuid.UUID) (bool, error)
 }
 
 func NewService(s Saver, g Getter, mv MarketViewer, rl RateLimiter, t time.Duration) *Service {
@@ -58,6 +58,9 @@ func (s *Service) CreateOrder(
 ) (uuid.UUID, models.OrderStatus, error) {
 	const op = "Service.CreateOrder"
 
+	ctx, cancel := context.WithTimeout(ctx, s.createTimeout)
+	defer cancel()
+
 	allowed, err := s.rateLimiter.Allow(ctx, userID)
 	if err != nil {
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
@@ -65,9 +68,6 @@ func (s *Service) CreateOrder(
 	if !allowed {
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrRateLimitExceeded)
 	}
-
-	ctx, cancel := context.WithTimeout(ctx, s.createTimeout)
-	defer cancel()
 
 	// Заглушка
 	markets, err := s.marketViewer.ViewMarkets(ctx, []sharedModels.UserRole{sharedModels.UserRoleUser})

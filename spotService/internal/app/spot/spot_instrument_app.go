@@ -70,7 +70,7 @@ func (a *App) setupDeps(ctx context.Context) error {
 }
 
 func (a *App) setupDI(_ context.Context) error {
-	a.diContainer = NewDIContainer(a.dbPool, a.config.Redis)
+	a.diContainer = NewDIContainer(a.dbPool, a.config)
 
 	return nil
 }

@@ -89,7 +89,7 @@ func TestMultipleOrdersReturnsCorrectStatus(test *testing.T) {
 	assert.Equal(test, proto.OrderStatus_STATUS_CREATED, getResponse2.GetStatus())
 }
 
-func TestGetOrderUUIDCornerCases(test *testing.T) {
+func TestGetOrderUUIDCornerCase(test *testing.T) {
 	ctx, st := suite.New(test)
 
 	market := suite.NewMarket()
@@ -99,10 +99,6 @@ func TestGetOrderUUIDCornerCases(test *testing.T) {
 		name   string
 		userID string
 	}{
-		{
-			name:   "uuid без дефисов",
-			userID: "550e8400e29b41d4a716446655440000",
-		},
 		{
 			name:   "uuid в верхнем регистре",
 			userID: "550E8400-E29B-41D4-A716-446655440000",
@@ -221,6 +217,11 @@ func TestInvalidArguments(test *testing.T) {
 			name:    "числа вместо UUID",
 			orderID: "12345",
 			userID:  validID,
+		},
+		{
+			name:    "UUID без дефисов",
+			orderID: validID,
+			userID:  "550e8400e29b41d4a716446655440000",
 		},
 	}
 
