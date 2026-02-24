@@ -29,6 +29,7 @@ type RedisClient interface {
 	Exists(ctx context.Context, key string) (bool, error)
 	Expire(ctx context.Context, key string, expirationTime time.Duration) error
 	Ping(ctx context.Context) error
+	Incr(ctx context.Context, key string) (int64, error)
 }
 
 type redisFn func(ctx context.Context, conn redigo.Conn) error
@@ -158,4 +159,19 @@ func (c *client) Ping(ctx context.Context) error {
 		_, err := conn.Do("PING")
 		return err
 	})
+}
+
+func (c *client) Incr(ctx context.Context, key string) (int64, error) {
+	var result int64
+	err := c.withConn(ctx, func(ctx context.Context, conn redigo.Conn) error {
+		value, err := redigo.Int64(conn.Do("INCR", key))
+		if err != nil {
+			return err
+		}
+
+		result = value
+		return nil
+	})
+
+	return result, err
 }

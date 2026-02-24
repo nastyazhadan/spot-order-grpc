@@ -2,6 +2,7 @@ package spot
 
 import (
 	"context"
+	"sync"
 
 	redigo "github.com/gomodule/redigo/redis"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,16 +17,23 @@ import (
 )
 
 type DiContainer struct {
-	dbPool *pgxpool.Pool
-
-	spotRepository      svcSpot.MarketRepository
-	spotCacheRepository svcSpot.MarketCacheRepository
-
-	spotService grpcSpot.SpotInstrument
-
-	redisPool   *redigo.Pool
-	redisClient redis.RedisClient
+	dbPool      *pgxpool.Pool
 	redisConfig config.RedisConfig
+
+	spotRepository     svcSpot.MarketRepository
+	spotRepositoryOnce sync.Once
+
+	spotCacheRepository     svcSpot.MarketCacheRepository
+	spotCacheRepositoryOnce sync.Once
+
+	spotService     grpcSpot.SpotInstrument
+	spotServiceOnce sync.Once
+
+	redisPool     *redigo.Pool
+	redisPoolOnce sync.Once
+
+	redisClient     redis.RedisClient
+	redisClientOnce sync.Once
 }
 
 func NewDIContainer(pool *pgxpool.Pool, redisCfg config.RedisConfig) *DiContainer {
@@ -36,35 +44,35 @@ func NewDIContainer(pool *pgxpool.Pool, redisCfg config.RedisConfig) *DiContaine
 }
 
 func (d *DiContainer) SpotRepository(_ context.Context) svcSpot.MarketRepository {
-	if d.spotRepository == nil {
+	d.spotRepositoryOnce.Do(func() {
 		d.spotRepository = repoPostgres.NewMarketStore(d.dbPool)
-	}
+	})
 
 	return d.spotRepository
 }
 
 func (d *DiContainer) SpotCacheRepository() svcSpot.MarketCacheRepository {
-	if d.spotCacheRepository == nil {
+	d.spotCacheRepositoryOnce.Do(func() {
 		d.spotCacheRepository = repoRedis.NewMarketCacheRepository(d.RedisClient())
-	}
+	})
 
 	return d.spotCacheRepository
 }
 
 func (d *DiContainer) SpotService(ctx context.Context) grpcSpot.SpotInstrument {
-	if d.spotService == nil {
+	d.spotServiceOnce.Do(func() {
 		d.spotService = svcSpot.NewService(
 			d.SpotRepository(ctx),
 			d.SpotCacheRepository(),
 			d.redisConfig.CacheTTL,
 		)
-	}
+	})
 
 	return d.spotService
 }
 
 func (d *DiContainer) RedisPool() *redigo.Pool {
-	if d.redisPool == nil {
+	d.redisPoolOnce.Do(func() {
 		d.redisPool = &redigo.Pool{
 			MaxIdle:     d.redisConfig.MaxIdle,
 			IdleTimeout: d.redisConfig.IdleTimeout,
@@ -72,19 +80,19 @@ func (d *DiContainer) RedisPool() *redigo.Pool {
 				return redigo.DialContext(ctx, "tcp", d.redisConfig.Address())
 			},
 		}
-	}
+	})
 
 	return d.redisPool
 }
 
 func (d *DiContainer) RedisClient() redis.RedisClient {
-	if d.redisClient == nil {
+	d.redisClientOnce.Do(func() {
 		d.redisClient = redis.NewClient(
 			d.RedisPool(),
 			zapLogger.Logger(),
 			d.redisConfig.ConnectionTimeout,
 		)
-	}
+	})
 
 	return d.redisClient
 }

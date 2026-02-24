@@ -2,6 +2,7 @@ package order
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,8 +17,11 @@ type DiContainer struct {
 	marketViewer  svcOrder.MarketViewer
 	createTimeout time.Duration
 
-	orderRepository *repoOrder.OrderStore
-	orderService    grpcOrder.Order
+	orderRepository     *repoOrder.OrderStore
+	orderRepositoryOnce sync.Once
+
+	orderService     grpcOrder.Order
+	orderServiceOnce sync.Once
 }
 
 func NewDIContainer(dbPool *pgxpool.Pool, marketViewer svcOrder.MarketViewer, createTimeout time.Duration) *DiContainer {
@@ -37,18 +41,18 @@ func NewDIContainer(dbPool *pgxpool.Pool, marketViewer svcOrder.MarketViewer, cr
 }
 
 func (d *DiContainer) OrderRepository(_ context.Context) *repoOrder.OrderStore {
-	if d.orderRepository == nil {
+	d.orderRepositoryOnce.Do(func() {
 		d.orderRepository = repoOrder.NewOrderStore(d.dbPool)
-	}
+	})
 
 	return d.orderRepository
 }
 
 func (d *DiContainer) OrderService(ctx context.Context) grpcOrder.Order {
-	if d.orderService == nil {
+	d.orderServiceOnce.Do(func() {
 		store := d.OrderRepository(ctx)
 		d.orderService = svcOrder.NewService(store, store, d.marketViewer, d.createTimeout)
-	}
+	})
 
 	return d.orderService
 }

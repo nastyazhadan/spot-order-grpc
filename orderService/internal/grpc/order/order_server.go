@@ -79,7 +79,8 @@ func (s *serverAPI) CreateOrder(
 	if err != nil {
 		if !errors.Is(err, serviceErrors.ErrMarketsNotFound) &&
 			!errors.Is(err, serviceErrors.ErrOrderAlreadyExists) &&
-			!errors.Is(err, serviceErrors.ErrCreatingOrderNotRequired) {
+			!errors.Is(err, serviceErrors.ErrCreatingOrderNotRequired) &&
+			!errors.Is(err, serviceErrors.ErrRateLimitExceeded) {
 			zapLogger.Error(ctx, "failed to create order",
 				zap.String("userId", userID.String()),
 				zap.Error(err),
@@ -173,6 +174,9 @@ func validateServiceError(err error) error {
 
 	case errors.Is(err, serviceErrors.ErrOrderNotFound):
 		return status.Error(codes.NotFound, err.Error())
+
+	case errors.Is(err, serviceErrors.ErrRateLimitExceeded):
+		return status.Error(codes.ResourceExhausted, err.Error())
 
 	default:
 		return status.Error(codes.Internal, "internal error")
