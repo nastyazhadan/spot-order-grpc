@@ -108,7 +108,7 @@ func TestGetOrderUUIDCornerCase(test *testing.T) {
 	for _, tt := range tests {
 		test.Run(tt.name, func(t *testing.T) {
 			createResponse, err := st.OrderClient.CreateOrder(ctx, suite.ValidCreateRequest(tt.userID, market.ID.String()))
-			require.NoError(test, err)
+			require.NoError(t, err)
 
 			getResponse, err := st.OrderClient.GetOrderStatus(ctx, &proto.GetOrderStatusRequest{
 				OrderId: createResponse.GetOrderId(),
@@ -116,8 +116,8 @@ func TestGetOrderUUIDCornerCase(test *testing.T) {
 			})
 
 			require.NoError(t, err)
-			assert.NotNil(test, getResponse)
-			assert.Equal(test, proto.OrderStatus_STATUS_CREATED, getResponse.GetStatus())
+			assert.NotNil(t, getResponse)
+			assert.Equal(t, proto.OrderStatus_STATUS_CREATED, getResponse.GetStatus())
 		})
 	}
 }

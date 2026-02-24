@@ -164,7 +164,7 @@ func (a *App) runGRPCServer(ctx context.Context) error {
 	zapLogger.Info(ctx, fmt.Sprintf("Starting gRPC Spot Server on %s", a.config.Address))
 
 	err := a.grpcServer.Serve(a.listener)
-	if err != nil && !errors.Is(err, net.ErrClosed) {
+	if err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 		return fmt.Errorf("grpcServer.Serve: %w", err)
 	}
 

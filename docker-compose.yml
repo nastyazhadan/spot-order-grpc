@@ -14,7 +14,7 @@ services:
       - ./spotService/migrations/db_spot:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
-        "CMD-SHELL pg_isready -U ${POSTGRES_USER} -d ${ORDER_DB} && pg_isready -U ${POSTGRES_USER} -d ${SPOT_DB}"
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${ORDER_DB} && pg_isready -U ${POSTGRES_USER} -d ${SPOT_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
