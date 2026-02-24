@@ -27,20 +27,18 @@ func NewOrderRateLimiter(client redis.RedisClient, limit int64, window time.Dura
 }
 
 func (r *OrderRateLimiter) Allow(ctx context.Context, userID uuid.UUID) (bool, error) {
+	const op = "OrderRateLimiter.Allow"
+
 	key := orderRateLimitPrefix + userID.String()
 
-	// INCR атомарно увеличивает счётчик и возвращает новое значение.
-	// Если ключа не было — создаёт его со значением 1.
 	count, err := r.client.Incr(ctx, key)
 	if err != nil {
-		return false, fmt.Errorf("rate limiter incr: %w", err)
+		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	// Устанавливаем TTL только при первом ордере (count == 1),
-	// чтобы не сдвигать окно при каждом запросе.
 	if count == 1 {
 		if err := r.client.Expire(ctx, key, r.window); err != nil {
-			return false, fmt.Errorf("rate limiter expire: %w", err)
+			return false, fmt.Errorf("%s: %w", op, err)
 		}
 	}
 
