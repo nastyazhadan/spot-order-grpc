@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	wire "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
@@ -30,16 +31,15 @@ import (
 )
 
 type App struct {
-	diContainer *DiContainer
-
 	grpcServer *grpc.Server
 	listener   net.Listener
 
 	spotConnection *grpc.ClientConn
 	marketClient   *grpcClient.Client
 
-	dbPool *pgxpool.Pool
-	config config.OrderConfig
+	dbPool    *pgxpool.Pool
+	config    config.OrderConfig
+	container *wire.Container
 }
 
 func New(ctx context.Context, cfg config.OrderConfig) *App {
@@ -150,15 +150,13 @@ func (a *App) setupMarketClient(ctx context.Context) error {
 }
 
 func (a *App) setupDI(_ context.Context) error {
-	a.diContainer = NewDIContainer(
-		a.dbPool,
-		a.marketClient,
-		a.config,
-	)
+	container := wire.NewContainer(a.dbPool, a.marketClient, a.config)
+
+	a.container = container
 
 	// Graceful shutdown for Redis
 	closer.AddNamed("Redis pool", func(ctx context.Context) error {
-		return a.diContainer.RedisPool().Close()
+		return container.RedisPool.Close()
 	})
 
 	return nil
@@ -195,7 +193,7 @@ func (a *App) checkSpotConnection(ctx context.Context, client *grpcClient.Client
 	return nil
 }
 
-func (a *App) setupGRPCServer(ctx context.Context) error {
+func (a *App) setupGRPCServer(_ context.Context) error {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return fmt.Errorf("validate.ProtovalidateUnary: %w", err)
@@ -221,7 +219,7 @@ func (a *App) setupGRPCServer(ctx context.Context) error {
 
 	reflection.Register(a.grpcServer)
 	health.RegisterService(a.grpcServer)
-	grpcOrder.Register(a.grpcServer, a.diContainer.OrderService(ctx))
+	grpcOrder.Register(a.grpcServer, a.container.OrderService)
 
 	return nil
 }

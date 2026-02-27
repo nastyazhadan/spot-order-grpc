@@ -6,10 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/joho/godotenv"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot"
-
-	"github.com/joho/godotenv"
 )
 
 func main() {

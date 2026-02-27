@@ -102,6 +102,14 @@ tasks:
 
       - echo "{{.GREEN}}Моки успешно сгенерированы{{.NC}}"
 
+  wire:generate:
+    desc: Сгенерировать wire_gen.go файлы
+    cmds:
+      - echo "{{.BLUE}}Генерация wire...{{.NC}}"
+      - wire ./spotService/internal/application/spot/gen/...
+      - wire ./orderService/internal/application/order/gen/...
+      - echo "{{.GREEN}}Wire файлы успешно сгенерированы{{.NC}}"
+
   clean:cache:
     desc: Очистить кэш тестов
     cmds:

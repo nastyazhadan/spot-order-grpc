@@ -22,18 +22,19 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
+	wire "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot/gen"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/migrations"
 )
 
 type App struct {
-	diContainer *DiContainer
-
 	grpcServer *grpc.Server
 	listener   net.Listener
 
 	dbPool *pgxpool.Pool
 	config config.SpotConfig
+
+	container *wire.Container
 }
 
 func New(ctx context.Context, cfg config.SpotConfig) *App {
@@ -78,11 +79,13 @@ func (a *App) setupDeps(ctx context.Context) error {
 }
 
 func (a *App) setupDI(_ context.Context) error {
-	a.diContainer = NewDIContainer(a.dbPool, a.config)
+	container := wire.NewContainer(a.dbPool, a.config)
+
+	a.container = container
 
 	// Graceful shutdown for Redis
 	closer.AddNamed("Redis pool", func(ctx context.Context) error {
-		return a.diContainer.RedisPool().Close()
+		return container.RedisPool.Close()
 	})
 
 	return nil
@@ -142,7 +145,7 @@ func (a *App) setupListener(_ context.Context) error {
 	return nil
 }
 
-func (a *App) setupGRPCServer(ctx context.Context) error {
+func (a *App) setupGRPCServer(_ context.Context) error {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return fmt.Errorf("validate.ProtovalidateUnary: %w", err)
@@ -168,7 +171,7 @@ func (a *App) setupGRPCServer(ctx context.Context) error {
 
 	reflection.Register(a.grpcServer)
 	health.RegisterService(a.grpcServer)
-	grpcSpot.Register(a.grpcServer, a.diContainer.SpotService(ctx))
+	grpcSpot.Register(a.grpcServer, a.container.SpotService)
 
 	return nil
 }
