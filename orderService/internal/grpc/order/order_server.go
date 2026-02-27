@@ -9,9 +9,9 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/mapper"
+	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v1"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
