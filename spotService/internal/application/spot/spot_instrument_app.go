@@ -72,6 +72,11 @@ func (a *App) setupDeps(ctx context.Context) error {
 func (a *App) setupDI(_ context.Context) error {
 	a.diContainer = NewDIContainer(a.dbPool, a.config)
 
+	// Graceful shutdown for Redis
+	closer.AddNamed("Redis pool", func(ctx context.Context) error {
+		return a.diContainer.RedisPool().Close()
+	})
+
 	return nil
 }
 

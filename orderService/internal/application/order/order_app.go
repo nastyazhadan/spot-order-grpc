@@ -148,6 +148,7 @@ func (a *App) setupDI(_ context.Context) error {
 		a.config,
 	)
 
+	// Graceful shutdown for Redis
 	closer.AddNamed("Redis pool", func(ctx context.Context) error {
 		return a.diContainer.RedisPool().Close()
 	})

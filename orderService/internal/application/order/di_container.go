@@ -6,10 +6,10 @@ import (
 
 	redigo "github.com/gomodule/redigo/redis"
 	"github.com/jackc/pgx/v5/pgxpool"
-	repoOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
-	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis"
 
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
+	repoOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
+	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
