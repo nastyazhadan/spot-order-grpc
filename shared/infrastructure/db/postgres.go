@@ -7,8 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/db/migrator"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db/migrator"
 )
 
 func SetupDB(ctx context.Context, dbURI string, migrationsFS fs.FS) (*pgxpool.Pool, error) {

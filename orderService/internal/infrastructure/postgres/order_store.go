@@ -9,9 +9,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/dto"
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/dto"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 )
 
@@ -57,7 +57,7 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 }
 
 func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, error) {
-	const op = "infrastructure.OrderStore.GetOrder"
+	const op = "infrastructure.OrderStore.GetOrderStatus"
 
 	rows, err := o.pool.Query(ctx,
 		`SELECT id, user_id, market_id, type, price, quantity, status, created_at

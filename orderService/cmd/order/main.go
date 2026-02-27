@@ -10,7 +10,7 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/closer"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/closer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 
 	"go.uber.org/zap"

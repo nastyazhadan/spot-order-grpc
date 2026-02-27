@@ -7,13 +7,13 @@ import (
 	"net"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/closer"
-	postgres "github.com/nastyazhadan/spot-order-grpc/shared/infra/db"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/health"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/closer"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
@@ -83,7 +83,7 @@ func (a *App) setupLogger(_ context.Context) error {
 }
 
 func (a *App) setupDB(ctx context.Context) error {
-	pool, err := postgres.SetupDB(ctx, a.config.DBURI, migrations.Migrations)
+	pool, err := db.SetupDB(ctx, a.config.DBURI, migrations.Migrations)
 	if err != nil {
 		return fmt.Errorf("postgres.SetupDB: %w", err)
 	}
@@ -128,8 +128,6 @@ func (a *App) setupListener(_ context.Context) error {
 
 	return nil
 }
-
-RATE limiter обертка
 
 func (a *App) setupGRPCServer(ctx context.Context) error {
 	validator, err := validate.ProtovalidateUnary()

@@ -6,13 +6,13 @@ import (
 
 	redigo "github.com/gomodule/redigo/redis"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	repoOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
 	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis"
+
+	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/redis"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 )
 
@@ -30,11 +30,14 @@ type DiContainer struct {
 	redisPool     *redigo.Pool
 	redisPoolOnce sync.Once
 
-	redisClient     redis.Client
+	redisClient     cache.Client
 	redisClientOnce sync.Once
 
-	rateLimiter     svcOrder.RateLimiter
-	rateLimiterOnce sync.Once
+	createRateLimiter     svcOrder.RateLimiter
+	createRateLimiterOnce sync.Once
+
+	getRateLimiter     svcOrder.RateLimiter
+	getRateLimiterOnce sync.Once
 }
 
 func NewDIContainer(
@@ -72,7 +75,8 @@ func (d *DiContainer) OrderService(ctx context.Context) grpcOrder.Order {
 			store,
 			store,
 			d.marketViewer,
-			d.RateLimiter(),
+			d.CreateRateLimiter(),
+			d.GetRateLimiter(),
 			d.orderConfig.CreateTimeout,
 		)
 	})
@@ -80,16 +84,30 @@ func (d *DiContainer) OrderService(ctx context.Context) grpcOrder.Order {
 	return d.orderService
 }
 
-func (d *DiContainer) RateLimiter() svcOrder.RateLimiter {
-	d.rateLimiterOnce.Do(func() {
-		d.rateLimiter = repoRedis.NewOrderRateLimiter(
+func (d *DiContainer) CreateRateLimiter() svcOrder.RateLimiter {
+	d.createRateLimiterOnce.Do(func() {
+		d.createRateLimiter = repoRedis.NewOrderRateLimiter(
 			d.RedisClient(),
-			d.orderConfig.RateLimiter.Orders,
+			d.orderConfig.RateLimiter.CreateOrder,
 			d.orderConfig.RateLimiter.Window,
+			"rate:order:create:",
 		)
 	})
 
-	return d.rateLimiter
+	return d.createRateLimiter
+}
+
+func (d *DiContainer) GetRateLimiter() svcOrder.RateLimiter {
+	d.getRateLimiterOnce.Do(func() {
+		d.getRateLimiter = repoRedis.NewOrderRateLimiter(
+			d.RedisClient(),
+			d.orderConfig.RateLimiter.GetOrderStatus,
+			d.orderConfig.RateLimiter.Window,
+			"rate:order:get:",
+		)
+	})
+
+	return d.getRateLimiter
 }
 
 func (d *DiContainer) RedisPool() *redigo.Pool {
@@ -106,9 +124,9 @@ func (d *DiContainer) RedisPool() *redigo.Pool {
 	return d.redisPool
 }
 
-func (d *DiContainer) RedisClient() redis.Client {
+func (d *DiContainer) RedisClient() cache.Client {
 	d.redisClientOnce.Do(func() {
-		d.redisClient = redis.NewClient(
+		d.redisClient = cache.NewClient(
 			d.RedisPool(),
 			zapLogger.Logger(),
 			d.orderConfig.Redis.ConnectionTimeout,

@@ -43,7 +43,7 @@ func (s *Service) ViewMarkets(ctx context.Context, userRoles []models.UserRole) 
 	markets, err := s.marketCacheRepository.GetAll(ctx)
 	if err != nil {
 		if !errors.Is(err, repositoryErrors.ErrMarketCacheNotFound) {
-			zapLogger.Error(ctx, "internal redis error", zap.Error(err))
+			zapLogger.Error(ctx, "internal cache error", zap.Error(err))
 		}
 
 		markets, err = s.marketRepository.ListAll(ctx)

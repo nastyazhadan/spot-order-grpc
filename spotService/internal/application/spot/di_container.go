@@ -8,11 +8,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/redis"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
-	repoPostgres "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/postgres"
-	repoRedis "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/redis"
+	repoPostgres "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres"
+	repoRedis "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 )
 
@@ -32,7 +32,7 @@ type DiContainer struct {
 	redisPool     *redigo.Pool
 	redisPoolOnce sync.Once
 
-	redisClient     redis.Client
+	redisClient     cache.Client
 	redisClientOnce sync.Once
 }
 
@@ -85,9 +85,9 @@ func (d *DiContainer) RedisPool() *redigo.Pool {
 	return d.redisPool
 }
 
-func (d *DiContainer) RedisClient() redis.Client {
+func (d *DiContainer) RedisClient() cache.Client {
 	d.redisClientOnce.Do(func() {
-		d.redisClient = redis.NewClient(
+		d.redisClient = cache.NewClient(
 			d.RedisPool(),
 			zapLogger.Logger(),
 			d.spotConfig.Redis.ConnectionTimeout,

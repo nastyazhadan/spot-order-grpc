@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/redis/dto"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis/dto"
 )
 
 type Market struct {

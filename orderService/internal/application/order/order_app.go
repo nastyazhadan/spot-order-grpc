@@ -10,9 +10,9 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/closer"
-	postgres "github.com/nastyazhadan/spot-order-grpc/shared/infra/db"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/health"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/closer"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
@@ -96,7 +96,7 @@ func (a *App) setupCloser(_ context.Context) error {
 }
 
 func (a *App) setupDB(ctx context.Context) error {
-	pool, err := postgres.SetupDB(ctx, a.config.DBURI, migrations.Migrations)
+	pool, err := db.SetupDB(ctx, a.config.DBURI, migrations.Migrations)
 	if err != nil {
 		return fmt.Errorf("postgres.SetupDB: %w", err)
 	}

@@ -15,11 +15,13 @@ import (
 )
 
 type Service struct {
-	saver         Saver
-	getter        Getter
-	marketViewer  MarketViewer
-	rateLimiter   RateLimiter
-	createTimeout time.Duration
+	saver        Saver
+	getter       Getter
+	marketViewer MarketViewer
+
+	createRateLimiter RateLimiter
+	getRateLimiter    RateLimiter
+	createTimeout     time.Duration
 }
 
 type Saver interface {
@@ -38,13 +40,14 @@ type RateLimiter interface {
 	Allow(ctx context.Context, userID uuid.UUID) (bool, error)
 }
 
-func NewService(s Saver, g Getter, mv MarketViewer, rl RateLimiter, t time.Duration) *Service {
+func NewService(s Saver, g Getter, mv MarketViewer, create, get RateLimiter, t time.Duration) *Service {
 	return &Service{
-		saver:         s,
-		getter:        g,
-		marketViewer:  mv,
-		rateLimiter:   rl,
-		createTimeout: t,
+		saver:             s,
+		getter:            g,
+		marketViewer:      mv,
+		createRateLimiter: create,
+		getRateLimiter:    get,
+		createTimeout:     t,
 	}
 }
 
@@ -61,31 +64,85 @@ func (s *Service) CreateOrder(
 	ctx, cancel := context.WithTimeout(ctx, s.createTimeout)
 	defer cancel()
 
-	allowed, err := s.rateLimiter.Allow(ctx, userID)
+	if err := s.checkCreateRateLimit(ctx, userID); err != nil {
+		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if err := s.validateMarket(ctx, marketID); err != nil {
+		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
+	}
+
+	orderID, orderStatus, err := s.saveOrder(ctx, userID, marketID, orderType, price, quantity)
 	if err != nil {
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
-	if !allowed {
-		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrRateLimitExceeded)
+
+	return orderID, orderStatus, nil
+}
+
+func (s *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
+	const op = "Service.GetOrderStatus"
+
+	if err := s.checkGetRateLimit(ctx, userID); err != nil {
+		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
+	order, err := s.fetchOrder(ctx, orderID, userID)
+	if err != nil {
+		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return order.Status, nil
+}
+
+func (s *Service) checkCreateRateLimit(ctx context.Context, userID uuid.UUID) error {
+	allowed, err := s.createRateLimiter.Allow(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return serviceErrors.ErrRateLimitExceeded
+	}
+
+	return nil
+}
+
+func (s *Service) checkGetRateLimit(ctx context.Context, userID uuid.UUID) error {
+	allowed, err := s.getRateLimiter.Allow(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return serviceErrors.ErrRateLimitExceeded
+	}
+
+	return nil
+}
+
+func (s *Service) validateMarket(ctx context.Context, marketID uuid.UUID) error {
 	// Заглушка
 	markets, err := s.marketViewer.ViewMarkets(ctx, []sharedModels.UserRole{sharedModels.UserRoleUser})
 	if err != nil {
-		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
+		return err
 	}
 
-	found := false
 	for _, market := range markets {
 		if market.ID == marketID {
-			found = true
-			break
+			return nil
 		}
 	}
-	if !found {
-		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrMarketsNotFound)
-	}
 
+	return serviceErrors.ErrMarketsNotFound
+}
+
+func (s *Service) saveOrder(
+	ctx context.Context,
+	userID uuid.UUID,
+	marketID uuid.UUID,
+	orderType models.OrderType,
+	price models.Decimal,
+	quantity int64,
+) (uuid.UUID, models.OrderStatus, error) {
 	orderID := uuid.New()
 	orderStatus := models.OrderStatusCreated
 
@@ -102,30 +159,28 @@ func (s *Service) CreateOrder(
 
 	if err := s.saver.SaveOrder(ctx, newOrder); err != nil {
 		if errors.Is(err, repositoryErrors.ErrOrderAlreadyExists) {
-			return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderAlreadyExists)
+			return uuid.Nil, models.OrderStatusCancelled, serviceErrors.ErrOrderAlreadyExists
 		}
 
-		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
+		return uuid.Nil, models.OrderStatusCancelled, err
 	}
 
 	return orderID, orderStatus, nil
 }
 
-func (s *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
-	const op = "Service.GetOrderStatus"
-
-	result, err := s.getter.GetOrder(ctx, orderID)
+func (s *Service) fetchOrder(ctx context.Context, orderID, userID uuid.UUID) (models.Order, error) {
+	order, err := s.getter.GetOrder(ctx, orderID)
 	if err != nil {
 		if errors.Is(err, repositoryErrors.ErrOrderNotFound) {
-			return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderNotFound)
+			return models.Order{}, serviceErrors.ErrOrderNotFound
 		}
 
-		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
+		return models.Order{}, err
 	}
 
-	if result.UserID != userID {
-		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, serviceErrors.ErrOrderNotFound)
+	if order.UserID != userID {
+		return models.Order{}, serviceErrors.ErrOrderNotFound
 	}
 
-	return result.Status, nil
+	return order, nil
 }

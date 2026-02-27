@@ -10,19 +10,19 @@ import (
 	redigo "github.com/gomodule/redigo/redis"
 
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/redis"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	postgres "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/postgres/dto"
-	redisDTO "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/redis/dto"
+	postgres "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/dto"
+	redisDTO "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis/dto"
 )
 
-const cacheKeyPrefix = "market:redis:all"
+const cacheKeyPrefix = "market:cache:all"
 
 type MarketCacheRepository struct {
-	cache redis.Client
+	cache cache.Client
 }
 
-func NewMarketCacheRepository(cache redis.Client) *MarketCacheRepository {
+func NewMarketCacheRepository(cache cache.Client) *MarketCacheRepository {
 	return &MarketCacheRepository{
 		cache: cache,
 	}

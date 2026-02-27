@@ -8,10 +8,10 @@ import (
 )
 
 type MarketRedisView struct {
-	ID          string `redis:"id"          json:"id"`
-	Name        string `redis:"name"        json:"name"`
-	Enabled     bool   `redis:"enabled"     json:"enabled"`
-	DeletedAtNs *int64 `redis:"deleted_at"  json:"deleted_at,omitempty"`
+	ID          string `cache:"id"          json:"id"`
+	Name        string `cache:"name"        json:"name"`
+	Enabled     bool   `cache:"enabled"     json:"enabled"`
+	DeletedAtNs *int64 `cache:"deleted_at"  json:"deleted_at,omitempty"`
 }
 
 func (m MarketRedisView) ToDomainView() (models.Market, error) {

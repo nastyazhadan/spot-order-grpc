@@ -21,7 +21,7 @@ func (_m *Getter) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, err
 	ret := _m.Called(ctx, id)
 
 	if len(ret) == 0 {
-		panic("no return value specified for GetOrder")
+		panic("no return value specified for GetOrderStatus")
 	}
 
 	var r0 models.Order

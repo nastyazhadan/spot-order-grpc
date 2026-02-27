@@ -9,7 +9,7 @@ import (
 
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/postgres/dto"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/dto"
 )
 
 type MarketStore struct {

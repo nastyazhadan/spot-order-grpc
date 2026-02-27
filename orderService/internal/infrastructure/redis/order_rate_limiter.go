@@ -7,29 +7,34 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/redis"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 )
 
-const orderRateLimitPrefix = "rate:order:create:"
-
 type OrderRateLimiter struct {
-	client redis.Client
+	client cache.Client
 	limit  int64
 	window time.Duration
+	prefix string
 }
 
-func NewOrderRateLimiter(client redis.Client, limit int64, window time.Duration) *OrderRateLimiter {
+func NewOrderRateLimiter(
+	client cache.Client,
+	limit int64,
+	window time.Duration,
+	prefix string,
+) *OrderRateLimiter {
 	return &OrderRateLimiter{
 		client: client,
 		limit:  limit,
 		window: window,
+		prefix: prefix,
 	}
 }
 
 func (r *OrderRateLimiter) Allow(ctx context.Context, userID uuid.UUID) (bool, error) {
 	const op = "OrderRateLimiter.Allow"
 
-	key := orderRateLimitPrefix + userID.String()
+	key := r.prefix + userID.String()
 
 	count, err := r.client.Incr(ctx, key)
 	if err != nil {

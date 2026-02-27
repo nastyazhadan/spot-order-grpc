@@ -52,8 +52,9 @@ type RedisConfig struct {
 }
 
 type RateLimiterConfig struct {
-	Orders int64         `env:"RATE_LIMIT_ORDERS" env-default:"5"`
-	Window time.Duration `env:"RATE_LIMIT_WINDOW" env-default:"1h"`
+	CreateOrder    int64         `env:"RATE_LIMIT_CREATE_ORDER" env-default:"5"`
+	GetOrderStatus int64         `env:"RATE_LIMIT_GET_ORDER_STATUS" env-default:"50"`
+	Window         time.Duration `env:"RATE_LIMIT_WINDOW" env-default:"1h"`
 }
 
 func (r RedisConfig) Address() string {

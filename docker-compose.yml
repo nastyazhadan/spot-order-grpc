@@ -28,9 +28,9 @@ services:
     container_name: myredis
     ports:
       - "${EXTERNAL_REDIS_PORT}:6379"
-    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "allkeys-lru"]
+    command: ["cache-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "allkeys-lru"]
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: [ "CMD", "cache-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -18,11 +18,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
-	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infra/db/migrator"
+	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db/migrator"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v1"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
-	repoSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/postgres"
+	repoSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/migrations"
 )

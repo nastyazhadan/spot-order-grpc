@@ -101,10 +101,10 @@ func TestCreateOrder(t *testing.T) {
 			price:     randomPrice,
 			quantity:  randomQuantity,
 			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
-				limiter.On("Allow", mock.Anything, randomUUID).Return(false, errors.New("redis down"))
+				limiter.On("Allow", mock.Anything, randomUUID).Return(false, errors.New("cache down"))
 			},
 			expectedStatus: models.OrderStatusCancelled,
-			expectedErrMsg: "Service.CreateOrder: redis down",
+			expectedErrMsg: "Service.CreateOrder: cache down",
 		},
 		{
 			name:      "ошибка - рынок не найден",
@@ -293,7 +293,7 @@ func TestGetOrderStatus(t *testing.T) {
 					Status:    models.OrderStatusCreated,
 					CreatedAt: time.Now().UTC(),
 				}
-				getter.On("GetOrder", mock.Anything, orderID).
+				getter.On("GetOrderStatus", mock.Anything, orderID).
 					Return(order, nil)
 			},
 			expectedStatus: models.OrderStatusCreated,
@@ -304,7 +304,7 @@ func TestGetOrderStatus(t *testing.T) {
 			orderID: orderID,
 			userID:  userID,
 			setupMocks: func(getter *mocks.Getter) {
-				getter.On("GetOrder", mock.Anything, orderID).
+				getter.On("GetOrderStatus", mock.Anything, orderID).
 					Return(models.Order{}, storageErrors.ErrOrderNotFound)
 			},
 			expectedStatus: models.OrderStatusUnspecified,
@@ -325,7 +325,7 @@ func TestGetOrderStatus(t *testing.T) {
 					Status:    models.OrderStatusCreated,
 					CreatedAt: time.Now().UTC(),
 				}
-				getter.On("GetOrder", mock.Anything, orderID).
+				getter.On("GetOrderStatus", mock.Anything, orderID).
 					Return(order, nil)
 			},
 			expectedStatus: models.OrderStatusUnspecified,
@@ -336,7 +336,7 @@ func TestGetOrderStatus(t *testing.T) {
 			orderID: orderID,
 			userID:  userID,
 			setupMocks: func(getter *mocks.Getter) {
-				getter.On("GetOrder", mock.Anything, orderID).
+				getter.On("GetOrderStatus", mock.Anything, orderID).
 					Return(models.Order{}, errors.New("internal error"))
 			},
 			expectedStatus: models.OrderStatusUnspecified,
@@ -347,7 +347,7 @@ func TestGetOrderStatus(t *testing.T) {
 			orderID: uuid.Nil,
 			userID:  userID,
 			setupMocks: func(getter *mocks.Getter) {
-				getter.On("GetOrder", mock.Anything, uuid.Nil).
+				getter.On("GetOrderStatus", mock.Anything, uuid.Nil).
 					Return(models.Order{}, storageErrors.ErrOrderNotFound)
 			},
 			expectedStatus: models.OrderStatusUnspecified,
@@ -368,7 +368,7 @@ func TestGetOrderStatus(t *testing.T) {
 					Status:    models.OrderStatusCancelled,
 					CreatedAt: time.Now().UTC(),
 				}
-				getter.On("GetOrder", mock.Anything, orderID).
+				getter.On("GetOrderStatus", mock.Anything, orderID).
 					Return(order, nil)
 			},
 			expectedStatus: models.OrderStatusCancelled,

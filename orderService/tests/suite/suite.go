@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
+	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis"
 	"github.com/testcontainers/testcontainers-go"
 	pgContainer "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -21,12 +23,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
-	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
-	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
-	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infra/db/migrator"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infra/redis"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
+	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db/migrator"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
@@ -129,21 +129,21 @@ func New(test *testing.T) (context.Context, *Suite) {
 		},
 	})
 	if err != nil {
-		test.Fatalf("failed to start redis container: %v", err)
+		test.Fatalf("failed to start cache container: %v", err)
 	}
 	test.Cleanup(func() {
 		if err := redisC.Terminate(context.Background()); err != nil {
-			test.Logf("failed to terminate redis container: %v", err)
+			test.Logf("failed to terminate cache container: %v", err)
 		}
 	})
 
 	redisHost, err := redisC.Host(ctx)
 	if err != nil {
-		test.Fatalf("failed to get redis host: %v", err)
+		test.Fatalf("failed to get cache host: %v", err)
 	}
 	redisPort, err := redisC.MappedPort(ctx, "6379/tcp")
 	if err != nil {
-		test.Fatalf("failed to get redis port: %v", err)
+		test.Fatalf("failed to get cache port: %v", err)
 	}
 	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
 
@@ -162,7 +162,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 		_ = redisPool.Close()
 	})
 
-	redisClient := redis.NewClient(redisPool, zapLogger.With(), redisConnectionTimeout)
+	redisClient := cache.NewClient(redisPool, zapLogger.With(), redisConnectionTimeout)
 	rateLimiter := repoRedis.NewOrderRateLimiter(redisClient, createRateLimit, createRateWindow)
 
 	marketViewer := &MockMarketViewer{
