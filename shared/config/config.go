@@ -61,10 +61,11 @@ func (r RedisConfig) Address() string {
 	return fmt.Sprintf("%s:%d", r.Host, r.Port)
 }
 
-func Load(path string) (*Config, error) {
+func Load() (*Config, error) {
 	config := &Config{}
-	if err := cleanenv.ReadConfig(path, config); err != nil {
+	if err := cleanenv.ReadEnv(config); err != nil {
 		return nil, err
 	}
+
 	return config, nil
 }

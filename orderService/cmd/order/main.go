@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log"
 	"os/signal"
 	"syscall"
@@ -13,18 +12,16 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/closer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 
+	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
 
-const envFilePath = "../../../.env"
-
 func main() {
-	envPath := flag.String("env", envFilePath, "path to .env file")
-	flag.Parse()
+	_ = godotenv.Load()
 
-	cfg, err := config.Load(*envPath)
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load config file: %v", err)
+		log.Fatalf("failed to load config: %v", err)
 	}
 
 	appCtx, appCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
