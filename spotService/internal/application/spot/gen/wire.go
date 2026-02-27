@@ -3,6 +3,8 @@
 package gen
 
 import (
+	"context"
+
 	redigo "github.com/gomodule/redigo/redis"
 	"github.com/google/wire"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -12,12 +14,14 @@ import (
 )
 
 type Container struct {
-	SpotService *svcSpot.Service
-	RedisPool   *redigo.Pool
+	SpotService  *svcSpot.Service
+	RedisPool    *redigo.Pool
+	PostgresPool *pgxpool.Pool
 }
 
-func NewContainer(pool *pgxpool.Pool, cfg config.SpotConfig) *Container {
+func NewContainer(ctx context.Context, cfg config.SpotConfig) (*Container, error) {
 	wire.Build(
+		providePostgresPool,
 		provideRedisPool,
 		provideRedisClient,
 		provideMarketStore,
@@ -26,5 +30,5 @@ func NewContainer(pool *pgxpool.Pool, cfg config.SpotConfig) *Container {
 		provideSpotService,
 		wire.Struct(new(Container), "*"),
 	)
-	return nil
+	return nil, nil
 }

@@ -10,11 +10,9 @@ import (
 
 	wire "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/closer"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
@@ -23,7 +21,6 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -37,7 +34,6 @@ type App struct {
 	spotConnection *grpc.ClientConn
 	marketClient   *grpcClient.Client
 
-	dbPool    *pgxpool.Pool
 	config    config.OrderConfig
 	container *wire.Container
 }
@@ -67,7 +63,6 @@ func (a *App) setupDeps(ctx context.Context) error {
 	setups := []func(ctx context.Context) error{
 		a.setupLogger,
 		a.setupCloser,
-		a.setupDB,
 		a.setupSpotConnection,
 		a.setupMarketClient,
 		a.setupDI,
@@ -97,22 +92,6 @@ func (a *App) setupCloser(_ context.Context) error {
 
 	closer.AddNamed("zap logger sync", func(ctx context.Context) error {
 		zapLogger.Sync()
-		return nil
-	})
-
-	return nil
-}
-
-func (a *App) setupDB(ctx context.Context) error {
-	pool, err := db.SetupDB(ctx, a.config.DBURI, migrations.Migrations)
-	if err != nil {
-		return fmt.Errorf("postgres.SetupDB: %w", err)
-	}
-
-	a.dbPool = pool
-
-	closer.AddNamed("Postgres pool", func(ctx context.Context) error {
-		a.dbPool.Close()
 		return nil
 	})
 
@@ -149,10 +128,18 @@ func (a *App) setupMarketClient(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) setupDI(_ context.Context) error {
-	container := wire.NewContainer(a.dbPool, a.marketClient, a.config)
+func (a *App) setupDI(ctx context.Context) error {
+	container, err := wire.NewContainer(ctx, a.marketClient, a.config)
+	if err != nil {
+		return err
+	}
 
 	a.container = container
+
+	closer.AddNamed("Postgres pool", func(ctx context.Context) error {
+		container.PostgresPool.Close()
+		return nil
+	})
 
 	// Graceful shutdown for Redis
 	closer.AddNamed("Redis pool", func(ctx context.Context) error {

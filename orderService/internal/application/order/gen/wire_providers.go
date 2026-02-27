@@ -2,6 +2,7 @@ package gen
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	redigo "github.com/gomodule/redigo/redis"
@@ -10,8 +11,10 @@ import (
 	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
 	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 )
 
@@ -21,6 +24,15 @@ type RateLimiters struct {
 }
 
 type CreateTimeout time.Duration
+
+func provideDBPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.Pool, error) {
+	pool, err := db.SetupDB(ctx, cfg.DBURI, migrations.Migrations)
+	if err != nil {
+		return nil, fmt.Errorf("postgres.SetupDB: %w", err)
+	}
+
+	return pool, nil
+}
 
 func provideRedisPool(cfg config.OrderConfig) *redigo.Pool {
 	return &redigo.Pool{

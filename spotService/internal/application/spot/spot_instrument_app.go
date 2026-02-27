@@ -8,14 +8,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/closer"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
@@ -24,16 +22,13 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
 	wire "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot/gen"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
-	"github.com/nastyazhadan/spot-order-grpc/spotService/migrations"
 )
 
 type App struct {
 	grpcServer *grpc.Server
 	listener   net.Listener
 
-	dbPool *pgxpool.Pool
-	config config.SpotConfig
-
+	config    config.SpotConfig
 	container *wire.Container
 }
 
@@ -62,7 +57,6 @@ func (a *App) setupDeps(ctx context.Context) error {
 	setups := []func(ctx context.Context) error{
 		a.setupLogger,
 		a.setupCloser,
-		a.setupDB,
 		a.setupDI,
 		a.setupListener,
 		a.setupGRPCServer,
@@ -78,11 +72,18 @@ func (a *App) setupDeps(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) setupDI(_ context.Context) error {
-	container := wire.NewContainer(a.dbPool, a.config)
+func (a *App) setupDI(ctx context.Context) error {
+	container, err := wire.NewContainer(ctx, a.config)
+	if err != nil {
+		return err
+	}
 
 	a.container = container
 
+	closer.AddNamed("Postgres pool", func(ctx context.Context) error {
+		container.PostgresPool.Close()
+		return nil
+	})
 	// Graceful shutdown for Redis
 	closer.AddNamed("Redis pool", func(ctx context.Context) error {
 		return container.RedisPool.Close()
@@ -96,22 +97,6 @@ func (a *App) setupLogger(_ context.Context) error {
 		a.config.LogLevel,
 		a.config.LogFormat == "json",
 	)
-}
-
-func (a *App) setupDB(ctx context.Context) error {
-	pool, err := db.SetupDB(ctx, a.config.DBURI, migrations.Migrations)
-	if err != nil {
-		return fmt.Errorf("postgres.SetupDB: %w", err)
-	}
-
-	a.dbPool = pool
-
-	closer.AddNamed("Postgres pool", func(ctx context.Context) error {
-		a.dbPool.Close()
-		return nil
-	})
-
-	return nil
 }
 
 func (a *App) setupCloser(_ context.Context) error {
