@@ -23,7 +23,7 @@ func NewMarketStore(pool *pgxpool.Pool) *MarketStore {
 }
 
 func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
-	const op = "repository.MarketStore.ListAll"
+	const op = "infrastructure.MarketStore.ListAll"
 
 	rows, err := m.pool.Query(ctx, `SELECT id, name, enabled, deleted_at FROM market_store`)
 	if err != nil {

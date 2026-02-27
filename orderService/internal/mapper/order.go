@@ -2,7 +2,7 @@ package mapper
 
 import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v6"
+	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v1"
 )
 
 func TypeFromProto(orderType proto.OrderType) models.OrderType {

@@ -129,6 +129,8 @@ func (a *App) setupListener(_ context.Context) error {
 	return nil
 }
 
+RATE limiter обертка
+
 func (a *App) setupGRPCServer(ctx context.Context) error {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {

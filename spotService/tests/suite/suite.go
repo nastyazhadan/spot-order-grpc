@@ -20,7 +20,7 @@ import (
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infra/db/migrator"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
+	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v1"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 	repoSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/repository/postgres"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"

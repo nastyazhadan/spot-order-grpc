@@ -2,7 +2,7 @@ module github.com/nastyazhadan/spot-order-grpc/spotService
 
 go 1.25.0
 
-replace github.com/nastyazhadan/spot-order-grpc/shared => ../shared
+replace github.com/nastyazhadan/shared => ../shared
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.28.0

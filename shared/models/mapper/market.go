@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
+	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v1"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"

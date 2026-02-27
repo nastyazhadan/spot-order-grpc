@@ -13,12 +13,12 @@ import (
 const orderRateLimitPrefix = "rate:order:create:"
 
 type OrderRateLimiter struct {
-	client redis.RedisClient
+	client redis.Client
 	limit  int64
 	window time.Duration
 }
 
-func NewOrderRateLimiter(client redis.RedisClient, limit int64, window time.Duration) *OrderRateLimiter {
+func NewOrderRateLimiter(client redis.Client, limit int64, window time.Duration) *OrderRateLimiter {
 	return &OrderRateLimiter{
 		client: client,
 		limit:  limit,

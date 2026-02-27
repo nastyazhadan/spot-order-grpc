@@ -2,7 +2,7 @@ package mapper
 
 import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
+	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v1"
 )
 
 func UserRoleFromProto(userRole proto.UserRole) models.UserRole {

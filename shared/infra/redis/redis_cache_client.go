@@ -19,7 +19,7 @@ type Logger interface {
 	Error(ctx context.Context, message string, fields ...zap.Field)
 }
 
-type RedisClient interface {
+type Client interface {
 	Set(ctx context.Context, key string, value interface{}) error
 	SetWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) error
 	Get(ctx context.Context, key string) ([]byte, error)

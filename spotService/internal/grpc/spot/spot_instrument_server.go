@@ -9,7 +9,7 @@ import (
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models/mapper"
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v6"
+	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v1"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/app/order"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infra/closer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"

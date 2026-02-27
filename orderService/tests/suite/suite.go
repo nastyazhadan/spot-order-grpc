@@ -21,8 +21,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
-	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/postgres"
-	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/redis"
+	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
+	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infra/db/migrator"
@@ -31,7 +31,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v6"
+	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v1"
 )
 
 const (
@@ -39,12 +39,12 @@ const (
 	dbPassword = "test_password"
 	dbName     = "order_test_db"
 
-	DefaultCreateTimeout = 5 * time.Second
-	LongTimeout          = 2 * time.Minute
-	StartupTimeout       = 30 * time.Second
+	defaultCreateTimeout = 5 * time.Second
+	longTimeout          = 2 * time.Minute
+	startupTimeout       = 30 * time.Second
 
-	CreateRateLimit  int64         = 1_000_000
-	CreateRateWindow time.Duration = 1 * time.Hour
+	createRateLimit  int64         = 1_000_000
+	createRateWindow time.Duration = 1 * time.Hour
 
 	redisConnectionTimeout = 3 * time.Second
 )
@@ -72,7 +72,7 @@ type Suite struct {
 func New(test *testing.T) (context.Context, *Suite) {
 	test.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), LongTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), longTimeout)
 	test.Cleanup(cancel)
 
 	container, err := pgContainer.Run(ctx,
@@ -83,7 +83,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(2).
-				WithStartupTimeout(StartupTimeout),
+				WithStartupTimeout(startupTimeout),
 		),
 	)
 	if err != nil {
@@ -125,7 +125,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 			Image:        "redis:7-alpine",
 			ExposedPorts: []string{"6379/tcp"},
 			WaitingFor: wait.ForListeningPort("6379/tcp").
-				WithStartupTimeout(StartupTimeout),
+				WithStartupTimeout(startupTimeout),
 		},
 	})
 	if err != nil {
@@ -163,14 +163,14 @@ func New(test *testing.T) (context.Context, *Suite) {
 	})
 
 	redisClient := redis.NewClient(redisPool, zapLogger.With(), redisConnectionTimeout)
-	rateLimiter := repoRedis.NewOrderRateLimiter(redisClient, CreateRateLimit, CreateRateWindow)
+	rateLimiter := repoRedis.NewOrderRateLimiter(redisClient, createRateLimit, createRateWindow)
 
 	marketViewer := &MockMarketViewer{
 		Markets: []models.Market{},
 	}
 
 	orderRepo := repoPostgres.NewOrderStore(pool)
-	orderSvc := svcOrder.NewService(orderRepo, orderRepo, marketViewer, rateLimiter, DefaultCreateTimeout)
+	orderSvc := svcOrder.NewService(orderRepo, orderRepo, marketViewer, rateLimiter, defaultCreateTimeout)
 
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {

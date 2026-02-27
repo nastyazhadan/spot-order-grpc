@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/tests/suite"
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v6"
+	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v1"
 )
 
 func TestCreateOrderHappyPath(test *testing.T) {

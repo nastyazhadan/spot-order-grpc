@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
-	repoOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/postgres"
-	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/repository/redis"
+	repoOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
+	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infra/redis"
@@ -30,7 +30,7 @@ type DiContainer struct {
 	redisPool     *redigo.Pool
 	redisPoolOnce sync.Once
 
-	redisClient     redis.RedisClient
+	redisClient     redis.Client
 	redisClientOnce sync.Once
 
 	rateLimiter     svcOrder.RateLimiter
@@ -106,7 +106,7 @@ func (d *DiContainer) RedisPool() *redigo.Pool {
 	return d.redisPool
 }
 
-func (d *DiContainer) RedisClient() redis.RedisClient {
+func (d *DiContainer) RedisClient() redis.Client {
 	d.redisClientOnce.Do(func() {
 		d.redisClient = redis.NewClient(
 			d.RedisPool(),

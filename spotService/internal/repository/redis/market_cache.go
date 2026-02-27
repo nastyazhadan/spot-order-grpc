@@ -19,10 +19,10 @@ import (
 const cacheKeyPrefix = "market:redis:all"
 
 type MarketCacheRepository struct {
-	cache redis.RedisClient
+	cache redis.Client
 }
 
-func NewMarketCacheRepository(cache redis.RedisClient) *MarketCacheRepository {
+func NewMarketCacheRepository(cache redis.Client) *MarketCacheRepository {
 	return &MarketCacheRepository{
 		cache: cache,
 	}
