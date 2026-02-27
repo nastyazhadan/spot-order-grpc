@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"time"
 
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
@@ -21,6 +23,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
@@ -39,21 +42,25 @@ type App struct {
 	config config.OrderConfig
 }
 
-func New(ctx context.Context, cfg config.OrderConfig) (*App, error) {
+func New(ctx context.Context, cfg config.OrderConfig) *App {
 	app := &App{
 		config: cfg,
 	}
 
-	err := app.setupDeps(ctx)
-	if err != nil {
-		return nil, err
+	if err := app.setupDeps(ctx); err != nil {
+		gracefulShutdown(app.config.GSTimeout)
+		os.Exit(1)
 	}
 
-	return app, nil
+	return app
 }
 
-func (a *App) Start(ctx context.Context) error {
-	return a.runGRPCServer(ctx)
+func (a *App) Start(ctx context.Context) {
+	defer gracefulShutdown(a.config.GSTimeout)
+
+	if err := a.runGRPCServer(ctx); err != nil {
+		zapLogger.Error(ctx, "failed to start order service", zap.Error(err))
+	}
 }
 
 func (a *App) setupDeps(ctx context.Context) error {
@@ -70,6 +77,7 @@ func (a *App) setupDeps(ctx context.Context) error {
 
 	for _, init := range setups {
 		if err := init(ctx); err != nil {
+			zapLogger.Error(ctx, "failed to initialize order service", zap.Error(err))
 			return err
 		}
 	}
@@ -227,4 +235,13 @@ func (a *App) runGRPCServer(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func gracefulShutdown(timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	if err := closer.CloseAll(ctx); err != nil {
+		zapLogger.Error(ctx, "failed to close all processes in order service", zap.Error(err))
+	}
 }

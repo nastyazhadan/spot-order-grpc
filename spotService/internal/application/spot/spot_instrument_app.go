@@ -5,14 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/closer"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
@@ -33,21 +36,25 @@ type App struct {
 	config config.SpotConfig
 }
 
-func New(ctx context.Context, cfg config.SpotConfig) (*App, error) {
+func New(ctx context.Context, cfg config.SpotConfig) *App {
 	app := &App{
 		config: cfg,
 	}
 
-	err := app.setupDeps(ctx)
-	if err != nil {
-		return nil, err
+	if err := app.setupDeps(ctx); err != nil {
+		gracefulShutdown(app.config.GSTimeout)
+		os.Exit(1)
 	}
 
-	return app, nil
+	return app
 }
 
-func (a *App) Start(ctx context.Context) error {
-	return a.runGRPCServer(ctx)
+func (a *App) Start(ctx context.Context) {
+	defer gracefulShutdown(a.config.GSTimeout)
+
+	if err := a.runGRPCServer(ctx); err != nil {
+		zapLogger.Error(ctx, "failed to start spot service", zap.Error(err))
+	}
 }
 
 func (a *App) setupDeps(ctx context.Context) error {
@@ -62,6 +69,7 @@ func (a *App) setupDeps(ctx context.Context) error {
 
 	for _, init := range setups {
 		if err := init(ctx); err != nil {
+			zapLogger.Error(ctx, "failed to initialize spot service", zap.Error(err))
 			return err
 		}
 	}
@@ -174,4 +182,13 @@ func (a *App) runGRPCServer(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func gracefulShutdown(timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	if err := closer.CloseAll(ctx); err != nil {
+		zapLogger.Error(ctx, "failed to close all processes in spot service", zap.Error(err))
+	}
 }
