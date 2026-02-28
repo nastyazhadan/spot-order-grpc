@@ -16,7 +16,6 @@ import (
 	redisDTO "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis/dto"
 )
 
-// //sdsdlmsdskdmsmkd
 const cacheKeyPrefix = "market:cache:all"
 
 type MarketCacheRepository struct {

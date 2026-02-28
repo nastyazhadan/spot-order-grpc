@@ -16,6 +16,8 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
+const singleFlightKey = "load_markets"
+
 type MarketRepository interface {
 	ListAll(ctx context.Context) ([]models.Market, error)
 }
@@ -71,9 +73,8 @@ func (s *Service) getMarketsFromCache(ctx context.Context) ([]models.Market, err
 
 func (s *Service) getMarketsWithSingleFlight(ctx context.Context) ([]models.Market, error) {
 	const op = "Service.getMarketsWithSingleFlight"
-	const key = "market:cache:all"
 
-	result, err, _ := s.singleFlight.Do(key, func() (interface{}, error) {
+	result, err, _ := s.singleFlight.Do(singleFlightKey, func() (interface{}, error) {
 		return s.loadAndWarmCache(ctx)
 	})
 	if err != nil {
