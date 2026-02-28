@@ -5,9 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
-	"time"
 
+	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -20,127 +19,78 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
-	wire "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot/gen"
+	wiregen "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot/gen"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 )
 
-type App struct {
-	grpcServer *grpc.Server
-	listener   net.Listener
-
-	config    config.SpotConfig
-	container *wire.Container
-}
-
-func New(ctx context.Context, cfg config.SpotConfig) *App {
-	app := &App{
-		config: cfg,
-	}
-
-	if err := app.setupDeps(ctx); err != nil {
-		gracefulShutdown(app.config.GSTimeout)
-		os.Exit(1)
-	}
-
-	return app
-}
-
-func (a *App) Start(ctx context.Context) {
-	defer gracefulShutdown(a.config.GSTimeout)
-
-	if err := a.runGRPCServer(ctx); err != nil {
-		zapLogger.Error(ctx, "failed to start spot service", zap.Error(err))
-	}
-}
-
-func (a *App) setupDeps(ctx context.Context) error {
-	setups := []func(ctx context.Context) error{
-		a.setupLogger,
-		a.setupCloser,
-		a.setupDI,
-		a.setupListener,
-		a.setupGRPCServer,
-	}
-
-	for _, init := range setups {
-		if err := init(ctx); err != nil {
-			zapLogger.Error(ctx, "failed to initialize spot service", zap.Error(err))
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (a *App) setupDI(ctx context.Context) error {
-	container, err := wire.NewContainer(ctx, a.config)
-	if err != nil {
-		return err
-	}
-
-	a.container = container
-
-	closer.AddNamed("Postgres pool", func(ctx context.Context) error {
-		container.PostgresPool.Close()
-		return nil
-	})
-	// Graceful shutdown for Redis
-	closer.AddNamed("Redis pool", func(ctx context.Context) error {
-		return container.RedisPool.Close()
-	})
-
-	return nil
-}
-
-func (a *App) setupLogger(_ context.Context) error {
-	return zapLogger.Init(
-		a.config.LogLevel,
-		a.config.LogFormat == "json",
+func Run(ctx context.Context, cfg config.SpotConfig) {
+	app := fx.New(
+		fx.Supply(ctx, cfg),
+		fx.Provide(
+			provideLogger,
+			provideContainer,
+			provideListener,
+			provideGRPCServer,
+		),
+		fx.Invoke(
+			registerCloser,
+			startGRPCServer,
+		),
 	)
+
+	app.Run()
 }
 
-func (a *App) setupCloser(_ context.Context) error {
-	closer.SetLogger(zapLogger.Logger())
-
-	closer.AddNamed("zap logger sync", func(ctx context.Context) error {
-		zapLogger.Sync()
-		return nil
-	})
-
-	return nil
+func provideLogger(cfg config.SpotConfig) error {
+	return zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json")
 }
 
-func (a *App) setupListener(_ context.Context) error {
-	listener, err := net.Listen("tcp", a.config.Address)
+func provideContainer(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (*wiregen.Container, error) {
+	container, err := wiregen.NewContainer(context.Background(), cfg)
 	if err != nil {
-		return fmt.Errorf("net.Listen: %w", err)
+		return nil, err
 	}
 
-	a.listener = listener
-
-	closer.AddNamed("TCP listener", func(ctx context.Context) error {
-		l := listener.Close()
-		if l != nil && !errors.Is(l, net.ErrClosed) {
-			return l
-		}
-
-		return nil
+	lifeCycle.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			container.PostgresPool.Close()
+			return container.RedisPool.Close()
+		},
 	})
 
-	return nil
+	return container, nil
 }
 
-func (a *App) setupGRPCServer(_ context.Context) error {
+func provideListener(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (net.Listener, error) {
+	listener, err := net.Listen("tcp", cfg.Address)
+	if err != nil {
+		return nil, fmt.Errorf("net.Listen: %w", err)
+	}
+
+	lifeCycle.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			errClose := listener.Close()
+			if errClose != nil && !errors.Is(errClose, net.ErrClosed) {
+				return errClose
+			}
+			return nil
+		},
+	})
+
+	return listener, nil
+}
+
+func provideGRPCServer(lifeCycle fx.Lifecycle, container *wiregen.Container) (*grpc.Server, error) {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
-		return fmt.Errorf("validate.ProtovalidateUnary: %w", err)
+		return nil, fmt.Errorf("validate.ProtovalidateUnary: %w", err)
 	}
 
 	tracer := xrequestid.Server
 	logger := logInterceptor.LoggerInterceptor()
 	recoverer := recovery.PanicRecoveryInterceptor
 
-	a.grpcServer = grpc.NewServer(
+	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			tracer,
 			logger,
@@ -149,34 +99,41 @@ func (a *App) setupGRPCServer(_ context.Context) error {
 		),
 	)
 
-	closer.AddNamed("gRPC Server", func(ctx context.Context) error {
-		a.grpcServer.GracefulStop()
-		return nil
+	reflection.Register(grpcServer)
+	health.RegisterService(grpcServer)
+	grpcSpot.Register(grpcServer, container.SpotService)
+
+	lifeCycle.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			grpcServer.GracefulStop()
+			return nil
+		},
 	})
 
-	reflection.Register(a.grpcServer)
-	health.RegisterService(a.grpcServer)
-	grpcSpot.Register(a.grpcServer, a.container.SpotService)
-
-	return nil
+	return grpcServer, nil
 }
 
-func (a *App) runGRPCServer(ctx context.Context) error {
-	zapLogger.Info(ctx, fmt.Sprintf("Starting gRPC Spot Server on %s", a.config.Address))
+func registerCloser() {
+	closer.SetLogger(zapLogger.Logger())
 
-	err := a.grpcServer.Serve(a.listener)
-	if err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-		return fmt.Errorf("grpcServer.Serve: %w", err)
-	}
-
-	return nil
+	closer.AddNamed("zap logger sync", func(ctx context.Context) error {
+		zapLogger.Sync()
+		return nil
+	})
 }
 
-func gracefulShutdown(timeout time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+func startGRPCServer(lifeCycle fx.Lifecycle, server *grpc.Server, listener net.Listener) {
+	lifeCycle.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			zapLogger.Info(ctx, fmt.Sprintf("Starting gRPC spot server on %s", listener.Addr()))
 
-	if err := closer.CloseAll(ctx); err != nil {
-		zapLogger.Error(ctx, "failed to close all processes in spot service", zap.Error(err))
-	}
+			go func() {
+				if err := server.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+					zapLogger.Error(ctx, "gRPC spot server error", zap.Error(err))
+				}
+			}()
+
+			return nil
+		},
+	})
 }

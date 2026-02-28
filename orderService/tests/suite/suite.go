@@ -25,13 +25,13 @@ import (
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
+	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db/migrator"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/order/v1"
 )
 
 const (

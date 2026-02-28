@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
+
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot"
 )
@@ -22,6 +23,5 @@ func main() {
 	appCtx, appCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer appCancel()
 
-	app := spot.New(appCtx, cfg.Spot)
-	app.Start(appCtx)
+	spot.Run(appCtx, cfg.Spot)
 }

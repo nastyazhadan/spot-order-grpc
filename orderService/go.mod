@@ -3,6 +3,7 @@ module github.com/nastyazhadan/spot-order-grpc/orderService
 go 1.25.0
 
 replace github.com/nastyazhadan/spot-order-grpc/shared => ../shared
+replace github.com/nastyazhadan/spot-order-grpc/protos => ../protos
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.28.0

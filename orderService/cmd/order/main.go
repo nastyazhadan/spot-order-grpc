@@ -23,6 +23,5 @@ func main() {
 	appCtx, appCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer appCancel()
 
-	app := order.New(appCtx, cfg.Order)
-	app.Start(appCtx)
+	order.Run(appCtx, cfg.Order)
 }
