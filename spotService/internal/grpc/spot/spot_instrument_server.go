@@ -3,7 +3,6 @@ package spot
 import (
 	"context"
 	"errors"
-	"sort"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
@@ -61,10 +60,6 @@ func (s *serverAPI) ViewMarkets(
 	for _, market := range markets {
 		out = append(out, mapper.MarketToProto(market))
 	}
-
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].Name < out[j].Name
-	})
 
 	return &proto.ViewMarketsResponse{
 		Markets: out,

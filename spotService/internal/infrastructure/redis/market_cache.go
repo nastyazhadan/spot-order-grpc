@@ -16,6 +16,7 @@ import (
 	redisDTO "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis/dto"
 )
 
+// //sdsdlmsdskdmsmkd
 const cacheKeyPrefix = "market:cache:all"
 
 type MarketCacheRepository struct {
@@ -41,7 +42,7 @@ func (m *MarketCacheRepository) GetAll(ctx context.Context) ([]models.Market, er
 	}
 
 	var redisViews []redisDTO.MarketRedisView
-	if err := json.Unmarshal(data, &redisViews); err != nil {
+	if err = json.Unmarshal(data, &redisViews); err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
@@ -27,6 +29,8 @@ type Service struct {
 	marketRepository      MarketRepository
 	marketCacheRepository MarketCacheRepository
 	cacheTTL              time.Duration
+
+	singleFlight singleflight.Group
 }
 
 func NewService(repo MarketRepository, cacheRepo MarketCacheRepository, ttl time.Duration) *Service {
@@ -40,34 +44,91 @@ func NewService(repo MarketRepository, cacheRepo MarketCacheRepository, ttl time
 func (s *Service) ViewMarkets(ctx context.Context, userRoles []models.UserRole) ([]models.Market, error) {
 	const op = "Service.ViewMarkets"
 
-	markets, err := s.marketCacheRepository.GetAll(ctx)
+	markets, err := s.getMarkets(ctx)
 	if err != nil {
-		if !errors.Is(err, repositoryErrors.ErrMarketCacheNotFound) {
-			zapLogger.Error(ctx, "internal cache error", zap.Error(err))
-		}
-
-		markets, err = s.marketRepository.ListAll(ctx)
-		if err != nil {
-			if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
-				return nil, serviceErrors.ErrMarketsNotFound
-			}
-
-			return nil, fmt.Errorf("%s: %w", op, err)
-		}
-
-		_ = s.marketCacheRepository.SetAll(ctx, markets, s.cacheTTL)
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return s.filterByRoles(markets, userRoles), nil
 }
 
+func (s *Service) getMarkets(ctx context.Context) ([]models.Market, error) {
+	markets, err := s.getMarketsFromCache(ctx)
+	if err == nil {
+		return markets, nil
+	}
+
+	if !errors.Is(err, repositoryErrors.ErrMarketCacheNotFound) {
+		zapLogger.Error(ctx, "internal cache error", zap.Error(err))
+	}
+
+	return s.getMarketsWithSingleFlight(ctx)
+}
+
+func (s *Service) getMarketsFromCache(ctx context.Context) ([]models.Market, error) {
+	return s.marketCacheRepository.GetAll(ctx)
+}
+
+func (s *Service) getMarketsWithSingleFlight(ctx context.Context) ([]models.Market, error) {
+	const op = "Service.getMarketsWithSingleFlight"
+	const key = "market:cache:all"
+
+	result, err, _ := s.singleFlight.Do(key, func() (interface{}, error) {
+		return s.loadAndWarmCache(ctx)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return result.([]models.Market), nil
+}
+
+func (s *Service) loadAndWarmCache(ctx context.Context) ([]models.Market, error) {
+	const op = "Service.loadAndWarmCache"
+
+	if markets, err := s.getMarketsFromCache(ctx); err == nil {
+		return markets, nil
+	}
+
+	markets, err := s.getMarketsFromRepo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	sort.Slice(markets, func(i, j int) bool {
+		return markets[i].Name < markets[j].Name
+	})
+
+	if err = s.marketCacheRepository.SetAll(ctx, markets, s.cacheTTL); err != nil {
+		zapLogger.Warn(ctx, "failed to update cache", zap.Error(err))
+	}
+
+	return markets, nil
+}
+
+func (s *Service) getMarketsFromRepo(ctx context.Context) ([]models.Market, error) {
+	const op = "Service.getMarketsFromRepo"
+
+	markets, err := s.marketRepository.ListAll(ctx)
+	if err != nil {
+		if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
+			return nil, serviceErrors.ErrMarketsNotFound
+		}
+
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return markets, nil
+}
+
 func (s *Service) filterByRoles(markets []models.Market, userRoles []models.UserRole) []models.Market {
-	isAdmin, isUser, isViewer := false, false, false
+	isUser, isViewer := false, false
 
 	for _, userRole := range userRoles {
 		switch userRole {
+		// Админ видит все рынки (включая disabled и deleted)
 		case models.UserRoleAdmin:
-			isAdmin = true
+			return markets
 		case models.UserRoleUser:
 			isUser = true
 		case models.UserRoleViewer:
@@ -79,10 +140,6 @@ func (s *Service) filterByRoles(markets []models.Market, userRoles []models.User
 	out := make([]models.Market, 0, len(markets))
 	for _, market := range markets {
 		switch {
-		// Админ видит все рынки (включая disabled и deleted)
-		case isAdmin:
-			out = append(out, market)
-
 		// Viewer видит все неудаленные рынки (включая disabled)
 		case isViewer && market.DeletedAt == nil:
 			out = append(out, market)
