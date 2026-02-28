@@ -9,9 +9,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	dto "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound"
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/dto"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 )
 

@@ -8,7 +8,7 @@ import (
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	"github.com/nastyazhadan/spot-order-grpc/shared/models/mapper"
+	mapper "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/inbound"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

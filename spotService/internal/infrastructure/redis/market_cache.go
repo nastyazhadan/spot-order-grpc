@@ -12,8 +12,7 @@ import (
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	postgresDTO "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/dto"
-	redisDTO "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis/dto"
+	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound"
 )
 
 const cacheKeyPrefix = "market:cache:all"
@@ -40,14 +39,14 @@ func (m *MarketCacheRepository) GetAll(ctx context.Context) ([]models.Market, er
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	var redisViews []redisDTO.MarketRedisView
+	var redisViews []dto.MarketRedisView
 	if err = json.Unmarshal(data, &redisViews); err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	markets := make([]models.Market, 0, len(redisViews))
 	for _, redisView := range redisViews {
-		market, err := redisView.ToDomainView()
+		market, err := redisView.ToDomain()
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
@@ -60,15 +59,9 @@ func (m *MarketCacheRepository) GetAll(ctx context.Context) ([]models.Market, er
 func (m *MarketCacheRepository) SetAll(ctx context.Context, markets []models.Market, ttl time.Duration) error {
 	const op = "MarketCacheRepository.SetAll"
 
-	redisViews := make([]redisDTO.MarketRedisView, 0, len(markets))
+	redisViews := make([]dto.MarketRedisView, 0, len(markets))
 	for _, market := range markets {
-		dto := postgresDTO.Market{
-			ID:        market.ID,
-			Name:      market.Name,
-			Enabled:   market.Enabled,
-			DeletedAt: market.DeletedAt,
-		}
-		redisViews = append(redisViews, dto.ToRedisView())
+		redisViews = append(redisViews, dto.FromDomain(market))
 	}
 
 	data, err := json.Marshal(redisViews)

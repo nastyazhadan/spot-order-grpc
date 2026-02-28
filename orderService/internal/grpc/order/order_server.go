@@ -7,8 +7,8 @@ import (
 	"math"
 	"strconv"
 
+	dto "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/mapper"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
@@ -64,7 +64,7 @@ func (s *serverAPI) CreateOrder(
 		return nil, err
 	}
 
-	orderType := mapper.TypeFromProto(request.GetOrderType())
+	orderType := dto.TypeFromProto(request.GetOrderType())
 	orderPrice := request.GetPrice()
 	orderQuantity := request.GetQuantity()
 
@@ -92,7 +92,7 @@ func (s *serverAPI) CreateOrder(
 
 	return &proto.CreateOrderResponse{
 		OrderId: orderID.String(),
-		Status:  mapper.StatusToProto(orderStatus),
+		Status:  dto.StatusToProto(orderStatus),
 	}, nil
 
 }
@@ -128,7 +128,7 @@ func (s *serverAPI) GetOrderStatus(
 	}
 
 	return &proto.GetOrderStatusResponse{
-		Status: mapper.StatusToProto(orderStatus),
+		Status: dto.StatusToProto(orderStatus),
 	}, nil
 }
 

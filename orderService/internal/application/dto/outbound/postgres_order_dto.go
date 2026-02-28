@@ -1,4 +1,4 @@
-package dto
+package outbound
 
 import (
 	"time"

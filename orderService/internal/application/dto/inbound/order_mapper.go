@@ -1,4 +1,4 @@
-package mapper
+package inbound
 
 import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"

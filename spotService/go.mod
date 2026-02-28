@@ -21,7 +21,9 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/zap v1.27.1
+	golang.org/x/sync v0.19.0
 	google.golang.org/grpc v1.79.1
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -93,13 +95,11 @@ require (
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a // indirect
 	golang.org/x/net v0.50.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260217215200-42d3e9bedb6d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260223185530-2f722ef697dc // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )

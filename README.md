@@ -244,7 +244,7 @@ spotOrder/
 │   │   ├── grpc/order/             # gRPC-хэндлеры
 │   │   ├── mapper/                 # маппинг proto ↔ domain
 │   │   ├── repository/
-│   │   │   ├── postgresDTO/           # хранение ордеров
+│   │   │   ├── dto/           # хранение ордеров
 │   │   │   └── redis/              # rate limiter
 │   │   └── services/order/         # бизнес-логика
 │   ├── migrations/                 # SQL-миграции (Goose)
@@ -256,7 +256,7 @@ spotOrder/
 │   │   ├── app/spot/               # DI-контейнер, сборка приложения
 │   │   ├── grpc/spot/              # gRPC-хэндлеры
 │   │   ├── repository/
-│   │   │   ├── postgresDTO/           # хранение рынков
+│   │   │   ├── dto/           # хранение рынков
 │   │   │   └── redis/              # кэш рынков (TTL 24h)
 │   │   └── services/spot/          # бизнес-логика + фильтрация по ролям
 │   ├── migrations/                 # SQL-миграции (Goose)
@@ -292,8 +292,8 @@ spotOrder/
 |---|---|---|
 | `ORDER_ADDRESS` | `:50051` | Адрес Order Service |
 | `SPOT_INSTRUMENT_ADDRESS` | `:50052` | Адрес Spot Service |
-| `ORDER_DB_URI` | `postgresDTO://...` | URI для order_db |
-| `SPOT_DB_URI` | `postgresDTO://...` | URI для spot_db |
+| `ORDER_DB_URI` | `dto://...` | URI для order_db |
+| `SPOT_DB_URI` | `dto://...` | URI для spot_db |
 | `REDIS_HOST` | `localhost` | Хост Redis |
 | `REDIS_PORT` | `6379` | Порт Redis |
 | `RATE_LIMIT_ORDERS` | `5` | Макс. ордеров в окне |
