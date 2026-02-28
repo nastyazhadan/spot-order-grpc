@@ -3,6 +3,7 @@ module github.com/nastyazhadan/spot-order-grpc/spotService
 go 1.25.0
 
 replace github.com/nastyazhadan/spot-order-grpc/shared => ../shared
+replace github.com/nastyazhadan/spot-order-grpc/protos => ../protos
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.28.0
@@ -44,7 +45,6 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/google/cel-go v0.27.0 // indirect
 	github.com/google/subcommands v1.2.0 // indirect
-	github.com/google/wiregen v0.7.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
 	github.com/ilyakaznacheev/cleanenv v1.5.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

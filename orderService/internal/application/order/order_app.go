@@ -8,7 +8,6 @@ import (
 
 	wiregen "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/closer"
@@ -31,7 +30,6 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 	app := fx.New(
 		fx.Supply(ctx, cfg),
 		fx.Provide(
-			provideLogger,
 			provideSpotConnection,
 			provideMarketClient,
 			provideContainer,
@@ -39,8 +37,8 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 			provideGRPCServer,
 		),
 		fx.Invoke(
+			initLogger,
 			registerCloser,
-			checkSpotConnection,
 			startGRPCServer,
 		),
 	)
@@ -48,7 +46,7 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 	app.Run()
 }
 
-func provideLogger(cfg config.OrderConfig) error {
+func initLogger(cfg config.OrderConfig) error {
 	return zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json")
 }
 
@@ -62,7 +60,6 @@ func registerCloser() {
 }
 
 func provideSpotConnection(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*grpc.ClientConn, error) {
-	// Возможно добавить таймаут
 	connection, err := grpc.NewClient(
 		cfg.SpotAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -74,7 +71,6 @@ func provideSpotConnection(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*grp
 
 	lifeCycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
-			zapLogger.Info(ctx, "closing Spot gRPC connection...")
 			return connection.Close()
 		},
 	})
@@ -82,12 +78,30 @@ func provideSpotConnection(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*grp
 	return connection, nil
 }
 
-func provideMarketClient(connection *grpc.ClientConn, cfg config.OrderConfig) *grpcClient.Client {
-	return grpcClient.New(connection, cfg.CircuitBreaker)
+func provideMarketClient(
+	ctx context.Context,
+	connection *grpc.ClientConn,
+	cfg config.OrderConfig,
+) (*grpcClient.Client, error) {
+	client := grpcClient.New(connection, cfg.CircuitBreaker)
+
+	checkCtx, cancel := context.WithTimeout(ctx, cfg.CheckTimeout)
+	defer cancel()
+
+	if _, err := client.ViewMarkets(checkCtx, []models.UserRole{models.UserRoleUser}); err != nil {
+		return nil, fmt.Errorf("spot instrument is not reachable at %s: %w", cfg.SpotAddress, err)
+	}
+
+	return client, nil
 }
 
-func provideContainer(ctx context.Context, lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*wiregen.Container, error) {
-	container, err := wiregen.NewContainer(ctx, order.MarketViewer, cfg)
+func provideContainer(
+	ctx context.Context,
+	lifeCycle fx.Lifecycle,
+	marketClient *grpcClient.Client,
+	cfg config.OrderConfig,
+) (*wiregen.Container, error) {
+	container, err := wiregen.NewContainer(ctx, marketClient, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +123,7 @@ func provideListener(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (net.Listen
 	}
 
 	lifeCycle.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
+		OnStop: func(ctx context.Context) error {
 			errClose := listener.Close()
 			if errClose != nil && !errors.Is(errClose, net.ErrClosed) {
 				return errClose
@@ -120,21 +134,6 @@ func provideListener(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (net.Listen
 	})
 
 	return listener, nil
-}
-
-func checkSpotConnection(lifeCycle fx.Lifecycle, cfg config.OrderConfig, client *grpcClient.Client) {
-	lifeCycle.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			checkCtx, cancel := context.WithTimeout(ctx, cfg.CheckTimeout)
-			defer cancel()
-
-			if _, err := client.ViewMarkets(checkCtx, []models.UserRole{models.UserRoleUser}); err != nil {
-				return fmt.Errorf("spot instrument is not reachable at %s: %w", cfg.SpotAddress, err)
-			}
-
-			return nil
-		},
-	})
 }
 
 func provideGRPCServer(lifeCycle fx.Lifecycle, container *wiregen.Container) (*grpc.Server, error) {

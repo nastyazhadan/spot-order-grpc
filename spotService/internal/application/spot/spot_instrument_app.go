@@ -27,12 +27,12 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 	app := fx.New(
 		fx.Supply(ctx, cfg),
 		fx.Provide(
-			provideLogger,
 			provideContainer,
 			provideListener,
 			provideGRPCServer,
 		),
 		fx.Invoke(
+			initLogger,
 			registerCloser,
 			startGRPCServer,
 		),
@@ -41,7 +41,7 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 	app.Run()
 }
 
-func provideLogger(cfg config.SpotConfig) error {
+func initLogger(cfg config.SpotConfig) error {
 	return zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json")
 }
 
