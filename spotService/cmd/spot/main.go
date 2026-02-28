@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"os/signal"
-	"syscall"
 
 	"github.com/joho/godotenv"
 
@@ -20,8 +18,5 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	appCtx, appCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer appCancel()
-
-	spot.Run(appCtx, cfg.Spot)
+	spot.Run(context.Background(), cfg.Spot)
 }

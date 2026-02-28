@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 
-	wiregen "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
+	wireGen "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
@@ -59,7 +59,10 @@ func registerCloser() {
 	})
 }
 
-func provideSpotConnection(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*grpc.ClientConn, error) {
+func provideSpotConnection(
+	lifeCycle fx.Lifecycle,
+	cfg config.OrderConfig,
+) (*grpc.ClientConn, error) {
 	connection, err := grpc.NewClient(
 		cfg.SpotAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -100,8 +103,8 @@ func provideContainer(
 	lifeCycle fx.Lifecycle,
 	marketClient *grpcClient.Client,
 	cfg config.OrderConfig,
-) (*wiregen.Container, error) {
-	container, err := wiregen.NewContainer(ctx, marketClient, cfg)
+) (*wireGen.Container, error) {
+	container, err := wireGen.NewContainer(ctx, marketClient, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +119,10 @@ func provideContainer(
 	return container, nil
 }
 
-func provideListener(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (net.Listener, error) {
+func provideListener(
+	lifeCycle fx.Lifecycle,
+	cfg config.OrderConfig,
+) (net.Listener, error) {
 	listener, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
 		return nil, fmt.Errorf("net.Listen: %w", err)
@@ -136,7 +142,10 @@ func provideListener(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (net.Listen
 	return listener, nil
 }
 
-func provideGRPCServer(lifeCycle fx.Lifecycle, container *wiregen.Container) (*grpc.Server, error) {
+func provideGRPCServer(
+	lifeCycle fx.Lifecycle,
+	container *wireGen.Container,
+) (*grpc.Server, error) {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return nil, fmt.Errorf("validate.ProtovalidateUnary: %w", err)
@@ -169,7 +178,11 @@ func provideGRPCServer(lifeCycle fx.Lifecycle, container *wiregen.Container) (*g
 	return grpcServer, nil
 }
 
-func startGRPCServer(lifeCycle fx.Lifecycle, server *grpc.Server, listener net.Listener) {
+func startGRPCServer(
+	lifeCycle fx.Lifecycle,
+	server *grpc.Server,
+	listener net.Listener,
+) {
 	lifeCycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			zapLogger.Info(ctx, fmt.Sprintf("Starting gRPC order server on %s", listener.Addr()))

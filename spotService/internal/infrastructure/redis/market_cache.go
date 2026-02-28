@@ -12,7 +12,7 @@ import (
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	postgres "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/dto"
+	postgresDTO "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/dto"
 	redisDTO "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis/dto"
 )
 
@@ -62,13 +62,13 @@ func (m *MarketCacheRepository) SetAll(ctx context.Context, markets []models.Mar
 
 	redisViews := make([]redisDTO.MarketRedisView, 0, len(markets))
 	for _, market := range markets {
-		postgresDTO := postgres.Market{
+		dto := postgresDTO.Market{
 			ID:        market.ID,
 			Name:      market.Name,
 			Enabled:   market.Enabled,
 			DeletedAt: market.DeletedAt,
 		}
-		redisViews = append(redisViews, postgresDTO.ToRedisView())
+		redisViews = append(redisViews, dto.ToRedisView())
 	}
 
 	data, err := json.Marshal(redisViews)

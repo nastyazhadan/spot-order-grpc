@@ -5,11 +5,11 @@ import (
 	"errors"
 	"sort"
 
+	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models/mapper"
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v1"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

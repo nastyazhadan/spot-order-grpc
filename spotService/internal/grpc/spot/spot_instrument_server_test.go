@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/mocks"
 
 	"github.com/brianvoe/gofakeit/v6"

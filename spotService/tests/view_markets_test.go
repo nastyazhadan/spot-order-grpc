@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	proto "github.com/nastyazhadan/spot-order-grpc/shared/protos/gen/go/spot/v1"
+	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/tests/suite"
 )
 

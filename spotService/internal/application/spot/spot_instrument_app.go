@@ -19,7 +19,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
-	wiregen "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot/gen"
+	wireGen "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot/gen"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 )
 
@@ -45,8 +45,12 @@ func initLogger(cfg config.SpotConfig) error {
 	return zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json")
 }
 
-func provideContainer(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (*wiregen.Container, error) {
-	container, err := wiregen.NewContainer(context.Background(), cfg)
+func provideContainer(
+	ctx context.Context,
+	lifeCycle fx.Lifecycle,
+	cfg config.SpotConfig,
+) (*wireGen.Container, error) {
+	container, err := wireGen.NewContainer(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +65,10 @@ func provideContainer(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (*wiregen.C
 	return container, nil
 }
 
-func provideListener(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (net.Listener, error) {
+func provideListener(
+	lifeCycle fx.Lifecycle,
+	cfg config.SpotConfig,
+) (net.Listener, error) {
 	listener, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
 		return nil, fmt.Errorf("net.Listen: %w", err)
@@ -80,7 +87,10 @@ func provideListener(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (net.Listene
 	return listener, nil
 }
 
-func provideGRPCServer(lifeCycle fx.Lifecycle, container *wiregen.Container) (*grpc.Server, error) {
+func provideGRPCServer(
+	lifeCycle fx.Lifecycle,
+	container *wireGen.Container,
+) (*grpc.Server, error) {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
 		return nil, fmt.Errorf("validate.ProtovalidateUnary: %w", err)
@@ -122,7 +132,11 @@ func registerCloser() {
 	})
 }
 
-func startGRPCServer(lifeCycle fx.Lifecycle, server *grpc.Server, listener net.Listener) {
+func startGRPCServer(
+	lifeCycle fx.Lifecycle,
+	server *grpc.Server,
+	listener net.Listener,
+) {
 	lifeCycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			zapLogger.Info(ctx, fmt.Sprintf("Starting gRPC spot server on %s", listener.Addr()))
