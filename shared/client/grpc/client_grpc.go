@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/client/grpc/mapper"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	"github.com/nastyazhadan/spot-order-grpc/shared/models/mapper"
 
 	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"

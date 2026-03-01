@@ -1,4 +1,4 @@
-package outbound
+package postgres
 
 import (
 	"time"
@@ -14,7 +14,7 @@ type Market struct {
 	DeletedAt *time.Time `db:"deleted_at"`
 }
 
-func (m Market) MarketToDomain() models.Market {
+func (m Market) ToDomain() models.Market {
 	return models.Market{
 		ID:        m.ID,
 		Name:      m.Name,

@@ -9,7 +9,7 @@ import (
 
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound"
+	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound/postgres"
 )
 
 type MarketStore struct {
@@ -41,7 +41,7 @@ func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 
 	out := make([]models.Market, 0, len(marketsDTO))
 	for _, marketDTO := range marketsDTO {
-		out = append(out, marketDTO.MarketToDomain())
+		out = append(out, marketDTO.ToDomain())
 	}
 
 	return out, nil
