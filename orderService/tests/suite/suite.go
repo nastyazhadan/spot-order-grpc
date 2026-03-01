@@ -43,8 +43,13 @@ const (
 	longTimeout          = 2 * time.Minute
 	startupTimeout       = 30 * time.Second
 
-	createRateLimit  int64         = 1_000_000
-	createRateWindow time.Duration = 1 * time.Hour
+	createRateLimit   int64         = 1_000_000
+	createRateWindow  time.Duration = 1 * time.Hour
+	createRedisPrefix string        = "rate:order:create:"
+
+	getRateLimit   int64         = 1_000_000
+	getRateWindow  time.Duration = 1 * time.Hour
+	getRedisPrefix string        = "rate:order:get:"
 
 	redisConnectionTimeout = 3 * time.Second
 )
@@ -163,14 +168,15 @@ func New(test *testing.T) (context.Context, *Suite) {
 	})
 
 	redisClient := cache.NewClient(redisPool, zapLogger.With(), redisConnectionTimeout)
-	rateLimiter := repoRedis.NewOrderRateLimiter(redisClient, createRateLimit, createRateWindow)
+	createLimiter := repoRedis.NewOrderRateLimiter(redisClient, createRateLimit, createRateWindow, createRedisPrefix)
+	getLimiter := repoRedis.NewOrderRateLimiter(redisClient, getRateLimit, getRateWindow, getRedisPrefix)
 
 	marketViewer := &MockMarketViewer{
 		Markets: []models.Market{},
 	}
 
 	orderRepo := repoPostgres.NewOrderStore(pool)
-	orderSvc := svcOrder.NewService(orderRepo, orderRepo, marketViewer, rateLimiter, defaultCreateTimeout)
+	orderSvc := svcOrder.NewService(orderRepo, orderRepo, marketViewer, createLimiter, getLimiter, defaultCreateTimeout)
 
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {

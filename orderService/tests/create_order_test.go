@@ -53,6 +53,7 @@ func TestAllOrderTypesHappyPath(test *testing.T) {
 		proto.OrderType_TYPE_TAKE_PROFIT,
 	}
 
+	st.ClearOrders(ctx)
 	for _, orderType := range orderTypes {
 		test.Run(orderType.String(), func(test *testing.T) {
 			request := suite.ValidCreateRequest(uuid.New().String(), market.ID.String())
@@ -443,12 +444,15 @@ func TestConcurrentRequests(test *testing.T) {
 	results := make(chan error, goroutines)
 
 	for i := 0; i < goroutines; i++ {
+		randomPrice := &decimal.Decimal{
+			Value: fmt.Sprintf("%.2f", gofakeit.Float64Range(1, 9999)),
+		}
+		randomQuantity := int64(gofakeit.IntRange(1, 1000))
+
 		go func() {
 			request := suite.ValidCreateRequest(uuid.New().String(), market.ID.String())
-			request.Price = &decimal.Decimal{
-				Value: fmt.Sprintf("%.2f", gofakeit.Float64Range(1, 9999)),
-			}
-			request.Quantity = int64(gofakeit.IntRange(1, 1000))
+			request.Price = randomPrice
+			request.Quantity = randomQuantity
 			_, err := st.OrderClient.CreateOrder(ctx, request)
 			results <- err
 		}()

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	redigo "github.com/gomodule/redigo/redis"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/testcontainers/testcontainers-go"
@@ -18,11 +19,14 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
-	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db/migrator"
-	"github.com/nastyazhadan/spot-order-grpc/shared/models"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
-	repoSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres"
+	repoPostgres "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres"
+	repoRedis "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/migrations"
 )
@@ -35,22 +39,16 @@ const (
 	longTimeout    = 2 * time.Minute
 	startupTimeout = 30 * time.Second
 	cacheTTL       = 5 * time.Minute
+
+	redisConnectionTimeout = 3 * time.Second
+	redisCacheKey          = "market:cache:all"
 )
 
 type Suite struct {
 	Test       *testing.T
 	SpotClient proto.SpotInstrumentServiceClient
 	Pool       *pgxpool.Pool
-}
-
-type NoopMarketCache struct{}
-
-func (n *NoopMarketCache) GetAll(ctx context.Context) ([]models.Market, error) {
-	return nil, repositoryErrors.ErrMarketCacheNotFound
-}
-
-func (n *NoopMarketCache) SetAll(ctx context.Context, m []models.Market, ttl time.Duration) error {
-	return nil
+	RedisPool  *redigo.Pool
 }
 
 func New(test *testing.T) (context.Context, *Suite) {
@@ -103,11 +101,66 @@ func New(test *testing.T) (context.Context, *Suite) {
 		test.Fatalf("failed to run migrations: %v", err)
 	}
 
-	marketRepo := repoSpot.NewMarketStore(pool)
-	cacheRepo := &NoopMarketCache{} // пока заглушка
+	redisC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		Started: true,
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "redis:7-alpine",
+			ExposedPorts: []string{"6379/tcp"},
+			WaitingFor: wait.ForListeningPort("6379/tcp").
+				WithStartupTimeout(startupTimeout),
+		},
+	})
+	if err != nil {
+		test.Fatalf("failed to start redis container: %v", err)
+	}
+	test.Cleanup(func() {
+		if err := redisC.Terminate(context.Background()); err != nil {
+			test.Logf("failed to terminate redis container: %v", err)
+		}
+	})
+
+	redisHost, err := redisC.Host(ctx)
+	if err != nil {
+		test.Fatalf("failed to get redis host: %v", err)
+	}
+	redisPort, err := redisC.MappedPort(ctx, "6379/tcp")
+	if err != nil {
+		test.Fatalf("failed to get redis port: %v", err)
+	}
+	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
+
+	redisPool := &redigo.Pool{
+		MaxIdle:     3,
+		IdleTimeout: 240 * time.Second,
+		Dial: func() (redigo.Conn, error) {
+			return redigo.Dial("tcp", redisAddr)
+		},
+		TestOnBorrow: func(c redigo.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
+	}
+	test.Cleanup(func() {
+		_ = redisPool.Close()
+	})
+
+	redisClient := cache.NewClient(redisPool, zapLogger.With(), redisConnectionTimeout)
+
+	marketRepo := repoPostgres.NewMarketStore(pool)
+	cacheRepo := repoRedis.NewMarketCacheRepository(redisClient)
 	marketSvc := svcSpot.NewService(marketRepo, cacheRepo, cacheTTL)
 
-	grpcServer := grpc.NewServer()
+	validator, err := validate.ProtovalidateUnary()
+	if err != nil {
+		test.Fatalf("validate.ProtovalidateUnary: %v", err)
+	}
+
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			recovery.PanicRecoveryInterceptor,
+			validator,
+		),
+	)
 	grpcSpot.Register(grpcServer, marketSvc)
 
 	listener, err := net.Listen("tcp", "localhost:0")
@@ -135,11 +188,13 @@ func New(test *testing.T) (context.Context, *Suite) {
 		Test:       test,
 		SpotClient: proto.NewSpotInstrumentServiceClient(connection),
 		Pool:       pool,
+		RedisPool:  redisPool,
 	}
 }
 
 func (s *Suite) ClearMarkets(ctx context.Context) {
 	s.Test.Helper()
+
 	if _, err := s.Pool.Exec(ctx, "DELETE FROM market_store"); err != nil {
 		s.Test.Fatalf("failed to clear market_store: %v", err)
 	}
@@ -147,6 +202,7 @@ func (s *Suite) ClearMarkets(ctx context.Context) {
 
 func (s *Suite) InsertMarket(ctx context.Context, id, name string, enabled bool, deletedAt *time.Time) {
 	s.Test.Helper()
+
 	_, err := s.Pool.Exec(ctx,
 		`INSERT INTO market_store (id, name, enabled, deleted_at) VALUES ($1, $2, $3, $4)`,
 		id, name, enabled, deletedAt,

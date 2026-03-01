@@ -41,7 +41,7 @@ func TestCreateOrder(t *testing.T) {
 		orderType      models.OrderType
 		price          models.Decimal
 		quantity       int64
-		setupMocks     func(*mocks.Saver, *mocks.MarketViewer, *mocks.RateLimiter)
+		setupMocks     func(*mocks.Saver, *mocks.MarketViewer, *mocks.RateLimiter, *mocks.RateLimiter)
 		expectedStatus models.OrderStatus
 		expectedErr    error
 		expectedErrMsg string
@@ -54,7 +54,7 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeTakeProfit,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
 				markets := []sharedModels.Market{
 					{
@@ -63,7 +63,7 @@ func TestCreateOrder(t *testing.T) {
 					},
 				}
 
-				limiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
+				createLimiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
 				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
 					Return(markets, nil)
 				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).
@@ -83,8 +83,8 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
-				limiter.On("Allow", mock.Anything, randomUUID).Return(false, nil)
+			setupMocks: func(_ *mocks.Saver, _ *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+				createLimiter.On("Allow", mock.Anything, randomUUID).Return(false, nil)
 			},
 			expectedStatus: models.OrderStatusCancelled,
 			expectedErr:    serviceErrors.ErrRateLimitExceeded,
@@ -100,8 +100,8 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
-				limiter.On("Allow", mock.Anything, randomUUID).Return(false, errors.New("cache down"))
+			setupMocks: func(_ *mocks.Saver, _ *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+				createLimiter.On("Allow", mock.Anything, randomUUID).Return(false, errors.New("cache down"))
 			},
 			expectedStatus: models.OrderStatusCancelled,
 			expectedErrMsg: "Service.CreateOrder: cache down",
@@ -113,9 +113,10 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
-				limiter.On("Allow", mock.Anything, mock.Anything).Return(true, nil)
-				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).Return([]sharedModels.Market{}, nil)
+			setupMocks: func(_ *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+				createLimiter.On("Allow", mock.Anything, mock.Anything).Return(true, nil)
+				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
+					Return([]sharedModels.Market{}, nil)
 			},
 			expectedStatus: models.OrderStatusCancelled,
 			expectedErr:    serviceErrors.ErrMarketsNotFound,
@@ -127,14 +128,14 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
 				markets := []sharedModels.Market{{
 					ID:      marketID,
 					Enabled: true,
 				}}
 
-				limiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
+				createLimiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
 				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).Return(markets, nil)
 				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).Return(storageErrors.ErrOrderAlreadyExists)
 			},
@@ -152,9 +153,11 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
-				limiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
-				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).Return(nil, errors.New("internal error"))
+			setupMocks: func(_ *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+				createLimiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
+				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
+					Return(nil, errors.New("internal error"))
+
 			},
 			expectedStatus: models.OrderStatusCancelled,
 			expectedErrMsg: "Service.CreateOrder: internal error",
@@ -170,16 +173,18 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
 				markets := []sharedModels.Market{{
 					ID:      marketID,
 					Enabled: true,
 				}}
 
-				limiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
-				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).Return(markets, nil)
-				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).Return(errors.New("internal error"))
+				createLimiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
+				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
+					Return(markets, nil)
+				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).
+					Return(errors.New("internal error"))
 			},
 			expectedStatus: models.OrderStatusCancelled,
 			expectedErrMsg: "Service.CreateOrder: internal error",
@@ -195,16 +200,18 @@ func TestCreateOrder(t *testing.T) {
 			orderType: models.OrderTypeTakeProfit,
 			price:     randomPrice,
 			quantity:  1,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, limiter *mocks.RateLimiter) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
 				markets := []sharedModels.Market{{
 					ID:      marketID,
 					Enabled: true,
 				}}
 
-				limiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
-				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).Return(markets, nil)
-				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).Return(nil)
+				createLimiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
+				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
+					Return(markets, nil)
+				saver.On("SaveOrder", mock.Anything, mock.AnythingOfType("models.Order")).
+					Return(nil)
 			},
 			expectedStatus: models.OrderStatusCreated,
 			expectedErr:    nil,
@@ -220,13 +227,14 @@ func TestCreateOrder(t *testing.T) {
 			mockSaver := mocks.NewSaver(t)
 			mockGetter := mocks.NewGetter(t)
 			mockMarketViewer := mocks.NewMarketViewer(t)
-			mockLimiter := mocks.NewRateLimiter(t)
+			mockCreateLimiter := mocks.NewRateLimiter(t)
+			mockGetLimiter := mocks.NewRateLimiter(t)
 
 			if test.setupMocks != nil {
-				test.setupMocks(mockSaver, mockMarketViewer, mockLimiter)
+				test.setupMocks(mockSaver, mockMarketViewer, mockCreateLimiter, mockGetLimiter)
 			}
 
-			service := NewService(mockSaver, mockGetter, mockMarketViewer, mockLimiter, CreateTimeout)
+			service := NewService(mockSaver, mockGetter, mockMarketViewer, mockCreateLimiter, mockGetLimiter, CreateTimeout)
 			ctx := context.Background()
 
 			orderID, status, err := service.CreateOrder(
@@ -258,6 +266,8 @@ func TestCreateOrder(t *testing.T) {
 
 			mockSaver.AssertExpectations(t)
 			mockMarketViewer.AssertExpectations(t)
+			mockCreateLimiter.AssertExpectations(t)
+			mockGetLimiter.AssertExpectations(t)
 		})
 	}
 }
@@ -270,13 +280,15 @@ func TestGetOrderStatus(t *testing.T) {
 	anotherUserID := uuid.New()
 
 	tests := []struct {
-		name           string
-		orderID        uuid.UUID
-		userID         uuid.UUID
-		setupMocks     func(*mocks.Getter)
-		expectedStatus models.OrderStatus
-		expectedErr    error
-		expectedErrMsg string
+		name                string
+		orderID             uuid.UUID
+		userID              uuid.UUID
+		setupMocks          func(*mocks.Getter)
+		getRateLimiterAllow bool
+		getRateLimiterError error
+		expectedStatus      models.OrderStatus
+		expectedError       error
+		expectedErrMsg      string
 	}{
 		{
 			name:    "успешное получение статуса заказа",
@@ -293,22 +305,43 @@ func TestGetOrderStatus(t *testing.T) {
 					Status:    models.OrderStatusCreated,
 					CreatedAt: time.Now().UTC(),
 				}
-				getter.On("GetOrderStatus", mock.Anything, orderID).
+				getter.On("GetOrder", mock.Anything, orderID).
 					Return(order, nil)
 			},
-			expectedStatus: models.OrderStatusCreated,
-			expectedErr:    nil,
+			getRateLimiterAllow: true,
+			expectedStatus:      models.OrderStatusCreated,
+			expectedError:       nil,
+		},
+		{
+			name:                "ошибка - превышен rate limit",
+			orderID:             orderID,
+			userID:              userID,
+			setupMocks:          nil,
+			getRateLimiterAllow: false,
+			expectedStatus:      models.OrderStatusUnspecified,
+			expectedError:       serviceErrors.ErrRateLimitExceeded,
+		},
+		{
+			name:                "ошибка - rate limiter недоступен",
+			orderID:             orderID,
+			userID:              userID,
+			setupMocks:          nil,
+			getRateLimiterAllow: false,
+			getRateLimiterError: errors.New("rate limiter error"),
+			expectedStatus:      models.OrderStatusUnspecified,
+			expectedErrMsg:      "rate limiter error",
 		},
 		{
 			name:    "ошибка - заказ не найден",
 			orderID: orderID,
 			userID:  userID,
 			setupMocks: func(getter *mocks.Getter) {
-				getter.On("GetOrderStatus", mock.Anything, orderID).
+				getter.On("GetOrder", mock.Anything, orderID).
 					Return(models.Order{}, storageErrors.ErrOrderNotFound)
 			},
-			expectedStatus: models.OrderStatusUnspecified,
-			expectedErr:    serviceErrors.ErrOrderNotFound,
+			getRateLimiterAllow: true,
+			expectedStatus:      models.OrderStatusUnspecified,
+			expectedError:       serviceErrors.ErrOrderNotFound,
 		},
 		{
 			name:    "ошибка - доступ запрещен (чужой заказ)",
@@ -325,33 +358,36 @@ func TestGetOrderStatus(t *testing.T) {
 					Status:    models.OrderStatusCreated,
 					CreatedAt: time.Now().UTC(),
 				}
-				getter.On("GetOrderStatus", mock.Anything, orderID).
+				getter.On("GetOrder", mock.Anything, orderID).
 					Return(order, nil)
 			},
-			expectedStatus: models.OrderStatusUnspecified,
-			expectedErr:    serviceErrors.ErrOrderNotFound,
+			getRateLimiterAllow: true,
+			expectedStatus:      models.OrderStatusUnspecified,
+			expectedError:       serviceErrors.ErrOrderNotFound,
 		},
 		{
 			name:    "ошибка - база данных недоступна",
 			orderID: orderID,
 			userID:  userID,
 			setupMocks: func(getter *mocks.Getter) {
-				getter.On("GetOrderStatus", mock.Anything, orderID).
+				getter.On("GetOrder", mock.Anything, orderID).
 					Return(models.Order{}, errors.New("internal error"))
 			},
-			expectedStatus: models.OrderStatusUnspecified,
-			expectedErrMsg: "Service.GetOrderStatus: internal error",
+			getRateLimiterAllow: true,
+			expectedStatus:      models.OrderStatusUnspecified,
+			expectedErrMsg:      "Service.GetOrderStatus: internal error",
 		},
 		{
 			name:    "corner case - несуществующий UUID",
 			orderID: uuid.Nil,
 			userID:  userID,
 			setupMocks: func(getter *mocks.Getter) {
-				getter.On("GetOrderStatus", mock.Anything, uuid.Nil).
+				getter.On("GetOrder", mock.Anything, uuid.Nil).
 					Return(models.Order{}, storageErrors.ErrOrderNotFound)
 			},
-			expectedStatus: models.OrderStatusUnspecified,
-			expectedErr:    serviceErrors.ErrOrderNotFound,
+			getRateLimiterAllow: true,
+			expectedStatus:      models.OrderStatusUnspecified,
+			expectedError:       serviceErrors.ErrOrderNotFound,
 		},
 		{
 			name:    "проверка статуса - Cancelled",
@@ -368,11 +404,12 @@ func TestGetOrderStatus(t *testing.T) {
 					Status:    models.OrderStatusCancelled,
 					CreatedAt: time.Now().UTC(),
 				}
-				getter.On("GetOrderStatus", mock.Anything, orderID).
+				getter.On("GetOrder", mock.Anything, orderID).
 					Return(order, nil)
 			},
-			expectedStatus: models.OrderStatusCancelled,
-			expectedErr:    nil,
+			getRateLimiterAllow: true,
+			expectedStatus:      models.OrderStatusCancelled,
+			expectedError:       nil,
 		},
 	}
 
@@ -381,22 +418,33 @@ func TestGetOrderStatus(t *testing.T) {
 			mockSaver := mocks.NewSaver(t)
 			mockGetter := mocks.NewGetter(t)
 			mockMarketViewer := mocks.NewMarketViewer(t)
-			mockLimiter := mocks.NewRateLimiter(t)
+			mockCreateLimiter := mocks.NewRateLimiter(t)
+			mockGetLimiter := mocks.NewRateLimiter(t)
+
+			mockGetLimiter.On("Allow", mock.Anything, test.userID).
+				Return(test.getRateLimiterAllow, test.getRateLimiterError)
 
 			if test.setupMocks != nil {
 				test.setupMocks(mockGetter)
 			}
 
-			service := NewService(mockSaver, mockGetter, mockMarketViewer, mockLimiter, CreateTimeout)
+			service := NewService(
+				mockSaver,
+				mockGetter,
+				mockMarketViewer,
+				mockCreateLimiter,
+				mockGetLimiter,
+				CreateTimeout,
+			)
 			ctx := context.Background()
 
 			status, err := service.GetOrderStatus(ctx, test.orderID, test.userID)
 
-			if test.expectedErr != nil || test.expectedErrMsg != "" {
+			if test.expectedError != nil || test.expectedErrMsg != "" {
 				require.Error(t, err)
 
-				if test.expectedErr != nil {
-					assert.ErrorIs(t, err, test.expectedErr)
+				if test.expectedError != nil {
+					assert.ErrorIs(t, err, test.expectedError)
 				}
 				if test.expectedErrMsg != "" {
 					assert.ErrorContains(t, err, test.expectedErrMsg)
@@ -406,8 +454,8 @@ func TestGetOrderStatus(t *testing.T) {
 			}
 
 			assert.Equal(t, test.expectedStatus, status)
-
 			mockGetter.AssertExpectations(t)
+			mockGetLimiter.AssertExpectations(t)
 		})
 	}
 }

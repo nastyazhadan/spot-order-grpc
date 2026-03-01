@@ -212,7 +212,7 @@ func TestViewMarkets(t *testing.T) {
 			expectedErr:        nil,
 			checkError: func(t *testing.T, err error) {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), "Service.ViewMarkets: internal error")
+				assert.Contains(t, err.Error(), "Service.getMarketsFromRepo: internal error")
 			},
 		},
 		{

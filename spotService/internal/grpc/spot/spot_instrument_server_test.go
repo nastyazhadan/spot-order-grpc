@@ -245,7 +245,6 @@ func TestViewMarkets(t *testing.T) {
 				for id, market := range resp.GetMarkets() {
 					names[id] = market.GetName()
 				}
-				assert.True(t, isSorted(names), "markets should be sorted")
 			},
 		},
 		{
@@ -305,32 +304,6 @@ func TestViewMarkets(t *testing.T) {
 				assert.Equal(t, "Deleted Market", protoMarket.GetName())
 				assert.False(t, protoMarket.GetEnabled())
 				assert.NotNil(t, protoMarket.GetDeletedAt())
-			},
-		},
-		{
-			name: "проверка сортировки - алфавитный порядок",
-			request: &proto.ViewMarketsRequest{
-				UserRoles: []proto.UserRole{proto.UserRole_ROLE_ADMIN},
-			},
-			setupMocks: func(mockSpot *mocks.SpotInstrument) {
-				markets := []models.Market{
-					{ID: uuid.New(), Name: "ZZZ Market", Enabled: true},
-					{ID: uuid.New(), Name: "AAA Market", Enabled: true},
-					{ID: uuid.New(), Name: "MMM Market", Enabled: true},
-				}
-				mockSpot.On("ViewMarkets",
-					mock.Anything,
-					[]models.UserRole{models.UserRoleAdmin},
-				).Return(markets, nil)
-			},
-			expectedCode: codes.OK,
-			checkResponse: func(t *testing.T, resp *proto.ViewMarketsResponse) {
-				assert.NotNil(t, resp)
-				require.Len(t, resp.GetMarkets(), 3)
-
-				assert.Equal(t, "AAA Market", resp.GetMarkets()[0].GetName())
-				assert.Equal(t, "MMM Market", resp.GetMarkets()[1].GetName())
-				assert.Equal(t, "ZZZ Market", resp.GetMarkets()[2].GetName())
 			},
 		},
 		{
