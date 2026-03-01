@@ -43,13 +43,13 @@ const (
 	longTimeout          = 2 * time.Minute
 	startupTimeout       = 30 * time.Second
 
-	createRateLimit   int64         = 1_000_000
-	createRateWindow  time.Duration = 1 * time.Hour
-	createRedisPrefix string        = "rate:order:create:"
+	createRateLimit   int64  = 1_000_000
+	createRateWindow         = 1 * time.Hour
+	createRedisPrefix string = "rate:order:create:"
 
-	getRateLimit   int64         = 1_000_000
-	getRateWindow  time.Duration = 1 * time.Hour
-	getRedisPrefix string        = "rate:order:get:"
+	getRateLimit   int64  = 1_000_000
+	getRateWindow         = 1 * time.Hour
+	getRedisPrefix string = "rate:order:get:"
 
 	redisConnectionTimeout = 3 * time.Second
 )
@@ -206,7 +206,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 	address := fmt.Sprintf("localhost:%d", listener.Addr().(*net.TCPAddr).Port)
 	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		test.Fatalf("failed to connect to grpc server: %v", err)
+		test.Fatalf("failed to connect to gRPC server: %v", err)
 	}
 	test.Cleanup(func() {
 		_ = conn.Close()

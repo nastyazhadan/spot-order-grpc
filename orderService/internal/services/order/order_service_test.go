@@ -259,6 +259,11 @@ func TestCreateOrder(t *testing.T) {
 				require.NoError(t, err)
 			}
 
+			switch test.name {
+			case "ошибка - превышен rate limit", "ошибка - rate limiter недоступен":
+				assertCreateShortCircuit(t, mockSaver, mockMarketViewer)
+			}
+
 			assert.Equal(t, test.expectedStatus, status)
 			if test.checkResult != nil {
 				test.checkResult(t, orderID, status)
@@ -453,9 +458,32 @@ func TestGetOrderStatus(t *testing.T) {
 				require.NoError(t, err)
 			}
 
+			switch test.name {
+			case "ошибка - превышен rate limit", "ошибка - rate limiter недоступен":
+				assertGetShortCircuit(t, mockGetter)
+			}
+
 			assert.Equal(t, test.expectedStatus, status)
 			mockGetter.AssertExpectations(t)
 			mockGetLimiter.AssertExpectations(t)
 		})
 	}
+}
+
+func assertCreateShortCircuit(
+	test *testing.T,
+	saver *mocks.Saver,
+	viewer *mocks.MarketViewer,
+) {
+	test.Helper()
+	viewer.AssertNotCalled(test, "ViewMarkets", mock.Anything, mock.Anything)
+	saver.AssertNotCalled(test, "SaveOrder", mock.Anything, mock.Anything)
+}
+
+func assertGetShortCircuit(
+	test *testing.T,
+	getter *mocks.Getter,
+) {
+	test.Helper()
+	getter.AssertNotCalled(test, "GetOrder", mock.Anything, mock.Anything)
 }

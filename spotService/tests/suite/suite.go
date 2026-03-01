@@ -178,7 +178,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 	address := fmt.Sprintf("localhost:%d", listener.Addr().(*net.TCPAddr).Port)
 	connection, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		test.Fatalf("failed to connect to grpc server: %v", err)
+		test.Fatalf("failed to connect to gRPC server: %v", err)
 	}
 	test.Cleanup(func() {
 		_ = connection.Close()
