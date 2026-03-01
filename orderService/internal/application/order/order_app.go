@@ -6,29 +6,33 @@ import (
 	"fmt"
 	"net"
 
+	"go.uber.org/fx"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/reflection"
+
 	wireGen "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/closer"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
-	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-
-	"go.uber.org/fx"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/reflection"
 )
 
 func Run(ctx context.Context, cfg config.OrderConfig) {
 	app := fx.New(
-		fx.Supply(ctx, cfg),
+		fx.Provide(
+			func() context.Context {
+				return ctx
+			},
+			func() config.OrderConfig {
+				return cfg
+			}),
 		fx.Provide(
 			provideSpotConnection,
 			provideMarketClient,
@@ -37,8 +41,7 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 			provideGRPCServer,
 		),
 		fx.Invoke(
-			initLogger,
-			registerCloser,
+			registerLogger,
 			startGRPCServer,
 		),
 	)
@@ -46,17 +49,20 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 	app.Run()
 }
 
-func initLogger(cfg config.OrderConfig) error {
-	return zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json")
-}
+func registerLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) error {
+	if err := zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json"); err != nil {
+		return err
+	}
 
-func registerCloser() {
-	closer.SetLogger(zapLogger.Logger())
+	lifeCycle.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			zapLogger.Sync()
 
-	closer.AddNamed("zap logger sync", func(ctx context.Context) error {
-		zapLogger.Sync()
-		return nil
+			return nil
+		},
 	})
+
+	return nil
 }
 
 func provideSpotConnection(
@@ -82,20 +88,10 @@ func provideSpotConnection(
 }
 
 func provideMarketClient(
-	ctx context.Context,
 	connection *grpc.ClientConn,
 	cfg config.OrderConfig,
-) (*grpcClient.Client, error) {
-	client := grpcClient.New(connection, cfg.CircuitBreaker)
-
-	checkCtx, cancel := context.WithTimeout(ctx, cfg.CheckTimeout)
-	defer cancel()
-
-	if _, err := client.ViewMarkets(checkCtx, []models.UserRole{models.UserRoleUser}); err != nil {
-		return nil, fmt.Errorf("spot instrument is not reachable at %s: %w", cfg.SpotAddress, err)
-	}
-
-	return client, nil
+) *grpcClient.Client {
+	return grpcClient.New(connection, cfg.CircuitBreaker)
 }
 
 func provideContainer(

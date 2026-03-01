@@ -34,7 +34,14 @@ func provideRedisPool(cfg config.SpotConfig) *redigo.Pool {
 		MaxIdle:     cfg.Redis.MaxIdle,
 		IdleTimeout: cfg.Redis.IdleTimeout,
 		DialContext: func(ctx context.Context) (redigo.Conn, error) {
-			return redigo.DialContext(ctx, "tcp", cfg.Redis.Address())
+			return redigo.DialContext(
+				ctx,
+				"tcp",
+				cfg.Redis.Address(),
+				redigo.DialConnectTimeout(cfg.Redis.ConnectionTimeout),
+				redigo.DialReadTimeout(cfg.Redis.ConnectionTimeout),
+				redigo.DialWriteTimeout(cfg.Redis.ConnectionTimeout),
+			)
 		},
 	}
 }

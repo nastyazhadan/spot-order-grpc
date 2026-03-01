@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/closer"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
@@ -25,15 +24,20 @@ import (
 
 func Run(ctx context.Context, cfg config.SpotConfig) {
 	app := fx.New(
-		fx.Supply(ctx, cfg),
+		fx.Provide(
+			func() context.Context {
+				return ctx
+			},
+			func() config.SpotConfig {
+				return cfg
+			}),
 		fx.Provide(
 			provideContainer,
 			provideListener,
 			provideGRPCServer,
 		),
 		fx.Invoke(
-			initLogger,
-			registerCloser,
+			registerLogger,
 			startGRPCServer,
 		),
 	)
@@ -41,8 +45,20 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 	app.Run()
 }
 
-func initLogger(cfg config.SpotConfig) error {
-	return zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json")
+func registerLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) error {
+	if err := zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json"); err != nil {
+		return err
+	}
+
+	lifeCycle.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			zapLogger.Sync()
+
+			return nil
+		},
+	})
+
+	return nil
 }
 
 func provideContainer(
@@ -121,15 +137,6 @@ func provideGRPCServer(
 	})
 
 	return grpcServer, nil
-}
-
-func registerCloser() {
-	closer.SetLogger(zapLogger.Logger())
-
-	closer.AddNamed("zap logger sync", func(ctx context.Context) error {
-		zapLogger.Sync()
-		return nil
-	})
 }
 
 func startGRPCServer(
