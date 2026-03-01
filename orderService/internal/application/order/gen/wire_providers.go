@@ -52,7 +52,7 @@ func provideRedisPool(cfg config.OrderConfig) *redigo.Pool {
 }
 
 func provideRedisClient(pool *redigo.Pool, cfg config.OrderConfig) cache.Client {
-	return cache.NewClient(pool, zapLogger.Logger(), cfg.Redis.ConnectionTimeout)
+	return cache.NewClient(pool, zapLogger.With(), cfg.Redis.ConnectionTimeout)
 }
 
 func provideOrderStore(pool *pgxpool.Pool) *repoPostgres.OrderStore {

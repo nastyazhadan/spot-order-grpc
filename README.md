@@ -2,17 +2,19 @@
 
 Два gRPC-сервиса для работы со спотовыми торговыми инструментами и ордерами.
 
-## Предварительные требования
+- SpotInstrumentService — справочник рынков (markets) + фильтрация по ролям
+- OrderService — создание ордеров и получение статуса (с проверкой рынка в SpotService)
+
+## Требования
 
 - [Docker](https://docs.docker.com/get-docker/) + Docker Compose
-- [Go 1.21+](https://go.dev/dl/)
+- [Go 1.25+](https://go.dev/dl/)
 - [Task](https://taskfile.dev/installation/) _(опционально, для удобного запуска команд)_
 - [Postman v10+](https://www.postman.com/downloads/)
 
 **Стек:** Go · gRPC / Protobuf · PostgreSQL · Redis · Circuit Breaker · Zap · Goose · Taskfile
 
 ---
-
 ## Запуск
 
 ### 1. Настройка окружения
@@ -35,14 +37,14 @@ Docker Compose поднимает:
 
 ### 3. Запуск сервисов
 
-В **двух отдельных терминалах**:
+Из корня в **двух отдельных терминалах**:
 
 ```bash
 # Терминал 1 — Spot Service
-go run ./spotService/cmd/spot/main.go -env .env
+go run ./spotService/cmd/spot/main.go
 
 # Терминал 2 — Order Service
-go run ./orderService/cmd/order/main.go -env .env
+go run ./orderService/cmd/order/main.go
 ```
 
 Сервисы при старте автоматически накатывают миграции через Goose.
@@ -194,6 +196,10 @@ go run ./orderService/cmd/order/main.go -env .env
 
 > Ордер возвращается только если `user_id` совпадает с тем, кто создавал — иначе `NOT_FOUND`.
 
+Rate limit:
+
+- лимит на чтение — `RATE_LIMIT_GET_ORDER_STATUS` запросов за `RATE_LIMIT_WINDOW`
+
 ---
 
 ### Возможные gRPC-статусы
@@ -204,7 +210,7 @@ go run ./orderService/cmd/order/main.go -env .env
 | `INVALID_ARGUMENT` | Пустые или некорректные поля, неверный UUID |
 | `NOT_FOUND` | Рынок или ордер не найден |
 | `ALREADY_EXISTS` | Ордер с таким ID уже существует |
-| `RESOURCE_EXHAUSTED` | Сработал Rate Limiter (5 ордеров/час) |
+| `RESOURCE_EXHAUSTED` | Сработал Rate Limiter |
 | `UNAVAILABLE` | Сработал Circuit Breaker (SpotService недоступен) |
 | `INTERNAL` | Внутренняя ошибка сервера |
 
@@ -227,6 +233,9 @@ task test:integration
 # Все тесты (юнит + интеграционные)
 task test:all
 
+# Все тесты с проверкой race conditions
+task test:all:race
+
 # Очистить кэш тестов
 task clean:cache
 ```
@@ -239,12 +248,11 @@ spotOrder/
 ├── orderService/
 │   ├── cmd/order/main.go           # точка входа
 │   ├── internal/
-│   │   ├── app/order/              # DI-контейнер, сборка приложения
+│   │   ├── application             # сборка приложения
 │   │   ├── domain/models/          # доменные модели
 │   │   ├── grpc/order/             # gRPC-хэндлеры
-│   │   ├── mapper/                 # маппинг proto ↔ domain
-│   │   ├── repository/
-│   │   │   ├── dto/           # хранение ордеров
+│   │   ├── infrastructure/
+│   │   │   ├── postgres/           # хранение ордеров
 │   │   │   └── redis/              # rate limiter
 │   │   └── services/order/         # бизнес-логика
 │   ├── migrations/                 # SQL-миграции (Goose)
@@ -253,11 +261,11 @@ spotOrder/
 ├── spotService/
 │   ├── cmd/spot/main.go            # точка входа
 │   ├── internal/
-│   │   ├── app/spot/               # DI-контейнер, сборка приложения
+│   │   ├── application             # сборка приложения
 │   │   ├── grpc/spot/              # gRPC-хэндлеры
-│   │   ├── repository/
-│   │   │   ├── dto/           # хранение рынков
-│   │   │   └── redis/              # кэш рынков (TTL 24h)
+│   │   ├── infrastructure/
+│   │   │   ├── postgres/           # хранение рынков
+│   │   │   └── redis/              # кэш рынков (TTL)
 │   │   └── services/spot/          # бизнес-логика + фильтрация по ролям
 │   ├── migrations/                 # SQL-миграции (Goose)
 │   └── tests/                      # интеграционные тесты
@@ -266,17 +274,17 @@ spotOrder/
 │   ├── client/grpc/                # gRPC-клиент (OrderService → SpotService)
 │   ├── config/                     # загрузка .env
 │   ├── errors/                     # общие ошибки (service, repository)
-│   ├── infra/
-│   │   ├── closer/                 # graceful shutdown
+│   ├── infrastructure/
 │   │   ├── db/                     # PostgreSQL + migrator
 │   │   ├── health/                 # health checker
 │   │   └── redis/                  # Redis-клиент
 │   ├── interceptors/               # Zap logger, X-Request-ID, Panic Recovery, Validator
-│   ├── models/                     # общие модели и маппинг
-│   └── protos/
-│       ├── proto/                  # исходники .proto
-│       ├── gen/go/                 # сгенерированный Go-код
-│       └── lib/                    # зависимости (buf/validate, google/type)
+│   └── models/                     # общие модели и маппинг
+│
+├── protos/
+│   ├── proto/                      # исходники .proto
+│   ├── gen/go/                     # сгенерированный Go-код
+│   └── lib/                        # зависимости (buf/validate, google/type)
 │
 ├── docker-compose.yml              # PostgreSQL + Redis
 ├── Taskfile.yaml                   # команды для запуска тестов и генерации
@@ -288,18 +296,36 @@ spotOrder/
 
 ## Конфигурация
 
+Переменные читаются из окружения (удобно через `.env`).
+
 | Переменная | По умолчанию | Описание |
 |---|---|---|
-| `ORDER_ADDRESS` | `:50051` | Адрес Order Service |
-| `SPOT_INSTRUMENT_ADDRESS` | `:50052` | Адрес Spot Service |
-| `ORDER_DB_URI` | `dto://...` | URI для order_db |
-| `SPOT_DB_URI` | `dto://...` | URI для spot_db |
-| `REDIS_HOST` | `localhost` | Хост Redis |
-| `REDIS_PORT` | `6379` | Порт Redis |
-| `RATE_LIMIT_ORDERS` | `5` | Макс. ордеров в окне |
-| `RATE_LIMIT_WINDOW` | `1h` | Окно Rate Limiter |
-| `SPOT_REDIS_CACHE_TTL` | `24h` | TTL кэша рынков |
+| `ORDER_ADDRESS` | `:50051` | Адрес OrderService (listen) |
+| `SPOT_INSTRUMENT_LISTEN_ADDRESS` | `:50052` | Адрес SpotService (listen) |
+| `SPOT_INSTRUMENT_DIAL_ADDRESS` | `localhost:50052` | Адрес SpotService (dial из OrderService) |
+| `ORDER_DB_URI` | — | URI подключения к `order_db` (обязателен) |
+| `SPOT_DB_URI` | — | URI подключения к `spot_db` (обязателен) |
+| `LOG_LEVEL` | `info` | Уровень логов |
+| `LOG_FORMAT` | `console` | Формат логов |
+| `CB_MAX_REQUESTS` | `3` | Circuit Breaker max requests (half-open) |
+| `CB_INTERVAL` | `10s` | Circuit Breaker interval |
+| `CB_TIMEOUT` | `5s` | Circuit Breaker timeout |
 | `CB_MAX_FAILURES` | `5` | Порог отказов Circuit Breaker |
-| `CB_TIMEOUT` | `5s` | Таймаут до перехода в полуоткрытое |
 | `ORDER_CREATE_TIMEOUT` | `5s` | Таймаут на создание ордера |
+| `ORDER_CHECK_TIMEOUT` | `2s` | Таймаут на получение статуса (если используется в сервисе) |
 | `GS_TIMEOUT` | `5s` | Таймаут graceful shutdown |
+| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_PORT` | `6379` | Redis port (внутренний) |
+| `REDIS_CONNECTION_TIMEOUT` | `10s` | Таймаут подключения Redis |
+| `REDIS_MAX_IDLE` | `10` | Max idle connections |
+| `REDIS_IDLE_TIMEOUT` | `10s` | Idle timeout |
+| `SPOT_REDIS_CACHE_TTL` | `24h` | TTL кэша рынков (SpotService) |
+| `RATE_LIMIT_CREATE_ORDER` | `5` | Лимит CreateOrder за окно |
+| `RATE_LIMIT_GET_ORDER_STATUS` | `50` | Лимит GetOrderStatus за окно |
+| `RATE_LIMIT_WINDOW` | `1h` | Окно Rate Limiter |
+
+Переменные ниже нужны в основном для `docker-compose.yml` (а не для кода напрямую):
+
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`
+- `ORDER_DB`, `SPOT_DB`
+- `EXTERNAL_REDIS_PORT`

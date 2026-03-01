@@ -47,7 +47,7 @@ func provideRedisPool(cfg config.SpotConfig) *redigo.Pool {
 }
 
 func provideRedisClient(pool *redigo.Pool, cfg config.SpotConfig) cache.Client {
-	return cache.NewClient(pool, zapLogger.Logger(), cfg.Redis.ConnectionTimeout)
+	return cache.NewClient(pool, zapLogger.With(), cfg.Redis.ConnectionTimeout)
 }
 
 func provideMarketStore(pool *pgxpool.Pool) *repoPostgres.MarketStore {
