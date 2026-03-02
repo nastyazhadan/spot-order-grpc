@@ -85,8 +85,8 @@ func provideOrderService(
 	marketViewer svcOrder.MarketViewer,
 	rateLimiter RateLimiters,
 	timeout CreateTimeout,
-) *svcOrder.Service {
-	return svcOrder.NewService(
+) *svcOrder.OrderService {
+	return svcOrder.NewOrderService(
 		store,
 		store,
 		marketViewer,

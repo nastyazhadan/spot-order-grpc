@@ -33,7 +33,7 @@ func NewContainer(
 		provideRateLimiters,
 		provideCreateTimeout,
 		provideOrderService,
-		wire.Bind(new(grpcOrder.Order), new(*svcOrder.Service)),
+		wire.Bind(new(grpcOrder.Order), new(*svcOrder.OrderService)),
 		wire.Struct(new(Container), "*"),
 	)
 	return nil, nil

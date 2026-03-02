@@ -39,7 +39,7 @@ func NewContainer(ctx context.Context, marketViewer order.MarketViewer, cfg conf
 // wire.go:
 
 type Container struct {
-	OrderService order2.Order
+	OrderService order2.OrderService
 	RedisPool    *redis.Pool
 	PostgresPool *pgxpool.Pool
 }

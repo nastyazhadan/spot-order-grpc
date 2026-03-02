@@ -40,10 +40,10 @@ Docker Compose поднимает:
 Из корня в **двух отдельных терминалах**:
 
 ```bash
-# Терминал 1 — Spot Service
+# Терминал 1 — Spot OrderService
 go run ./spotService/cmd/spot/main.go
 
-# Терминал 2 — Order Service
+# Терминал 2 — Order OrderService
 go run ./orderService/cmd/order/main.go
 ```
 
@@ -65,8 +65,8 @@ go run ./orderService/cmd/order/main.go
 
 | Файл | Путь в проекте |
 |---|---|
-| Спецификация Order Service | `shared/protos/proto/order/v6/order.proto` |
-| Спецификация Spot Service | `shared/protos/proto/spot/v6/spot.proto` |
+| Спецификация Order OrderService | `shared/protos/proto/order/v6/order.proto` |
+| Спецификация Spot OrderService | `shared/protos/proto/spot/v6/spot.proto` |
 
 > Можно использовать gRPC Server Reflection — если включить reflection на сервере, инструменты вроде grpcui смогут автоматически подтянуть список сервисов и методов без ручного импорта .proto. Важно подключаться к реальному gRPC-порту сервиса (например, :50051 для OrderService).
 
@@ -74,7 +74,7 @@ go run ./orderService/cmd/order/main.go
 
 ---
 
-#### SpotInstrument Service — `localhost:50052`
+#### SpotInstrument OrderService — `localhost:50052`
 
 ##### `SpotInstrumentService / ViewMarkets`
 
@@ -138,7 +138,7 @@ go run ./orderService/cmd/order/main.go
 
 ---
 
-#### Order Service — `localhost:50051`
+#### Order OrderService — `localhost:50051`
 
 ##### `OrderService / CreateOrder`
 

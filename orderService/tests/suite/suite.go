@@ -176,7 +176,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 	}
 
 	orderRepo := repoPostgres.NewOrderStore(pool)
-	orderSvc := svcOrder.NewService(orderRepo, orderRepo, marketViewer, createLimiter, getLimiter, defaultCreateTimeout)
+	orderSvc := svcOrder.NewOrderService(orderRepo, orderRepo, marketViewer, createLimiter, getLimiter, defaultCreateTimeout)
 
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {

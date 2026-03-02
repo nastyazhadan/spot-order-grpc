@@ -22,7 +22,7 @@ import (
 
 const EmptyValue = 0
 
-type Order interface {
+type OrderService interface {
 	CreateOrder(ctx context.Context,
 		userID uuid.UUID,
 		marketID uuid.UUID,
@@ -38,10 +38,10 @@ type Order interface {
 
 type serverAPI struct {
 	proto.UnimplementedOrderServiceServer
-	service Order
+	service OrderService
 }
 
-func Register(grpc *grpc.Server, service Order) {
+func Register(grpc *grpc.Server, service OrderService) {
 	proto.RegisterOrderServiceServer(grpc, &serverAPI{
 		service: service,
 	})

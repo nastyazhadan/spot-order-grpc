@@ -104,7 +104,7 @@ func TestCreateOrder(t *testing.T) {
 				createLimiter.On("Allow", mock.Anything, randomUUID).Return(false, errors.New("cache down"))
 			},
 			expectedStatus: models.OrderStatusCancelled,
-			expectedErrMsg: "Service.CreateOrder: cache down",
+			expectedErrMsg: "OrderService.CreateOrder: cache down",
 		},
 		{
 			name:      "ошибка - рынок не найден",
@@ -160,7 +160,7 @@ func TestCreateOrder(t *testing.T) {
 
 			},
 			expectedStatus: models.OrderStatusCancelled,
-			expectedErrMsg: "Service.CreateOrder: internal error",
+			expectedErrMsg: "OrderService.CreateOrder: internal error",
 			checkResult: func(t *testing.T, orderID uuid.UUID, status models.OrderStatus) {
 				assert.Equal(t, uuid.Nil, orderID)
 				assert.Equal(t, models.OrderStatusCancelled, status)
@@ -187,7 +187,7 @@ func TestCreateOrder(t *testing.T) {
 					Return(errors.New("internal error"))
 			},
 			expectedStatus: models.OrderStatusCancelled,
-			expectedErrMsg: "Service.CreateOrder: internal error",
+			expectedErrMsg: "OrderService.CreateOrder: internal error",
 			checkResult: func(t *testing.T, orderID uuid.UUID, status models.OrderStatus) {
 				assert.Equal(t, uuid.Nil, orderID)
 				assert.Equal(t, models.OrderStatusCancelled, status)
@@ -234,7 +234,7 @@ func TestCreateOrder(t *testing.T) {
 				test.setupMocks(mockSaver, mockMarketViewer, mockCreateLimiter, mockGetLimiter)
 			}
 
-			service := NewService(mockSaver, mockGetter, mockMarketViewer, mockCreateLimiter, mockGetLimiter, CreateTimeout)
+			service := NewOrderService(mockSaver, mockGetter, mockMarketViewer, mockCreateLimiter, mockGetLimiter, CreateTimeout)
 			ctx := context.Background()
 
 			orderID, status, err := service.CreateOrder(
@@ -380,7 +380,7 @@ func TestGetOrderStatus(t *testing.T) {
 			},
 			getRateLimiterAllow: true,
 			expectedStatus:      models.OrderStatusUnspecified,
-			expectedErrMsg:      "Service.GetOrderStatus: internal error",
+			expectedErrMsg:      "OrderService.GetOrderStatus: internal error",
 		},
 		{
 			name:    "corner case - несуществующий UUID",
@@ -433,7 +433,7 @@ func TestGetOrderStatus(t *testing.T) {
 				test.setupMocks(mockGetter)
 			}
 
-			service := NewService(
+			service := NewOrderService(
 				mockSaver,
 				mockGetter,
 				mockMarketViewer,

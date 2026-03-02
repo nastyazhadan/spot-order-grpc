@@ -14,7 +14,7 @@ import (
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
-type Service struct {
+type OrderService struct {
 	saver        Saver
 	getter       Getter
 	marketViewer MarketViewer
@@ -40,8 +40,8 @@ type RateLimiter interface {
 	Allow(ctx context.Context, userID uuid.UUID) (bool, error)
 }
 
-func NewService(s Saver, g Getter, mv MarketViewer, create, get RateLimiter, t time.Duration) *Service {
-	return &Service{
+func NewOrderService(s Saver, g Getter, mv MarketViewer, create, get RateLimiter, t time.Duration) *OrderService {
+	return &OrderService{
 		saver:             s,
 		getter:            g,
 		marketViewer:      mv,
@@ -51,7 +51,7 @@ func NewService(s Saver, g Getter, mv MarketViewer, create, get RateLimiter, t t
 	}
 }
 
-func (s *Service) CreateOrder(
+func (s *OrderService) CreateOrder(
 	ctx context.Context,
 	userID uuid.UUID,
 	marketID uuid.UUID,
@@ -59,7 +59,7 @@ func (s *Service) CreateOrder(
 	price models.Decimal,
 	quantity int64,
 ) (uuid.UUID, models.OrderStatus, error) {
-	const op = "Service.CreateOrder"
+	const op = "OrderService.CreateOrder"
 
 	ctx, cancel := context.WithTimeout(ctx, s.createTimeout)
 	defer cancel()
@@ -80,8 +80,8 @@ func (s *Service) CreateOrder(
 	return orderID, orderStatus, nil
 }
 
-func (s *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
-	const op = "Service.GetOrderStatus"
+func (s *OrderService) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
+	const op = "OrderService.GetOrderStatus"
 
 	if err := s.checkGetRateLimit(ctx, userID); err != nil {
 		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
@@ -95,7 +95,7 @@ func (s *Service) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID)
 	return order.Status, nil
 }
 
-func (s *Service) checkCreateRateLimit(ctx context.Context, userID uuid.UUID) error {
+func (s *OrderService) checkCreateRateLimit(ctx context.Context, userID uuid.UUID) error {
 	allowed, err := s.createRateLimiter.Allow(ctx, userID)
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func (s *Service) checkCreateRateLimit(ctx context.Context, userID uuid.UUID) er
 	return nil
 }
 
-func (s *Service) checkGetRateLimit(ctx context.Context, userID uuid.UUID) error {
+func (s *OrderService) checkGetRateLimit(ctx context.Context, userID uuid.UUID) error {
 	allowed, err := s.getRateLimiter.Allow(ctx, userID)
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func (s *Service) checkGetRateLimit(ctx context.Context, userID uuid.UUID) error
 	return nil
 }
 
-func (s *Service) validateMarket(ctx context.Context, marketID uuid.UUID) error {
+func (s *OrderService) validateMarket(ctx context.Context, marketID uuid.UUID) error {
 	// Заглушка
 	markets, err := s.marketViewer.ViewMarkets(ctx, []sharedModels.UserRole{sharedModels.UserRoleUser})
 	if err != nil {
@@ -135,7 +135,7 @@ func (s *Service) validateMarket(ctx context.Context, marketID uuid.UUID) error 
 	return serviceErrors.ErrMarketsNotFound
 }
 
-func (s *Service) saveOrder(
+func (s *OrderService) saveOrder(
 	ctx context.Context,
 	userID uuid.UUID,
 	marketID uuid.UUID,
@@ -168,7 +168,7 @@ func (s *Service) saveOrder(
 	return orderID, orderStatus, nil
 }
 
-func (s *Service) fetchOrder(ctx context.Context, orderID, userID uuid.UUID) (models.Order, error) {
+func (s *OrderService) fetchOrder(ctx context.Context, orderID, userID uuid.UUID) (models.Order, error) {
 	order, err := s.getter.GetOrder(ctx, orderID)
 	if err != nil {
 		if errors.Is(err, repositoryErrors.ErrOrderNotFound) {
