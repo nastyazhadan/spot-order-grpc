@@ -22,6 +22,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
 func Run(ctx context.Context, cfg config.OrderConfig) {
@@ -88,10 +89,20 @@ func provideSpotConnection(
 }
 
 func provideMarketClient(
+	ctx context.Context,
 	connection *grpc.ClientConn,
 	cfg config.OrderConfig,
-) *grpcClient.Client {
-	return grpcClient.New(connection, cfg.CircuitBreaker)
+) (*grpcClient.Client, error) {
+	client := grpcClient.New(connection, cfg.CircuitBreaker)
+
+	checkCtx, cancel := context.WithTimeout(ctx, cfg.CheckTimeout)
+	defer cancel()
+
+	if _, err := client.ViewMarkets(checkCtx, []models.UserRole{models.UserRoleUser}); err != nil {
+		return nil, fmt.Errorf("spot instrument is not reachable at %s: %w", cfg.SpotAddress, err)
+	}
+
+	return client, nil
 }
 
 func provideContainer(
