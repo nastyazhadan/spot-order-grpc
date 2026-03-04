@@ -61,8 +61,11 @@ func (s *OrderService) CreateOrder(
 ) (uuid.UUID, models.OrderStatus, error) {
 	const op = "OrderService.CreateOrder"
 
-	ctx, cancel := context.WithTimeout(ctx, s.createTimeout)
-	defer cancel()
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.createTimeout)
+		defer cancel()
+	}
 
 	if err := s.checkCreateRateLimit(ctx, userID); err != nil {
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
