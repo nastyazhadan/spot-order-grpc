@@ -5,9 +5,9 @@ package gen
 import (
 	"context"
 
-	redigo "github.com/gomodule/redigo/redis"
 	"github.com/google/wire"
 	"github.com/jackc/pgx/v5/pgxpool"
+	redis "github.com/redis/go-redis/v9"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"

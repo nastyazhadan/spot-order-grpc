@@ -5,9 +5,9 @@ package gen
 import (
 	"context"
 
-	redigo "github.com/gomodule/redigo/redis"
 	"github.com/google/wire"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"

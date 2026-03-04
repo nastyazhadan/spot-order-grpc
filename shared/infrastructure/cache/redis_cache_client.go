@@ -2,16 +2,15 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	redigo "github.com/gomodule/redigo/redis"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
 type client struct {
-	pool              *redigo.Pool
-	logger            Logger
-	connectionTimeout time.Duration
+	redis *redis.Client
 }
 
 type Logger interface {
@@ -24,7 +23,7 @@ type Client interface {
 	SetWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) error
 	Get(ctx context.Context, key string) ([]byte, error)
 	HashSet(ctx context.Context, key string, value interface{}) error
-	HGetAll(ctx context.Context, key string) ([]any, error)
+	HGetAll(ctx context.Context, key string) (map[string]string, error)
 	Del(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
 	Expire(ctx context.Context, key string, expirationTime time.Duration) error
@@ -32,146 +31,92 @@ type Client interface {
 	Incr(ctx context.Context, key string) (int64, error)
 }
 
-type redisFn func(ctx context.Context, conn redigo.Conn) error
-
-func NewClient(pool *redigo.Pool, logger Logger, connectionTimeout time.Duration) *client {
+func NewClient(redisClient *redis.Client) *client {
 	return &client{
-		pool:              pool,
-		logger:            logger,
-		connectionTimeout: connectionTimeout,
+		redis: redisClient,
 	}
-}
-
-func (c *client) withConn(ctx context.Context, fn redisFn) error {
-	connection, err := c.getConn(ctx)
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if cErr := connection.Close(); cErr != nil {
-			c.logger.Error(ctx, "failed to close client connection",
-				zap.Error(cErr),
-			)
-		}
-	}()
-
-	return fn(ctx, connection)
-}
-
-func (c *client) getConn(ctx context.Context) (redigo.Conn, error) {
-	connCtx, cancel := context.WithTimeout(ctx, c.connectionTimeout)
-	defer cancel()
-
-	connection, err := c.pool.GetContext(connCtx)
-	if err != nil {
-		c.logger.Error(ctx, "failed to get client connection",
-			zap.Error(err),
-		)
-		return nil, err
-	}
-
-	return connection, nil
 }
 
 func (c *client) Set(ctx context.Context, key string, value interface{}) error {
-	return c.withConn(ctx, func(ctx context.Context, conn redigo.Conn) error {
-		_, err := conn.Do("SET", key, value)
-		return err
-	})
+	if err := c.redis.Set(ctx, key, value, 0).Err(); err != nil {
+		return fmt.Errorf("failed to set key %s: %w", key, err)
+	}
+
+	return nil
 }
 
 func (c *client) SetWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
-	return c.withConn(ctx, func(ctx context.Context, conn redigo.Conn) error {
-		_, err := conn.Do("SET", key, value, "EX", int(ttl.Seconds()))
-		return err
-	})
+	if err := c.redis.Set(ctx, key, value, ttl).Err(); err != nil {
+		return fmt.Errorf("failed to set key %s with ttl: %w", key, err)
+	}
+
+	return nil
 }
 
 func (c *client) Get(ctx context.Context, key string) ([]byte, error) {
-	var result []byte
-	err := c.withConn(ctx, func(ctx context.Context, conn redigo.Conn) error {
-		value, err := redigo.Bytes(conn.Do("GET", key))
-		if err != nil {
-			return err
-		}
+	result, err := c.redis.Get(ctx, key).Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key %s: %w", key, err)
+	}
 
-		result = value
-		return nil
-	})
-
-	return result, err
+	return result, nil
 }
 
 func (c *client) HashSet(ctx context.Context, key string, values interface{}) error {
-	return c.withConn(ctx, func(ctx context.Context, conn redigo.Conn) error {
-		_, err := conn.Do("HSET", redigo.Args{key}.AddFlat(values)...)
-		return err
-	})
+	if err := c.redis.HSet(ctx, key, values).Err(); err != nil {
+		return fmt.Errorf("failed to hash set key %s: %w", key, err)
+	}
+
+	return nil
 }
 
-func (c *client) HGetAll(ctx context.Context, key string) ([]any, error) {
-	var values []any
-	err := c.withConn(ctx, func(ctx context.Context, conn redigo.Conn) error {
-		result, err := redigo.Values(conn.Do("HGETALL", key))
-		if err != nil {
-			return err
-		}
+func (c *client) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	result, err := c.redis.HGetAll(ctx, key).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key %s: %w", key, err)
+	}
 
-		values = result
-		return nil
-	})
-
-	return values, err
+	return result, nil
 }
 
 func (c *client) Del(ctx context.Context, key string) error {
-	return c.withConn(ctx, func(ctx context.Context, conn redigo.Conn) error {
-		_, err := conn.Do("DEL", key)
-		return err
-	})
+	if err := c.redis.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("failed to delete key %s: %w", key, err)
+	}
+
+	return nil
 }
 
 func (c *client) Exists(ctx context.Context, key string) (bool, error) {
-	var exists bool
-	err := c.withConn(ctx, func(ctx context.Context, conn redigo.Conn) error {
-		value, err := redigo.Bool(conn.Do("EXISTS", key))
-		if err != nil {
-			return err
-		}
+	result, err := c.redis.Exists(ctx, key).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to check if key %s exists: %w", key, err)
+	}
 
-		exists = value
-		return nil
-	})
-
-	return exists, err
+	return result > 0, nil
 }
 
 func (c *client) Expire(ctx context.Context, key string, expiration time.Duration) error {
-	return c.withConn(ctx, func(ctx context.Context, conn redigo.Conn) error {
-		_, err := conn.Do("EXPIRE", key, int(expiration.Seconds()))
-		return err
-	})
+	if err := c.redis.Expire(ctx, key, expiration).Err(); err != nil {
+		return fmt.Errorf("failed to set expiration for key %s: %w", key, err)
+	}
+
+	return nil
 }
 
 func (c *client) Ping(ctx context.Context) error {
-	return c.withConn(ctx, func(ctx context.Context, conn redigo.Conn) error {
-		_, err := conn.Do("PING")
-		return err
-	})
+	if err := c.redis.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("redis ping failed: %w", err)
+	}
+
+	return nil
 }
 
 func (c *client) Incr(ctx context.Context, key string) (int64, error) {
-	var result int64
-	err := c.withConn(ctx, func(ctx context.Context, conn redigo.Conn) error {
-		value, err := redigo.Int64(conn.Do("INCR", key))
-		if err != nil {
-			return err
-		}
+	result, err := c.redis.Incr(ctx, key).Result()
+	if err != nil {
+		return 0, fmt.Errorf("failed to increment key %s: %w", key, err)
+	}
 
-		result = value
-		return nil
-	})
-
-	return result, err
+	return result, nil
 }

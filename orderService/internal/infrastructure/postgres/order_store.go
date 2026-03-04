@@ -80,6 +80,8 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 		return models.Order{}, fmt.Errorf("%s: collect: %w", op, err)
 	}
 
+	// проверка на валидность строки
+
 	return orderDTO.ToDomain(), nil
 }
 

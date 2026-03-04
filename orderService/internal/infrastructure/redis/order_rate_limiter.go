@@ -6,19 +6,27 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
+	redisGo "github.com/redis/go-redis/v9"
 )
 
+// для решения проблемы race condition между incr и count == 1
+var rateLimitScript = redisGo.NewScript(`
+	local count = redis.call('INCR', KEYS[1])
+	if count == 1 then
+		redis.call('EXPIRE', KEYS[1], ARGV[1])
+	end
+	return count
+`)
+
 type OrderRateLimiter struct {
-	client cache.Client
+	client *redisGo.Client
 	limit  int64
 	window time.Duration
 	prefix string
 }
 
 func NewOrderRateLimiter(
-	client cache.Client,
+	client *redisGo.Client,
 	limit int64,
 	window time.Duration,
 	prefix string,
@@ -36,16 +44,10 @@ func (r *OrderRateLimiter) Allow(ctx context.Context, userID uuid.UUID) (bool, e
 
 	key := r.prefix + userID.String()
 
-	count, err := r.client.Incr(ctx, key)
+	result, err := rateLimitScript.Run(ctx, r.client, []string{key}, int(r.window.Seconds())).Int64()
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if count == 1 {
-		if err := r.client.Expire(ctx, key, r.window); err != nil {
-			return false, fmt.Errorf("%s: %w", op, err)
-		}
-	}
-
-	return count <= r.limit, nil
+	return result <= r.limit, nil
 }

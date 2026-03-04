@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"time"
 
-	redigo "github.com/gomodule/redigo/redis"
-
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound/redis"
+
+	redisGo "github.com/redis/go-redis/v9"
 )
 
 const cacheKeyPrefix = "market:cache:all"
@@ -32,7 +32,7 @@ func (m *MarketCacheRepository) GetAll(ctx context.Context) ([]models.Market, er
 
 	data, err := m.cache.Get(ctx, cacheKeyPrefix)
 	if err != nil {
-		if errors.Is(err, redigo.ErrNil) {
+		if errors.Is(err, redisGo.Nil) {
 			return nil, repositoryErrors.ErrMarketCacheNotFound
 		}
 
