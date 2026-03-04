@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/redis/go-redis/v9"
 
 	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
@@ -13,9 +14,7 @@ import (
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 )
 
 type RateLimiters struct {
@@ -25,7 +24,7 @@ type RateLimiters struct {
 
 type CreateTimeout time.Duration
 
-func provideDBPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.Pool, error) {
+func providePostgresPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.Pool, error) {
 	pool, err := db.SetupDB(ctx, cfg.DBURI, migrations.Migrations)
 	if err != nil {
 		return nil, fmt.Errorf("postgres.SetupDB: %w", err)
@@ -34,25 +33,25 @@ func provideDBPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.Pool, 
 	return pool, nil
 }
 
-func provideRedisPool(cfg config.OrderConfig) *redigo.Pool {
-	return &redigo.Pool{
-		MaxIdle:     cfg.Redis.MaxIdle,
-		IdleTimeout: cfg.Redis.IdleTimeout,
-		DialContext: func(ctx context.Context) (redigo.Conn, error) {
-			return redigo.DialContext(
-				ctx,
-				"tcp",
-				cfg.Redis.Address(),
-				redigo.DialConnectTimeout(cfg.Redis.ConnectionTimeout),
-				redigo.DialReadTimeout(cfg.Redis.ConnectionTimeout),
-				redigo.DialWriteTimeout(cfg.Redis.ConnectionTimeout),
-			)
-		},
+func provideRedisClient(cfg config.OrderConfig) (*redis.Client, error) {
+	client := redis.NewClient(&redis.Options{
+		Addr:            cfg.Redis.Address(),
+		DialTimeout:     cfg.Redis.ConnectionTimeout,
+		ReadTimeout:     cfg.Redis.ConnectionTimeout,
+		WriteTimeout:    cfg.Redis.ConnectionTimeout,
+		PoolSize:        cfg.Redis.MaxIdle,
+		ConnMaxIdleTime: cfg.Redis.IdleTimeout,
+	})
+
+	if err := client.Ping(context.Background()).Err(); err != nil {
+		return nil, fmt.Errorf("redis.Ping: %w", err)
 	}
+
+	return client, nil
 }
 
-func provideRedisClient(pool *redigo.Pool, cfg config.OrderConfig) cache.Client {
-	return cache.NewClient(pool, zapLogger.With(), cfg.Redis.ConnectionTimeout)
+func provideCacheClient(client *redis.Client) cache.Client {
+	return cache.NewClient(client)
 }
 
 func provideOrderStore(pool *pgxpool.Pool) *repoPostgres.OrderStore {

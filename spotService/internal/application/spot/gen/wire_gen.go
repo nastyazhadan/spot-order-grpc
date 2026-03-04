@@ -8,10 +8,10 @@ package gen
 
 import (
 	"context"
-	"github.com/gomodule/redigo/redis"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
+	"github.com/redis/go-redis/v9"
 )
 
 // Injectors from wire.go:
@@ -22,14 +22,17 @@ func NewContainer(ctx context.Context, cfg config.SpotConfig) (*Container, error
 		return nil, err
 	}
 	marketStore := provideMarketStore(pool)
-	redisPool := provideRedisPool(cfg)
-	client := provideRedisClient(redisPool, cfg)
-	marketCacheRepository := provideMarketCacheRepository(client)
+	client, err := provideRedisClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	cacheClient := provideCacheClient(client)
+	marketCacheRepository := provideMarketCacheRepository(cacheClient)
 	cacheTTL := provideCacheTTL(cfg)
 	service := provideSpotService(marketStore, marketCacheRepository, cacheTTL)
 	container := &Container{
 		SpotService:  service,
-		RedisPool:    redisPool,
+		RedisClient:  client,
 		PostgresPool: pool,
 	}
 	return container, nil
@@ -39,6 +42,6 @@ func NewContainer(ctx context.Context, cfg config.SpotConfig) (*Container, error
 
 type Container struct {
 	SpotService  *spot.Service
-	RedisPool    *redis.Pool
+	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }

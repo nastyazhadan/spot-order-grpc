@@ -9,14 +9,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 )
 
 type Container struct {
-	OrderService grpcOrder.Order
-	RedisPool    *redigo.Pool
+	OrderService *svcOrder.OrderService
+	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }
 
@@ -26,14 +25,13 @@ func NewContainer(
 	cfg config.OrderConfig,
 ) (*Container, error) {
 	wire.Build(
-		provideDBPool,
-		provideRedisPool,
+		providePostgresPool,
 		provideRedisClient,
+		provideCacheClient,
 		provideOrderStore,
 		provideRateLimiters,
 		provideCreateTimeout,
 		provideOrderService,
-		wire.Bind(new(grpcOrder.Order), new(*svcOrder.OrderService)),
 		wire.Struct(new(Container), "*"),
 	)
 	return nil, nil

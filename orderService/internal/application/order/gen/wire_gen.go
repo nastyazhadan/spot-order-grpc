@@ -8,29 +8,31 @@ package gen
 
 import (
 	"context"
-	"github.com/gomodule/redigo/redis"
 	"github.com/jackc/pgx/v5/pgxpool"
-	order2 "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/redis/go-redis/v9"
 )
 
 // Injectors from wire.go:
 
 func NewContainer(ctx context.Context, marketViewer order.MarketViewer, cfg config.OrderConfig) (*Container, error) {
-	pool, err := provideDBPool(ctx, cfg)
+	pool, err := providePostgresPool(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	orderStore := provideOrderStore(pool)
-	redisPool := provideRedisPool(cfg)
-	client := provideRedisClient(redisPool, cfg)
-	rateLimiters := provideRateLimiters(client, cfg)
+	client, err := provideRedisClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	cacheClient := provideCacheClient(client)
+	rateLimiters := provideRateLimiters(cacheClient, cfg)
 	createTimeout := provideCreateTimeout(cfg)
-	service := provideOrderService(orderStore, marketViewer, rateLimiters, createTimeout)
+	orderService := provideOrderService(orderStore, marketViewer, rateLimiters, createTimeout)
 	container := &Container{
-		OrderService: service,
-		RedisPool:    redisPool,
+		OrderService: orderService,
+		RedisClient:  client,
 		PostgresPool: pool,
 	}
 	return container, nil
@@ -39,7 +41,7 @@ func NewContainer(ctx context.Context, marketViewer order.MarketViewer, cfg conf
 // wire.go:
 
 type Container struct {
-	OrderService order2.OrderService
-	RedisPool    *redis.Pool
+	OrderService *order.OrderService
+	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }

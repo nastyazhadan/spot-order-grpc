@@ -72,9 +72,9 @@ func provideContainer(
 	}
 
 	lifeCycle.Append(fx.Hook{
-		OnStop: func(context.Context) error {
+		OnStop: func(ctx context.Context) error {
 			container.PostgresPool.Close()
-			return container.RedisPool.Close()
+			return container.RedisClient.Close()
 		},
 	})
 
@@ -91,7 +91,7 @@ func provideListener(
 	}
 
 	lifeCycle.Append(fx.Hook{
-		OnStop: func(context.Context) error {
+		OnStop: func(ctx context.Context) error {
 			errClose := listener.Close()
 			if errClose != nil && !errors.Is(errClose, net.ErrClosed) {
 				return errClose
@@ -130,7 +130,7 @@ func provideGRPCServer(
 	grpcSpot.Register(grpcServer, container.SpotService)
 
 	lifeCycle.Append(fx.Hook{
-		OnStop: func(context.Context) error {
+		OnStop: func(ctx context.Context) error {
 			grpcServer.GracefulStop()
 			return nil
 		},

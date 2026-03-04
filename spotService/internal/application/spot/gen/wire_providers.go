@@ -6,12 +6,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	redis "github.com/redis/go-redis/v9"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	repoPostgres "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres"
 	repoRedis "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
@@ -29,25 +28,25 @@ func providePostgresPool(ctx context.Context, cfg config.SpotConfig) (*pgxpool.P
 	return pool, nil
 }
 
-func provideRedisPool(cfg config.SpotConfig) *redigo.Pool {
-	return &redigo.Pool{
-		MaxIdle:     cfg.Redis.MaxIdle,
-		IdleTimeout: cfg.Redis.IdleTimeout,
-		DialContext: func(ctx context.Context) (redigo.Conn, error) {
-			return redigo.DialContext(
-				ctx,
-				"tcp",
-				cfg.Redis.Address(),
-				redigo.DialConnectTimeout(cfg.Redis.ConnectionTimeout),
-				redigo.DialReadTimeout(cfg.Redis.ConnectionTimeout),
-				redigo.DialWriteTimeout(cfg.Redis.ConnectionTimeout),
-			)
-		},
+func provideRedisClient(cfg config.SpotConfig) (*redis.Client, error) {
+	client := redis.NewClient(&redis.Options{
+		Addr:            cfg.Redis.Address(),
+		DialTimeout:     cfg.Redis.ConnectionTimeout,
+		ReadTimeout:     cfg.Redis.ConnectionTimeout,
+		WriteTimeout:    cfg.Redis.ConnectionTimeout,
+		PoolSize:        cfg.Redis.MaxIdle,
+		ConnMaxIdleTime: cfg.Redis.IdleTimeout,
+	})
+
+	if err := client.Ping(context.Background()).Err(); err != nil {
+		return nil, fmt.Errorf("redis.Ping: %w", err)
 	}
+
+	return client, nil
 }
 
-func provideRedisClient(pool *redigo.Pool, cfg config.SpotConfig) cache.Client {
-	return cache.NewClient(pool, zapLogger.With(), cfg.Redis.ConnectionTimeout)
+func provideCacheClient(client *redis.Client) cache.Client {
+	return cache.NewClient(client)
 }
 
 func provideMarketStore(pool *pgxpool.Pool) *repoPostgres.MarketStore {

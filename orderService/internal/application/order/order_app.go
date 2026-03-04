@@ -108,7 +108,7 @@ func provideContainer(
 	lifeCycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			container.PostgresPool.Close()
-			return container.RedisPool.Close()
+			return container.RedisClient.Close()
 		},
 	})
 

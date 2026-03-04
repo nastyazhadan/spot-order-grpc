@@ -18,19 +18,19 @@ import (
 const cacheKeyPrefix = "market:cache:all"
 
 type MarketCacheRepository struct {
-	cache cache.Client
+	redisClient cache.Client
 }
 
-func NewMarketCacheRepository(cache cache.Client) *MarketCacheRepository {
+func NewMarketCacheRepository(client cache.Client) *MarketCacheRepository {
 	return &MarketCacheRepository{
-		cache: cache,
+		redisClient: client,
 	}
 }
 
 func (m *MarketCacheRepository) GetAll(ctx context.Context) ([]models.Market, error) {
 	const op = "MarketCacheRepository.GetAll"
 
-	data, err := m.cache.Get(ctx, cacheKeyPrefix)
+	data, err := m.redisClient.Get(ctx, cacheKeyPrefix)
 	if err != nil {
 		if errors.Is(err, redisGo.Nil) {
 			return nil, repositoryErrors.ErrMarketCacheNotFound
@@ -69,7 +69,7 @@ func (m *MarketCacheRepository) SetAll(ctx context.Context, markets []models.Mar
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err = m.cache.SetWithTTL(ctx, cacheKeyPrefix, data, ttl); err != nil {
+	if err = m.redisClient.SetWithTTL(ctx, cacheKeyPrefix, data, ttl); err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 

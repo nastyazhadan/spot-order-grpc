@@ -6,16 +6,10 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 type client struct {
 	redis *redis.Client
-}
-
-type Logger interface {
-	Info(ctx context.Context, message string, fields ...zap.Field)
-	Error(ctx context.Context, message string, fields ...zap.Field)
 }
 
 type Client interface {
@@ -28,7 +22,7 @@ type Client interface {
 	Exists(ctx context.Context, key string) (bool, error)
 	Expire(ctx context.Context, key string, expirationTime time.Duration) error
 	Ping(ctx context.Context) error
-	Incr(ctx context.Context, key string) (int64, error)
+	RunScript(ctx context.Context, script *redis.Script, keys []string, args ...interface{}) (interface{}, error)
 }
 
 func NewClient(redisClient *redis.Client) *client {
@@ -112,11 +106,6 @@ func (c *client) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (c *client) Incr(ctx context.Context, key string) (int64, error) {
-	result, err := c.redis.Incr(ctx, key).Result()
-	if err != nil {
-		return 0, fmt.Errorf("failed to increment key %s: %w", key, err)
-	}
-
-	return result, nil
+func (c *client) RunScript(ctx context.Context, script *redis.Script, keys []string, args ...interface{}) (interface{}, error) {
+	return script.Run(ctx, c.redis, keys, args...).Result()
 }
