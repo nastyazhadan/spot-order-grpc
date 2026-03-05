@@ -27,7 +27,18 @@ func New(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig) *Client {
 		Interval:    cfg.Interval,
 		Timeout:     cfg.Timeout,
 		ReadyToTrip: func(counts gobreaker.Counts) bool {
-			return counts.ConsecutiveFailures >= cfg.MaxFailures
+			shouldTrip := counts.ConsecutiveFailures >= cfg.MaxFailures
+
+			if shouldTrip {
+				zapLogger.Warn(context.Background(), "circuit breaker is about to open",
+					zap.String("name", "spotService"),
+					zap.Uint32("consecutive_failures", counts.ConsecutiveFailures),
+					zap.Uint32("total_failures", counts.TotalFailures),
+					zap.Uint32("total_requests", counts.Requests),
+				)
+			}
+
+			return shouldTrip
 		},
 	})
 
@@ -38,6 +49,7 @@ func New(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig) *Client {
 }
 
 func (c *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models.Market, error) {
+
 	markets, err := c.circuitBreaker.Execute(func() ([]models.Market, error) {
 		userRoles := make([]proto.UserRole, 0, len(roles))
 		for _, role := range roles {
