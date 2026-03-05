@@ -22,17 +22,19 @@ type OrderConfig struct {
 	LogFormat      string        `env:"LOG_FORMAT" env-default:"console"`
 	GSTimeout      time.Duration `env:"GS_TIMEOUT" env-default:"5s"`
 	CircuitBreaker CircuitBreakerConfig
+	PostgresPool   PostgresPoolConfig
 	RateLimiter    RateLimiterConfig
 	Redis          RedisConfig
 }
 
 type SpotConfig struct {
-	Address   string        `env:"SPOT_INSTRUMENT_LISTEN_ADDRESS" env-default:":50052"`
-	DBURI     string        `env:"SPOT_DB_URI" env-required:"true"`
-	LogLevel  string        `env:"LOG_LEVEL"  env-default:"info"`
-	LogFormat string        `env:"LOG_FORMAT" env-default:"console"`
-	GSTimeout time.Duration `env:"GS_TIMEOUT" env-default:"5s"`
-	Redis     RedisConfig
+	Address      string        `env:"SPOT_INSTRUMENT_LISTEN_ADDRESS" env-default:":50052"`
+	DBURI        string        `env:"SPOT_DB_URI" env-required:"true"`
+	LogLevel     string        `env:"LOG_LEVEL"  env-default:"info"`
+	LogFormat    string        `env:"LOG_FORMAT" env-default:"console"`
+	GSTimeout    time.Duration `env:"GS_TIMEOUT" env-default:"5s"`
+	PostgresPool PostgresPoolConfig
+	Redis        RedisConfig
 }
 
 type CircuitBreakerConfig struct {
@@ -42,12 +44,23 @@ type CircuitBreakerConfig struct {
 	MaxFailures uint32        `env:"CB_MAX_FAILURES" env-default:"5"`
 }
 
+type PostgresPoolConfig struct {
+	MaxConnections  int32         `env:"PG_POOL_MAX_CONNS" env-default:"10"`
+	MinConnections  int32         `env:"PG_POOL_MIN_CONNS" env-default:"2"`
+	MaxConnLifetime time.Duration `env:"PG_POOL_MAX_CONN_LIFETIME" env-default:"30m"`
+	MaxConnIdleTime time.Duration `env:"PG_POOL_MAX_CONN_IDLE_TIME" env-default:"5m"`
+}
+
 type RedisConfig struct {
 	Host              string        `env:"REDIS_HOST" env-default:"localhost"`
 	Port              int           `env:"REDIS_PORT" env-default:"6379"`
 	ConnectionTimeout time.Duration `env:"REDIS_CONNECTION_TIMEOUT" env-default:"10s"`
+	PoolSize          int           `env:"REDIS_POOL_SIZE" env-default:"10"`
+	MinIdle           int           `env:"REDIS_MIN_IDLE" env-default:"2"`
 	MaxIdle           int           `env:"REDIS_MAX_IDLE" env-default:"10"`
-	IdleTimeout       time.Duration `env:"REDIS_IDLE_TIMEOUT" env-default:"10s"`
+	MaxActiveConns    int           `env:"REDIS_MAX_ACTIVE_CONNS" env-default:"15"`
+	IdleTimeout       time.Duration `env:"REDIS_IDLE_TIMEOUT" env-default:"1m"`
+	ConnMaxLifetime   time.Duration `env:"REDIS_CONN_MAX_LIFETIME" env-default:"30m"`
 	CacheTTL          time.Duration `env:"SPOT_REDIS_CACHE_TTL" env-default:"24h"`
 }
 

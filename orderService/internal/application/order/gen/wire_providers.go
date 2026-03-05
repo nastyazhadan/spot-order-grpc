@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/redis/go-redis/v9"
 
 	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
@@ -14,6 +13,7 @@ import (
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
 )
 
@@ -25,7 +25,12 @@ type RateLimiters struct {
 type CreateTimeout time.Duration
 
 func providePostgresPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.Pool, error) {
-	pool, err := db.SetupDB(ctx, cfg.DBURI, migrations.Migrations)
+	pool, err := db.SetupDBWithPoolConfig(ctx, cfg.DBURI, migrations.Migrations, db.PoolConfig{
+		MaxConnections:  cfg.PostgresPool.MaxConnections,
+		MinConnections:  cfg.PostgresPool.MinConnections,
+		MaxConnLifetime: cfg.PostgresPool.MaxConnLifetime,
+		MaxConnIdleTime: cfg.PostgresPool.MaxConnIdleTime,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("postgres.SetupDB: %w", err)
 	}
@@ -35,15 +40,25 @@ func providePostgresPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.
 
 func provideRedisClient(cfg config.OrderConfig) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:            cfg.Redis.Address(),
-		DialTimeout:     cfg.Redis.ConnectionTimeout,
-		ReadTimeout:     cfg.Redis.ConnectionTimeout,
-		WriteTimeout:    cfg.Redis.ConnectionTimeout,
-		PoolSize:        cfg.Redis.MaxIdle,
+		Addr: cfg.Redis.Address(),
+
+		DialTimeout:  cfg.Redis.ConnectionTimeout,
+		ReadTimeout:  cfg.Redis.ConnectionTimeout,
+		WriteTimeout: cfg.Redis.ConnectionTimeout,
+
+		PoolSize:       cfg.Redis.PoolSize,
+		MinIdleConns:   cfg.Redis.MinIdle,
+		MaxIdleConns:   cfg.Redis.MaxIdle,
+		MaxActiveConns: cfg.Redis.MaxActiveConns,
+
 		ConnMaxIdleTime: cfg.Redis.IdleTimeout,
+		ConnMaxLifetime: cfg.Redis.ConnMaxLifetime,
 	})
 
-	if err := client.Ping(context.Background()).Err(); err != nil {
+	pingCtx, cancel := context.WithTimeout(context.Background(), cfg.Redis.ConnectionTimeout)
+	defer cancel()
+
+	if err := client.Ping(pingCtx).Err(); err != nil {
 		return nil, fmt.Errorf("redis.Ping: %w", err)
 	}
 

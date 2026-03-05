@@ -66,7 +66,6 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 		 LIMIT 1`,
 		id,
 	)
-
 	if err != nil {
 		return models.Order{}, fmt.Errorf("%s: query: %w", op, err)
 	}
@@ -74,13 +73,15 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 	orderDTO, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[dto.Order])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return models.Order{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrOrderNotFound)
+			return models.Order{}, fmt.Errorf("%s: collect: %w", op, repositoryErrors.ErrOrderNotFound)
 		}
 
 		return models.Order{}, fmt.Errorf("%s: collect: %w", op, err)
 	}
 
-	// проверка на валидность строки
+	if err = rows.Err(); err != nil {
+		return models.Order{}, fmt.Errorf("%s: rows: %w", op, err)
+	}
 
 	return orderDTO.ToDomain(), nil
 }

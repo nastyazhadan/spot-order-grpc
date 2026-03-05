@@ -35,6 +35,10 @@ func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 		return nil, fmt.Errorf("%s: collect: %w", op, err)
 	}
 
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: rows: %w", op, err)
+	}
+
 	if len(marketsDTO) == 0 {
 		return nil, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketStoreIsEmpty)
 	}
