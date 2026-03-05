@@ -12,6 +12,7 @@ import (
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -27,7 +28,7 @@ type OrderService interface {
 		userID uuid.UUID,
 		marketID uuid.UUID,
 		orderType models.OrderType,
-		price models.Decimal,
+		price sharedModels.Decimal,
 		quantity int64,
 	) (uuid.UUID, models.OrderStatus, error)
 
@@ -65,7 +66,7 @@ func (s *serverAPI) CreateOrder(
 	}
 
 	orderType := dto.TypeFromProto(request.GetOrderType())
-	orderPrice := request.GetPrice()
+	orderPrice := sharedModels.NewDecimal(request.GetPrice().GetValue())
 	orderQuantity := request.GetQuantity()
 
 	orderID, orderStatus, err := s.service.CreateOrder(ctx,

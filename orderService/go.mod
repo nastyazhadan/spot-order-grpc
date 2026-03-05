@@ -9,7 +9,6 @@ replace (
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.28.0
-	github.com/gomodule/redigo v1.9.3
 	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.7.0
 	github.com/jackc/pgx/v5 v5.8.0

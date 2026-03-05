@@ -56,7 +56,7 @@ func (s *OrderService) CreateOrder(
 	userID uuid.UUID,
 	marketID uuid.UUID,
 	orderType models.OrderType,
-	price models.Decimal,
+	price sharedModels.Decimal,
 	quantity int64,
 ) (uuid.UUID, models.OrderStatus, error) {
 	const op = "OrderService.CreateOrder"
@@ -67,7 +67,7 @@ func (s *OrderService) CreateOrder(
 		defer cancel()
 	}
 
-	if err := s.checkCreateRateLimit(ctx, userID); err != nil {
+	if err := s.checkRateLimit(ctx, userID, s.createRateLimiter); err != nil {
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -86,7 +86,7 @@ func (s *OrderService) CreateOrder(
 func (s *OrderService) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
 	const op = "OrderService.GetOrderStatus"
 
-	if err := s.checkGetRateLimit(ctx, userID); err != nil {
+	if err := s.checkRateLimit(ctx, userID, s.getRateLimiter); err != nil {
 		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -98,27 +98,14 @@ func (s *OrderService) GetOrderStatus(ctx context.Context, orderID, userID uuid.
 	return order.Status, nil
 }
 
-func (s *OrderService) checkCreateRateLimit(ctx context.Context, userID uuid.UUID) error {
-	allowed, err := s.createRateLimiter.Allow(ctx, userID)
+func (s *OrderService) checkRateLimit(ctx context.Context, userID uuid.UUID, limiter RateLimiter) error {
+	allowed, err := limiter.Allow(ctx, userID)
 	if err != nil {
 		return err
 	}
 	if !allowed {
 		return serviceErrors.ErrRateLimitExceeded
 	}
-
-	return nil
-}
-
-func (s *OrderService) checkGetRateLimit(ctx context.Context, userID uuid.UUID) error {
-	allowed, err := s.getRateLimiter.Allow(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if !allowed {
-		return serviceErrors.ErrRateLimitExceeded
-	}
-
 	return nil
 }
 
@@ -143,7 +130,7 @@ func (s *OrderService) saveOrder(
 	userID uuid.UUID,
 	marketID uuid.UUID,
 	orderType models.OrderType,
-	price models.Decimal,
+	price sharedModels.Decimal,
 	quantity int64,
 ) (uuid.UUID, models.OrderStatus, error) {
 	orderID := uuid.New()

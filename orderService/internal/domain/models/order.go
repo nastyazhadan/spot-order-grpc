@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"google.golang.org/genproto/googleapis/type/decimal"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
 type Order struct {
@@ -12,7 +12,7 @@ type Order struct {
 	UserID    uuid.UUID
 	MarketID  uuid.UUID
 	Type      OrderType
-	Price     Decimal
+	Price     models.Decimal
 	Quantity  int64
 	Status    OrderStatus
 	CreatedAt time.Time
@@ -37,5 +37,3 @@ const (
 	OrderStatusFilled
 	OrderStatusCancelled
 )
-
-type Decimal *decimal.Decimal

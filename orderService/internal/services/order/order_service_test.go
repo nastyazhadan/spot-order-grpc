@@ -18,28 +18,24 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/genproto/googleapis/type/decimal"
 )
 
 const CreateTimeout = 5 * time.Second
 
-var (
-	randomUUID  = uuid.New()
-	randomPrice = models.Decimal(&decimal.Decimal{
-		Value: fmt.Sprintf("%.2f", fakeValue.Float64Range(1, 1000)),
-	})
-	randomQuantity = int64(fakeValue.IntRange(1, 1000))
-)
-
 func TestCreateOrder(t *testing.T) {
 	fakeValue.Seed(time.Now().UnixNano())
+
+	randomUUID := uuid.New()
+	randomPrice := sharedModels.NewDecimal(
+		fmt.Sprintf("%.2f", fakeValue.Float64Range(1, 1000)))
+	randomQuantity := int64(fakeValue.IntRange(1, 1000))
 
 	tests := []struct {
 		name           string
 		userID         uuid.UUID
 		marketID       uuid.UUID
 		orderType      models.OrderType
-		price          models.Decimal
+		price          sharedModels.Decimal
 		quantity       int64
 		setupMocks     func(*mocks.Saver, *mocks.MarketViewer, *mocks.RateLimiter, *mocks.RateLimiter)
 		expectedStatus models.OrderStatus
@@ -283,6 +279,11 @@ func TestGetOrderStatus(t *testing.T) {
 	userID := uuid.New()
 	orderID := uuid.New()
 	anotherUserID := uuid.New()
+
+	randomUUID := uuid.New()
+	randomPrice := sharedModels.NewDecimal(
+		fmt.Sprintf("%.2f", fakeValue.Float64Range(1, 1000)))
+	randomQuantity := int64(fakeValue.IntRange(1, 1000))
 
 	tests := []struct {
 		name                string

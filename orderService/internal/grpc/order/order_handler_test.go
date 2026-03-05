@@ -21,26 +21,21 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var randomUUID = uuid.New()
-
-var randomPrice = models.Decimal(&decimal.Decimal{
-	Value: fmt.Sprintf("%.2f", fakeValue.Float64Range(1, 1000)),
-})
-
-var randomQuantity = int64(fakeValue.IntRange(1, 1000))
-
 func TestCreateOrder(t *testing.T) {
 	fakeValue.Seed(0)
 
-	validUserID := randomUUID.String()
-	validMarketID := randomUUID.String()
-	validOrderID := randomUUID
+	validUserID := uuid.New().String()
+	validMarketID := uuid.New().String()
+	validOrderID := uuid.New()
+	randomPrice := &decimal.Decimal{
+		Value: fmt.Sprintf("%.2f", fakeValue.Float64Range(1, 1000)),
+	}
+	randomQuantity := int64(fakeValue.IntRange(1, 1000))
 
 	tests := []struct {
 		name          string
 		request       *proto.CreateOrderRequest
 		setupMocks    func(*mocks.Order)
-		expectedErr   error
 		expectedCode  codes.Code
 		checkResponse func(t *testing.T, resp *proto.CreateOrderResponse)
 	}{
@@ -63,7 +58,6 @@ func TestCreateOrder(t *testing.T) {
 					int64(10),
 				).Return(validOrderID, models.OrderStatusCreated, nil)
 			},
-			expectedErr: nil,
 			checkResponse: func(t *testing.T, resp *proto.CreateOrderResponse) {
 				assert.NotNil(t, resp)
 				assert.NotEmpty(t, resp.GetOrderId())
@@ -308,6 +302,30 @@ func TestCreateOrder(t *testing.T) {
 			},
 		},
 		{
+			name: "ошибка сервиса - ErrRateLimitExceeded",
+			request: &proto.CreateOrderRequest{
+				UserId:    validUserID,
+				MarketId:  validMarketID,
+				OrderType: proto.OrderType_TYPE_MARKET,
+				Price:     randomPrice,
+				Quantity:  10,
+			},
+			setupMocks: func(mockOrder *mocks.Order) {
+				mockOrder.On("CreateOrder",
+					mock.Anything,
+					mock.AnythingOfType("uuid.UUID"),
+					mock.AnythingOfType("uuid.UUID"),
+					mock.AnythingOfType("models.OrderType"),
+					mock.Anything,
+					int64(10),
+				).Return(uuid.Nil, models.OrderStatusCancelled, serviceErrors.ErrRateLimitExceeded)
+			},
+			expectedCode: codes.ResourceExhausted,
+			checkResponse: func(t *testing.T, resp *proto.CreateOrderResponse) {
+				assert.Nil(t, resp)
+			},
+		},
+		{
 			name: "ошибка сервиса - внутренняя ошибка",
 			request: &proto.CreateOrderRequest{
 				UserId:    validUserID,
@@ -350,7 +368,6 @@ func TestCreateOrder(t *testing.T) {
 					int64(1),
 				).Return(validOrderID, models.OrderStatusCreated, nil)
 			},
-			expectedErr: nil,
 			checkResponse: func(t *testing.T, resp *proto.CreateOrderResponse) {
 				assert.NotNil(t, resp)
 				assert.Equal(t, proto.OrderStatus_STATUS_CREATED, resp.GetStatus())
@@ -391,10 +408,8 @@ func TestCreateOrder(t *testing.T) {
 }
 
 func TestGetOrderStatus(t *testing.T) {
-	fakeValue.Seed(0)
-
-	validUserID := randomUUID.String()
-	validOrderID := randomUUID.String()
+	validUserID := uuid.New().String()
+	validOrderID := uuid.New().String()
 
 	tests := []struct {
 		name          string
@@ -504,25 +519,6 @@ func TestGetOrderStatus(t *testing.T) {
 			expectedCode: codes.Internal,
 			checkResponse: func(t *testing.T, resp *proto.GetOrderStatusResponse) {
 				assert.Nil(t, resp)
-			},
-		},
-		{
-			name: "успешное получение - статус Created",
-			request: &proto.GetOrderStatusRequest{
-				OrderId: validOrderID,
-				UserId:  validUserID,
-			},
-			setupMocks: func(mockOrder *mocks.Order) {
-				mockOrder.On("GetOrderStatus",
-					mock.Anything,
-					mock.AnythingOfType("uuid.UUID"),
-					mock.AnythingOfType("uuid.UUID"),
-				).Return(models.OrderStatusCreated, nil)
-			},
-			expectedCode: codes.OK,
-			checkResponse: func(t *testing.T, resp *proto.GetOrderStatusResponse) {
-				assert.NotNil(t, resp)
-				assert.Equal(t, proto.OrderStatus_STATUS_CREATED, resp.GetStatus())
 			},
 		},
 		{
