@@ -106,6 +106,7 @@ func provideListener(
 func provideGRPCServer(
 	lifeCycle fx.Lifecycle,
 	container *wireGen.Container,
+	cfg config.SpotConfig,
 ) (*grpc.Server, error) {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
@@ -117,6 +118,7 @@ func provideGRPCServer(
 	recoverer := recovery.PanicRecoveryInterceptor
 
 	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize),
 		grpc.ChainUnaryInterceptor(
 			tracer,
 			logger,

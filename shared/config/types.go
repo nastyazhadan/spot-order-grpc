@@ -19,6 +19,7 @@ type OrderConfig struct {
 	LogLevel       string               `mapstructure:"log_level"`
 	LogFormat      string               `mapstructure:"log_format"`
 	GSTimeout      time.Duration        `mapstructure:"gs_timeout"`
+	MaxRecvMsgSize int                  `mapstructure:"max_recv_msg_size"`
 	CircuitBreaker CircuitBreakerConfig `mapstructure:"circuit_breaker"`
 	PostgresPool   PostgresPoolConfig   `mapstructure:"postgres_pool"`
 	RateLimiter    RateLimiterConfig    `mapstructure:"rate_limiter"`
@@ -26,13 +27,14 @@ type OrderConfig struct {
 }
 
 type SpotConfig struct {
-	Address      string             `mapstructure:"address"`
-	DBURI        string             `mapstructure:"db_uri"`
-	LogLevel     string             `mapstructure:"log_level"`
-	LogFormat    string             `mapstructure:"log_format"`
-	GSTimeout    time.Duration      `mapstructure:"gs_timeout"`
-	PostgresPool PostgresPoolConfig `mapstructure:"postgres_pool"`
-	Redis        RedisConfig        `mapstructure:"redis"`
+	Address        string             `mapstructure:"address"`
+	DBURI          string             `mapstructure:"db_uri"`
+	LogLevel       string             `mapstructure:"log_level"`
+	LogFormat      string             `mapstructure:"log_format"`
+	GSTimeout      time.Duration      `mapstructure:"gs_timeout"`
+	MaxRecvMsgSize int                `mapstructure:"max_recv_msg_size"`
+	PostgresPool   PostgresPoolConfig `mapstructure:"postgres_pool"`
+	Redis          RedisConfig        `mapstructure:"redis"`
 }
 
 type CircuitBreakerConfig struct {

@@ -24,6 +24,7 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("order.log_level", "LOG_LEVEL")
 	_ = viper.BindEnv("order.log_format", "LOG_FORMAT")
 	_ = viper.BindEnv("order.gs_timeout", "GS_TIMEOUT")
+	_ = viper.BindEnv("order.max_recv_msg_size", "ORDER_MAX_RECV_MSG_SIZE")
 
 	// Order circuit breaker
 	_ = viper.BindEnv("order.circuit_breaker.max_requests", "CB_MAX_REQUESTS")
@@ -60,6 +61,7 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("spot.log_level", "LOG_LEVEL")
 	_ = viper.BindEnv("spot.log_format", "LOG_FORMAT")
 	_ = viper.BindEnv("spot.gs_timeout", "GS_TIMEOUT")
+	_ = viper.BindEnv("spot.max_recv_msg_size", "SPOT_MAX_RECV_MSG_SIZE")
 
 	// Spot postgres pool (те же env-переменные, что и у order)
 	_ = viper.BindEnv("spot.postgres_pool.max_conns", "PG_POOL_MAX_CONNS")
