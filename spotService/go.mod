@@ -9,11 +9,9 @@ replace (
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.28.0
-	github.com/gomodule/redigo v1.9.3
 	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.7.0
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/joho/godotenv v1.5.1
 	github.com/nastyazhadan/spot-order-grpc/protos v0.0.0-20260228150309-129aa47537e4
 	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.11.1

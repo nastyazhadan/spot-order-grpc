@@ -1,0 +1,73 @@
+package config
+
+import (
+	"fmt"
+	"time"
+)
+
+type Config struct {
+	Order OrderConfig `mapstructure:"order"`
+	Spot  SpotConfig  `mapstructure:"spot"`
+}
+
+type OrderConfig struct {
+	Address        string               `mapstructure:"address"`
+	DBURI          string               `mapstructure:"db_uri"`
+	SpotAddress    string               `mapstructure:"spot_address"`
+	CreateTimeout  time.Duration        `mapstructure:"create_timeout"`
+	CheckTimeout   time.Duration        `mapstructure:"check_timeout"`
+	LogLevel       string               `mapstructure:"log_level"`
+	LogFormat      string               `mapstructure:"log_format"`
+	GSTimeout      time.Duration        `mapstructure:"gs_timeout"`
+	CircuitBreaker CircuitBreakerConfig `mapstructure:"circuit_breaker"`
+	PostgresPool   PostgresPoolConfig   `mapstructure:"postgres_pool"`
+	RateLimiter    RateLimiterConfig    `mapstructure:"rate_limiter"`
+	Redis          RedisConfig          `mapstructure:"redis"`
+}
+
+type SpotConfig struct {
+	Address      string             `mapstructure:"address"`
+	DBURI        string             `mapstructure:"db_uri"`
+	LogLevel     string             `mapstructure:"log_level"`
+	LogFormat    string             `mapstructure:"log_format"`
+	GSTimeout    time.Duration      `mapstructure:"gs_timeout"`
+	PostgresPool PostgresPoolConfig `mapstructure:"postgres_pool"`
+	Redis        RedisConfig        `mapstructure:"redis"`
+}
+
+type CircuitBreakerConfig struct {
+	MaxRequests uint32        `mapstructure:"max_requests"`
+	Interval    time.Duration `mapstructure:"interval"`
+	Timeout     time.Duration `mapstructure:"timeout"`
+	MaxFailures uint32        `mapstructure:"max_failures"`
+}
+
+type PostgresPoolConfig struct {
+	MaxConnections  int32         `mapstructure:"max_conns"`
+	MinConnections  int32         `mapstructure:"min_conns"`
+	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
+	MaxConnIdleTime time.Duration `mapstructure:"max_conn_idle_time"`
+}
+
+type RedisConfig struct {
+	Host              string        `mapstructure:"host"`
+	Port              int           `mapstructure:"port"`
+	ConnectionTimeout time.Duration `mapstructure:"connection_timeout"`
+	PoolSize          int           `mapstructure:"pool_size"`
+	MinIdle           int           `mapstructure:"min_idle"`
+	MaxIdle           int           `mapstructure:"max_idle"`
+	MaxActiveConns    int           `mapstructure:"max_active_conns"`
+	IdleTimeout       time.Duration `mapstructure:"idle_timeout"`
+	ConnMaxLifetime   time.Duration `mapstructure:"max_conn_lifetime"`
+	CacheTTL          time.Duration `mapstructure:"spot_cache_ttl"`
+}
+
+type RateLimiterConfig struct {
+	CreateOrder    int64         `mapstructure:"create_order"`
+	GetOrderStatus int64         `mapstructure:"get_order_status"`
+	Window         time.Duration `mapstructure:"window"`
+}
+
+func (r RedisConfig) Address() string {
+	return fmt.Sprintf("%s:%d", r.Host, r.Port)
+}

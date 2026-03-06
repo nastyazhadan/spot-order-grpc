@@ -1,0 +1,57 @@
+order:
+  address: ":50051"
+  db_uri: ""
+  spot_address: "localhost:50052"
+  create_timeout: "5s"
+  check_timeout: "15s"
+  log_level: "info"
+  log_format: "console"
+  gs_timeout: "5s"
+  circuit_breaker:
+    max_requests: 3
+    interval: "10s"
+    timeout: "5s"
+    max_failures: 5
+  postgres_pool:
+    max_conns: 10
+    min_conns: 2
+    max_conn_lifetime: "30m"
+    max_conn_idle_time: "5m"
+  redis:
+    host: "localhost"
+    port: 6379
+    connection_timeout: "10s"
+    pool_size: 10
+    min_idle: 2
+    max_idle: 10
+    max_active_conns: 15
+    idle_timeout: "1m"
+    max_conn_lifetime: "30m"
+    spot_cache_ttl: "24h"
+  rate_limiter:
+    create_order: 5
+    get_order_status: 50
+    window: "1h"
+
+spot:
+  address: ":50052"
+  db_uri: ""
+  log_level: "info"
+  log_format: "console"
+  gs_timeout: "5s"
+  postgres_pool:
+    max_conns: 10
+    min_conns: 2
+    max_conn_lifetime: "30m"
+    max_conn_idle_time: "5m"
+  redis:
+    host: "localhost"
+    port: 6379
+    connection_timeout: "10s"
+    pool_size: 10
+    min_idle: 2
+    max_idle: 10
+    max_active_conns: 15
+    idle_timeout: "1m"
+    max_conn_lifetime: "30m"
+    spot_cache_ttl: "24h"
