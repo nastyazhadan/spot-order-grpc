@@ -19,7 +19,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
-	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/ratelimit"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/rate_limit"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
@@ -163,7 +163,7 @@ func provideGRPCServer(
 	tracer := xrequestid.Server
 	logger := logInterceptor.LoggerInterceptor()
 	recoverer := recovery.PanicRecoveryInterceptor
-	rateLimiter := ratelimit.RateLimiter(cfg.GRPCRateLimit)
+	rateLimiter := rate_limit.RateLimiter(cfg.GRPCRateLimit)
 
 	grpcServer := grpc.NewServer(
 		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize),

@@ -58,3 +58,11 @@ func (r *OrderRateLimiter) Allow(ctx context.Context, userID uuid.UUID) (bool, e
 
 	return result <= r.limit, nil
 }
+
+func (r *OrderRateLimiter) Limit() int64 {
+	return r.limit
+}
+
+func (r *OrderRateLimiter) Window() time.Duration {
+	return r.window
+}

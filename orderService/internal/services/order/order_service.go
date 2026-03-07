@@ -38,6 +38,8 @@ type MarketViewer interface {
 
 type RateLimiter interface {
 	Allow(ctx context.Context, userID uuid.UUID) (bool, error)
+	Limit() int64
+	Window() time.Duration
 }
 
 func NewOrderService(s Saver, g Getter, mv MarketViewer, create, get RateLimiter, t time.Duration) *OrderService {
@@ -104,8 +106,12 @@ func (s *OrderService) checkRateLimit(ctx context.Context, userID uuid.UUID, lim
 		return err
 	}
 	if !allowed {
-		return serviceErrors.ErrRateLimitExceeded
+		return serviceErrors.ErrLimitExceeded{
+			Limit:  limiter.Limit(),
+			Window: limiter.Window(),
+		}
 	}
+
 	return nil
 }
 
@@ -149,7 +155,7 @@ func (s *OrderService) saveOrder(
 
 	if err := s.saver.SaveOrder(ctx, newOrder); err != nil {
 		if errors.Is(err, repositoryErrors.ErrOrderAlreadyExists) {
-			return uuid.Nil, models.OrderStatusCancelled, serviceErrors.ErrOrderAlreadyExists
+			return uuid.Nil, models.OrderStatusCancelled, serviceErrors.ErrAlreadyExists{ID: orderID}
 		}
 
 		return uuid.Nil, models.OrderStatusCancelled, err
@@ -162,14 +168,14 @@ func (s *OrderService) fetchOrder(ctx context.Context, orderID, userID uuid.UUID
 	order, err := s.getter.GetOrder(ctx, orderID)
 	if err != nil {
 		if errors.Is(err, repositoryErrors.ErrOrderNotFound) {
-			return models.Order{}, serviceErrors.ErrOrderNotFound
+			return models.Order{}, serviceErrors.ErrNotFound{ID: orderID}
 		}
 
 		return models.Order{}, err
 	}
 
 	if order.UserID != userID {
-		return models.Order{}, serviceErrors.ErrOrderNotFound
+		return models.Order{}, serviceErrors.ErrNotFound{ID: orderID}
 	}
 
 	return order, nil

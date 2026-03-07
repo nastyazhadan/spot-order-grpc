@@ -47,10 +47,10 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 
 	if err != nil {
 		if isDuplicateKey(err) {
-			return fmt.Errorf("%s: %w", op, repositoryErrors.ErrOrderAlreadyExists)
+			return fmt.Errorf("%s: %w", op, repositoryErrors.ErrAlreadyExists{ID: orderDTO.ID})
 		}
 
-		return fmt.Errorf("%s: exec: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	return nil
@@ -67,20 +67,20 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 		id,
 	)
 	if err != nil {
-		return models.Order{}, fmt.Errorf("%s: query: %w", op, err)
+		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	orderDTO, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[dto.Order])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return models.Order{}, fmt.Errorf("%s: collect: %w", op, repositoryErrors.ErrOrderNotFound)
+			return models.Order{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrNotFound{ID: id})
 		}
 
-		return models.Order{}, fmt.Errorf("%s: collect: %w", op, err)
+		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if err = rows.Err(); err != nil {
-		return models.Order{}, fmt.Errorf("%s: rows: %w", op, err)
+		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return orderDTO.ToDomain(), nil

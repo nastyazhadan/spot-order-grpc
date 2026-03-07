@@ -27,16 +27,16 @@ func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 
 	rows, err := m.pool.Query(ctx, `SELECT id, name, enabled, deleted_at FROM market_store`)
 	if err != nil {
-		return nil, fmt.Errorf("%s: query: %w", op, err)
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	marketsDTO, err := pgx.CollectRows(rows, pgx.RowToStructByName[dto.Market])
 	if err != nil {
-		return nil, fmt.Errorf("%s: collect: %w", op, err)
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: rows: %w", op, err)
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if len(marketsDTO) == 0 {
