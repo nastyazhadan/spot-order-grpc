@@ -14,6 +14,7 @@ var (
 	ErrRateLimitExceeded        = ErrLimitExceeded{}
 	ErrMarketsNotFound          = errors.New("markets not found")
 	ErrCreatingOrderNotRequired = errors.New("creating order not required")
+	ErrUserRoleNotSpecified     = errors.New("user role not specified")
 )
 
 type ErrNotFound struct {

@@ -15,7 +15,7 @@ import (
 	redisGo "github.com/redis/go-redis/v9"
 )
 
-const cacheKeyPrefix = "market:cache:all"
+const cacheKeyPrefix = "market:cache"
 
 type MarketCacheRepository struct {
 	redisClient cache.Client
@@ -27,10 +27,18 @@ func NewMarketCacheRepository(client cache.Client) *MarketCacheRepository {
 	}
 }
 
-func (m *MarketCacheRepository) GetAll(ctx context.Context) ([]models.Market, error) {
+func cacheKey(roleKey string) string {
+	return fmt.Sprintf("%s:%s", cacheKeyPrefix, roleKey)
+}
+
+func (m *MarketCacheRepository) GetAll(
+	ctx context.Context,
+	roleKey string,
+) ([]models.Market, error) {
+
 	const op = "MarketCacheRepository.GetAll"
 
-	data, err := m.redisClient.Get(ctx, cacheKeyPrefix)
+	data, err := m.redisClient.Get(ctx, cacheKey(roleKey))
 	if err != nil {
 		if errors.Is(err, redisGo.Nil) {
 			return nil, repositoryErrors.ErrMarketCacheNotFound
@@ -56,7 +64,13 @@ func (m *MarketCacheRepository) GetAll(ctx context.Context) ([]models.Market, er
 	return markets, nil
 }
 
-func (m *MarketCacheRepository) SetAll(ctx context.Context, markets []models.Market, ttl time.Duration) error {
+func (m *MarketCacheRepository) SetAll(
+	ctx context.Context,
+	markets []models.Market,
+	roleKey string,
+	ttl time.Duration,
+) error {
+
 	const op = "MarketCacheRepository.SetAll"
 
 	redisViews := make([]dto.MarketRedisView, 0, len(markets))
@@ -69,7 +83,7 @@ func (m *MarketCacheRepository) SetAll(ctx context.Context, markets []models.Mar
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err = m.redisClient.SetWithTTL(ctx, cacheKeyPrefix, data, ttl); err != nil {
+	if err = m.redisClient.SetWithTTL(ctx, cacheKey(roleKey), data, ttl); err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 

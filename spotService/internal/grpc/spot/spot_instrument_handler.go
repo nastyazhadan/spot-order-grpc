@@ -47,6 +47,9 @@ func (s *serverAPI) ViewMarkets(
 
 	markets, err := s.spotInstrument.ViewMarkets(ctx, userRoles)
 	if err != nil {
+		if errors.Is(err, serviceErrors.ErrUserRoleNotSpecified) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
 		if errors.Is(err, serviceErrors.ErrMarketsNotFound) {
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
@@ -66,7 +69,10 @@ func (s *serverAPI) ViewMarkets(
 	}, nil
 }
 
-func (s *serverAPI) getUserRoles(request *proto.ViewMarketsRequest) ([]models.UserRole, error) {
+func (s *serverAPI) getUserRoles(
+	request *proto.ViewMarketsRequest,
+) ([]models.UserRole, error) {
+
 	roles := request.GetUserRoles()
 
 	if len(roles) == 0 {
