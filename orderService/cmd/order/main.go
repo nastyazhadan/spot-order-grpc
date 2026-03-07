@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 
+	"github.com/nastyazhadan/spot-order-grpc/orderService/config"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order"
-	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 )
 
 func main() {
@@ -14,5 +14,5 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	order.Run(context.Background(), cfg.Order)
+	order.Run(context.Background(), *cfg)
 }

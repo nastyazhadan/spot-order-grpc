@@ -5,11 +5,6 @@ import (
 	"time"
 )
 
-type Config struct {
-	Order OrderConfig `mapstructure:"order"`
-	Spot  SpotConfig  `mapstructure:"spot"`
-}
-
 type OrderConfig struct {
 	Address        string               `mapstructure:"address"`
 	DBURI          string               `mapstructure:"db_uri"`

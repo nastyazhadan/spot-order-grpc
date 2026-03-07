@@ -1,6 +1,5 @@
 order:
   address: ":50051"
-  db_uri: ""
   spot_address: "localhost:50052"
   create_timeout: "5s"
   check_timeout: "15s"
@@ -37,7 +36,6 @@ order:
 
 spot:
   address: ":50052"
-  db_uri: ""
   log_level: "info"
   log_format: "console"
   gs_timeout: "5s"

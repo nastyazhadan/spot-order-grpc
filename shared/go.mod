@@ -8,6 +8,7 @@ require (
 	buf.build/go/protovalidate v1.1.2
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
+	github.com/joho/godotenv v1.5.1
 	github.com/nastyazhadan/spot-order-grpc/protos v0.0.0-20260228150309-129aa47537e4
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/redis/go-redis/v9 v9.18.0
