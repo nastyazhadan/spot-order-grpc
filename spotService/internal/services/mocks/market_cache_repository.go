@@ -16,9 +16,9 @@ type MarketCacheRepository struct {
 	mock.Mock
 }
 
-// GetAll provides a mock function with given fields: ctx
-func (_m *MarketCacheRepository) GetAll(ctx context.Context) ([]models.Market, error) {
-	ret := _m.Called(ctx)
+// GetAll provides a mock function with given fields: ctx, roleKey
+func (_m *MarketCacheRepository) GetAll(ctx context.Context, roleKey string) ([]models.Market, error) {
+	ret := _m.Called(ctx, roleKey)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetAll")
@@ -26,19 +26,19 @@ func (_m *MarketCacheRepository) GetAll(ctx context.Context) ([]models.Market, e
 
 	var r0 []models.Market
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]models.Market, error)); ok {
-		return rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string) ([]models.Market, error)); ok {
+		return rf(ctx, roleKey)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) []models.Market); ok {
-		r0 = rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string) []models.Market); ok {
+		r0 = rf(ctx, roleKey)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]models.Market)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = rf(ctx)
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, roleKey)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -46,17 +46,17 @@ func (_m *MarketCacheRepository) GetAll(ctx context.Context) ([]models.Market, e
 	return r0, r1
 }
 
-// SetAll provides a mock function with given fields: ctx, market, ttl
-func (_m *MarketCacheRepository) SetAll(ctx context.Context, market []models.Market, ttl time.Duration) error {
-	ret := _m.Called(ctx, market, ttl)
+// SetAll provides a mock function with given fields: ctx, market, roleKey, ttl
+func (_m *MarketCacheRepository) SetAll(ctx context.Context, market []models.Market, roleKey string, ttl time.Duration) error {
+	ret := _m.Called(ctx, market, roleKey, ttl)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SetAll")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, []models.Market, time.Duration) error); ok {
-		r0 = rf(ctx, market, ttl)
+	if rf, ok := ret.Get(0).(func(context.Context, []models.Market, string, time.Duration) error); ok {
+		r0 = rf(ctx, market, roleKey, ttl)
 	} else {
 		r0 = ret.Error(0)
 	}
