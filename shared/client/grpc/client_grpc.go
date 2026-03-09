@@ -69,14 +69,6 @@ func (c *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]mo
 			return nil, err
 		}
 
-		// Нужно ли получать и прокидывать дальше trace-id вручную
-		traceIDs := header.Get("x-trace-id")
-		if len(traceIDs) > 0 {
-			zapLogger.Info(ctx, "received trace id from spot service",
-				zap.String("trace_id", traceIDs[0]),
-			)
-		}
-
 		out := make([]models.Market, 0, len(response.GetMarkets()))
 		for _, market := range response.GetMarkets() {
 			mappedMarket, err := mapper.MarketFromProto(market)

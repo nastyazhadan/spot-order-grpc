@@ -141,14 +141,12 @@ func (s *OrderService) validateMarket(ctx context.Context, marketID uuid.UUID) e
 	)
 	defer span.End()
 
-	// Заглушка
 	markets, err := s.marketViewer.ViewMarkets(ctx, []sharedModels.UserRole{sharedModels.UserRoleUser})
 	if err != nil {
 		span.RecordError(err)
 		return err
 	}
 
-	// Здесь может быть неоптимально
 	for _, market := range markets {
 		if market.ID == marketID {
 			return nil

@@ -21,7 +21,6 @@ func UnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
-		// Здесь может быть ошибка
 		tracer := otel.GetTracerProvider().Tracer(serviceName)
 		propagator := otel.GetTextMapPropagator()
 
@@ -60,7 +59,6 @@ func UnaryClientInterceptor(serviceName string) grpc.UnaryClientInterceptor {
 		invoker grpc.UnaryInvoker,
 		options ...grpc.CallOption,
 	) error {
-		// Здесь может быть ошибка
 		tracer := otel.GetTracerProvider().Tracer(serviceName)
 		propagator := otel.GetTextMapPropagator()
 
@@ -120,6 +118,5 @@ func AddTraceIDToResponse(ctx context.Context) {
 		return
 	}
 
-	// Здесь может быть ошибка
 	_ = grpc.SetHeader(ctx, metadata.Pairs(TraceIDHeader, traceID))
 }

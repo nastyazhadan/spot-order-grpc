@@ -61,5 +61,5 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, probabilistic_sampler, batch, resourcedetection]
+      processors: [memory_limiter, resourcedetection, probabilistic_sampler, batch]
       exporters: [otlp/jaeger, debug]
