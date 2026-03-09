@@ -42,16 +42,16 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.147.0
     container_name: otel-collector
-    command: [ "--config=/etc/otel-collector-config.yaml" ]
+    command: [ "--config=/etc/otel_collector_config.yaml" ]
     volumes:
-      - ./shared/infrastructure/otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+      - ./shared/infrastructure/otel/otel_collector_config.yaml:/etc/otel_collector_config.yaml
     ports:
       - "${OTEL_GRPC_PORT}:4317"
       - "${OTEL_HTTP_PORT}:4318"
-      - "${OTEL_METRICS_PORT}:8888"
       - "${OTEL_ZPAGES_PORT}:8889"
+      - "${OTEL_HEALTH_PORT}:13133"
     healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--spider", "http://localhost:8888/metrics" ]
+      test: [ "CMD", "wget", "--quiet", "--spider", "http://localhost:13133/health" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -64,17 +64,16 @@ services:
       - microservices-net
 
   jaeger:
-    image: jaegertracing/jaeger:2.15.0
+    image: jaegertracing/all-in-one:1.62.0
     container_name: jaeger
-    command: [ "--config", "/etc/jaeger/jaeger_config.yaml" ]
-    volumes:
-      - ./shared/infrastructure/otel/jaeger_config.yaml:/etc/jaeger/jaeger_config.yaml
-      - jaeger_data:/badger/data
-      - jaeger_key:/badger/key
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+      - MEMORY_MAX_TRACES=50000
     ports:
       - "${JAEGER_UI_PORT}:16686"
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:13133/status" ]
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:16686" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -90,5 +89,3 @@ networks:
 
 volumes:
   pgdata:
-  jaeger_data:
-  jaeger_key:

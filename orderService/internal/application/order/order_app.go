@@ -101,6 +101,23 @@ func provideSpotConnection(
 	return connection, nil
 }
 
+func provideMarketClient(
+	ctx context.Context,
+	connection *grpc.ClientConn,
+	cfg config.OrderConfig,
+) (*grpcClient.Client, error) {
+	client := grpcClient.New(connection, cfg.CircuitBreaker)
+
+	checkCtx, cancel := context.WithTimeout(ctx, cfg.CheckTimeout)
+	defer cancel()
+
+	if err := checkSpotServiceHealth(checkCtx, connection, cfg.SpotAddress); err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
 func checkSpotServiceHealth(
 	ctx context.Context,
 	connection *grpc.ClientConn,
@@ -118,23 +135,6 @@ func checkSpotServiceHealth(
 	}
 
 	return nil
-}
-
-func provideMarketClient(
-	ctx context.Context,
-	connection *grpc.ClientConn,
-	cfg config.OrderConfig,
-) (*grpcClient.Client, error) {
-	client := grpcClient.New(connection, cfg.CircuitBreaker)
-
-	checkCtx, cancel := context.WithTimeout(ctx, cfg.CheckTimeout)
-	defer cancel()
-
-	if err := checkSpotServiceHealth(checkCtx, connection, cfg.SpotAddress); err != nil {
-		return nil, err
-	}
-
-	return client, nil
 }
 
 func provideContainer(
