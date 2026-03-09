@@ -7,10 +7,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
@@ -101,34 +104,60 @@ func (s *OrderService) GetOrderStatus(ctx context.Context, orderID, userID uuid.
 }
 
 func (s *OrderService) checkRateLimit(ctx context.Context, userID uuid.UUID, limiter RateLimiter) error {
+	limit := limiter.Limit()
+	window := limiter.Window()
+
+	ctx, span := tracing.StartSpan(ctx, "order.check_rate_limit",
+		trace.WithAttributes(
+			attributeUUID("user_id", userID),
+			attribute.Int64("limit", limit),
+			attribute.String("window", window.String()),
+		),
+	)
+	defer span.End()
+
 	allowed, err := limiter.Allow(ctx, userID)
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 	if !allowed {
-		return serviceErrors.ErrLimitExceeded{
-			Limit:  limiter.Limit(),
-			Window: limiter.Window(),
+		err = serviceErrors.ErrLimitExceeded{
+			Limit:  limit,
+			Window: window,
 		}
+		span.RecordError(err)
+		return err
 	}
 
 	return nil
 }
 
 func (s *OrderService) validateMarket(ctx context.Context, marketID uuid.UUID) error {
+	ctx, span := tracing.StartSpan(ctx, "order.validate_market",
+		trace.WithAttributes(
+			attributeUUID("market_id", marketID),
+		),
+	)
+	defer span.End()
+
 	// Заглушка
 	markets, err := s.marketViewer.ViewMarkets(ctx, []sharedModels.UserRole{sharedModels.UserRoleUser})
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 
+	// Здесь может быть неоптимально
 	for _, market := range markets {
 		if market.ID == marketID {
 			return nil
 		}
 	}
 
-	return serviceErrors.ErrMarketsNotFound
+	err = serviceErrors.ErrMarketsNotFound
+	span.RecordError(err)
+	return err
 }
 
 func (s *OrderService) saveOrder(
@@ -142,6 +171,17 @@ func (s *OrderService) saveOrder(
 	orderID := uuid.New()
 	orderStatus := models.OrderStatusCreated
 
+	ctx, span := tracing.StartSpan(ctx, "order.save_order",
+		trace.WithAttributes(
+			attributeUUID("order_id", orderID),
+			attributeUUID("user_id", userID),
+			attributeUUID("market_id", marketID),
+			attribute.String("price", price.Value()),
+			attribute.Int64("quantity", quantity),
+		),
+	)
+	defer span.End()
+
 	newOrder := models.Order{
 		ID:        orderID,
 		UserID:    userID,
@@ -154,6 +194,7 @@ func (s *OrderService) saveOrder(
 	}
 
 	if err := s.saver.SaveOrder(ctx, newOrder); err != nil {
+		span.RecordError(err)
 		if errors.Is(err, repositoryErrors.ErrOrderAlreadyExists) {
 			return uuid.Nil, models.OrderStatusCancelled, serviceErrors.ErrAlreadyExists{ID: orderID}
 		}
@@ -165,8 +206,17 @@ func (s *OrderService) saveOrder(
 }
 
 func (s *OrderService) fetchOrder(ctx context.Context, orderID, userID uuid.UUID) (models.Order, error) {
+	ctx, span := tracing.StartSpan(ctx, "order.fetch_order",
+		trace.WithAttributes(
+			attributeUUID("user_id", userID),
+			attributeUUID("order_id", orderID),
+		),
+	)
+	defer span.End()
+
 	order, err := s.getter.GetOrder(ctx, orderID)
 	if err != nil {
+		span.RecordError(err)
 		if errors.Is(err, repositoryErrors.ErrOrderNotFound) {
 			return models.Order{}, serviceErrors.ErrNotFound{ID: orderID}
 		}
@@ -175,8 +225,14 @@ func (s *OrderService) fetchOrder(ctx context.Context, orderID, userID uuid.UUID
 	}
 
 	if order.UserID != userID {
-		return models.Order{}, serviceErrors.ErrNotFound{ID: orderID}
+		err = serviceErrors.ErrNotFound{ID: orderID}
+		span.RecordError(err)
+		return models.Order{}, err
 	}
 
 	return order, nil
+}
+
+func attributeUUID(key string, id uuid.UUID) attribute.KeyValue {
+	return attribute.String(key, id.String())
 }

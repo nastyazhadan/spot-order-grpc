@@ -7,20 +7,24 @@ import (
 	"sort"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
 const (
-	singleFlightKey = "load_markets"
-	roleAdminKey    = "admin"
-	roleViewerKey   = "viewer"
-	roleUserKey     = "user"
+	singleFlightKey    = "load_markets"
+	loadMarketsTimeout = 3 * time.Second
+	roleAdminKey       = "admin"
+	roleViewerKey      = "viewer"
+	roleUserKey        = "user"
 )
 
 type MarketRepository interface {
@@ -50,13 +54,19 @@ func NewService(repo MarketRepository, cacheRepo MarketCacheRepository, ttl time
 func (s *Service) ViewMarkets(ctx context.Context, userRoles []models.UserRole) ([]models.Market, error) {
 	const op = "Service.ViewMarkets"
 
+	ctx, span := tracing.StartSpan(ctx, "spot.view_markets")
+	defer span.End()
+
 	roleKey, ok := effectiveUserRole(userRoles)
 	if !ok {
-		return nil, serviceErrors.ErrUserRoleNotSpecified
+		err := serviceErrors.ErrUserRoleNotSpecified
+		span.RecordError(err)
+		return nil, err
 	}
 
 	markets, err := s.getMarkets(ctx, roleKey)
 	if err != nil {
+		span.RecordError(err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -101,17 +111,32 @@ func (s *Service) getMarketsWithSingleFlight(ctx context.Context, roleKey string
 	resultKey := singleFlightKey + ":" + roleKey
 
 	result, err, _ := s.singleFlight.Do(resultKey, func() (interface{}, error) {
-		return s.loadAndWarmCache(ctx, roleKey)
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), loadMarketsTimeout)
+		defer cancel()
+
+		return s.loadAndWarmCache(loadCtx, roleKey)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	return result.([]models.Market), nil
+	markets, ok := result.([]models.Market)
+	if !ok {
+		return nil, fmt.Errorf("%s: unexpected result type %T", op, result)
+	}
+
+	return markets, nil
 }
 
 func (s *Service) loadAndWarmCache(ctx context.Context, roleKey string) ([]models.Market, error) {
 	const op = "Service.loadAndWarmCache"
+
+	ctx, span := tracing.StartSpan(ctx, "spot.load_and_warm_cache",
+		trace.WithAttributes(
+			attribute.String("roleKey", roleKey),
+		),
+	)
+	defer span.End()
 
 	if markets, err := s.marketCacheRepository.GetAll(ctx, roleKey); err == nil {
 		return markets, nil
@@ -125,6 +150,7 @@ func (s *Service) loadAndWarmCache(ctx context.Context, roleKey string) ([]model
 	filtered := filterByRole(allMarkets, roleKey)
 
 	if err = s.marketCacheRepository.SetAll(ctx, filtered, roleKey, s.cacheTTL); err != nil {
+		span.RecordError(err)
 		zapLogger.Warn(ctx, "failed to update cache", zap.Error(err))
 	}
 
@@ -134,8 +160,12 @@ func (s *Service) loadAndWarmCache(ctx context.Context, roleKey string) ([]model
 func (s *Service) getMarketsFromRepo(ctx context.Context) ([]models.Market, error) {
 	const op = "Service.getMarketsFromRepo"
 
+	ctx, span := tracing.StartSpan(ctx, "spot.get_markets_from_repo")
+	defer span.End()
+
 	allMarkets, err := s.marketRepository.ListAll(ctx)
 	if err != nil {
+		span.RecordError(err)
 		if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
 			return nil, serviceErrors.ErrMarketsNotFound
 		}

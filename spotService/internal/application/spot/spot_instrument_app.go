@@ -17,8 +17,8 @@ import (
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/rate_limit"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
-	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
 	wireGen "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot/gen"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 )
@@ -39,6 +39,7 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 		),
 		fx.Invoke(
 			registerLogger,
+			registerTracer,
 			startGRPCServer,
 		),
 	)
@@ -47,15 +48,26 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 }
 
 func registerLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) error {
-	if err := zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json"); err != nil {
+	zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json")
+
+	lifeCycle.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			return zapLogger.Sync()
+		},
+	})
+
+	return nil
+}
+
+func registerTracer(ctx context.Context, lifeCycle fx.Lifecycle, cfg config.SpotConfig) error {
+	err := tracing.InitTracer(ctx, cfg.Tracing)
+	if err != nil {
 		return err
 	}
 
 	lifeCycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
-			zapLogger.Sync()
-
-			return nil
+			return tracing.ShutdownTracer(ctx)
 		},
 	})
 
@@ -114,7 +126,7 @@ func provideGRPCServer(
 		return nil, fmt.Errorf("validate.ProtovalidateUnary: %w", err)
 	}
 
-	tracer := xrequestid.Server
+	tracer := tracing.UnaryServerInterceptor(cfg.Tracing.ServiceName)
 	logger := logInterceptor.LoggerInterceptor()
 	recoverer := recovery.PanicRecoveryInterceptor
 	rateLimiter := rate_limit.RateLimiter(cfg.GRPCRateLimit)

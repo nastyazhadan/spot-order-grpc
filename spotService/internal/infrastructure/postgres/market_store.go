@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound/postgres"
 )
@@ -25,17 +26,18 @@ func NewMarketStore(pool *pgxpool.Pool) *MarketStore {
 func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 	const op = "infrastructure.MarketStore.ListAll"
 
+	ctx, span := tracing.StartSpan(ctx, "postgres.list_all_markets")
+	defer span.End()
+
 	rows, err := m.pool.Query(ctx, `SELECT id, name, enabled, deleted_at FROM market_store`)
 	if err != nil {
+		span.RecordError(err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	marketsDTO, err := pgx.CollectRows(rows, pgx.RowToStructByName[dto.Market])
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	if err = rows.Err(); err != nil {
+		span.RecordError(err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 

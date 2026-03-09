@@ -13,6 +13,7 @@ import (
 	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type Client struct {
@@ -56,13 +57,24 @@ func (c *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]mo
 			userRoles = append(userRoles, mapper.UserRoleToProto(role))
 		}
 
+		var header metadata.MD
+
 		response, err := c.api.ViewMarkets(ctx, &proto.ViewMarketsRequest{
 			UserRoles: userRoles,
-		})
+		},
+			grpc.Header(&header),
+		)
 		if err != nil {
 			zapLogger.Error(ctx, "ViewMarkets failed", zap.Error(err))
-
 			return nil, err
+		}
+
+		// Нужно ли получать и прокидывать дальше trace-id вручную
+		traceIDs := header.Get("x-trace-id")
+		if len(traceIDs) > 0 {
+			zapLogger.Info(ctx, "received trace id from spot service",
+				zap.String("trace_id", traceIDs[0]),
+			)
 		}
 
 		out := make([]models.Market, 0, len(response.GetMarkets()))
@@ -70,7 +82,6 @@ func (c *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]mo
 			mappedMarket, err := mapper.MarketFromProto(market)
 			if err != nil {
 				zapLogger.Error(ctx, "ViewMarkets failed", zap.Error(err))
-
 				return nil, err
 			}
 			out = append(out, mappedMarket)

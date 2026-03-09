@@ -14,7 +14,7 @@ services:
       - ./spotService/migrations/db_spot:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
-        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${ORDER_DB} && pg_isready -U ${POSTGRES_USER} -d ${SPOT_DB}"]
+        [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${ORDER_DB} && pg_isready -U ${POSTGRES_USER} -d ${SPOT_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,13 +28,57 @@ services:
     container_name: myredis
     ports:
       - "${EXTERNAL_REDIS_PORT}:6379"
-    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "allkeys-lru"]
+    command: [ "redis-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "allkeys-lru" ]
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.147.0
+    container_name: otel-collector
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
+    volumes:
+      - ./shared/infrastructure/otel/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "${OTEL_GRPC_PORT}:4317"
+      - "${OTEL_HTTP_PORT}:4318"
+      - "${OTEL_METRICS_PORT}:8888"
+      - "${OTEL_ZPAGES_PORT}:8889"
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--spider", "http://localhost:8888/metrics" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    depends_on:
+      jaeger:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+  jaeger:
+    image: jaegertracing/jaeger:2.15.0
+    container_name: jaeger
+    command: [ "--config", "/etc/jaeger/jaeger_config.yaml" ]
+    volumes:
+      - ./shared/infrastructure/otel/jaeger_config.yaml:/etc/jaeger/jaeger_config.yaml
+      - jaeger_data:/badger/data
+      - jaeger_key:/badger/key
+    ports:
+      - "${JAEGER_UI_PORT}:16686"
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:13133/status" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     networks:
       - microservices-net
@@ -46,3 +90,5 @@ networks:
 
 volumes:
   pgdata:
+  jaeger_data:
+  jaeger_key:

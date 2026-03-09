@@ -21,9 +21,9 @@ import (
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/rate_limit"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
-	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/xrequestid"
-	"github.com/nastyazhadan/spot-order-grpc/shared/models"
+	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
 func Run(ctx context.Context, cfg config.OrderConfig) {
@@ -44,6 +44,7 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 		),
 		fx.Invoke(
 			registerLogger,
+			registerTracer,
 			startGRPCServer,
 		),
 	)
@@ -52,15 +53,26 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 }
 
 func registerLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) error {
-	if err := zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json"); err != nil {
+	zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json")
+
+	lifeCycle.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			return zapLogger.Sync()
+		},
+	})
+
+	return nil
+}
+
+func registerTracer(ctx context.Context, lifeCycle fx.Lifecycle, cfg config.OrderConfig) error {
+	err := tracing.InitTracer(ctx, cfg.Tracing)
+	if err != nil {
 		return err
 	}
 
 	lifeCycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
-			zapLogger.Sync()
-
-			return nil
+			return tracing.ShutdownTracer(ctx)
 		},
 	})
 
@@ -74,7 +86,7 @@ func provideSpotConnection(
 	connection, err := grpc.NewClient(
 		cfg.SpotAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(xrequestid.Client),
+		grpc.WithUnaryInterceptor(tracing.UnaryClientInterceptor(cfg.Tracing.ServiceName)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("grpc.NewClient: %w", err)
@@ -89,6 +101,25 @@ func provideSpotConnection(
 	return connection, nil
 }
 
+func checkSpotServiceHealth(
+	ctx context.Context,
+	connection *grpc.ClientConn,
+	address string,
+) error {
+	healthClient := grpc_health_v1.NewHealthClient(connection)
+
+	response, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
+	if err != nil {
+		return fmt.Errorf("grpc health check failed for %s: %w", address, err)
+	}
+
+	if response.GetStatus() != grpc_health_v1.HealthCheckResponse_SERVING {
+		return fmt.Errorf("spot instrument is not serving at %s: %s", address, response.GetStatus().String())
+	}
+
+	return nil
+}
+
 func provideMarketClient(
 	ctx context.Context,
 	connection *grpc.ClientConn,
@@ -99,8 +130,8 @@ func provideMarketClient(
 	checkCtx, cancel := context.WithTimeout(ctx, cfg.CheckTimeout)
 	defer cancel()
 
-	if _, err := client.ViewMarkets(checkCtx, []models.UserRole{models.UserRoleUser}); err != nil {
-		return nil, fmt.Errorf("spot instrument is not reachable at %s: %w", cfg.SpotAddress, err)
+	if err := checkSpotServiceHealth(checkCtx, connection, cfg.SpotAddress); err != nil {
+		return nil, err
 	}
 
 	return client, nil
@@ -160,7 +191,7 @@ func provideGRPCServer(
 		return nil, fmt.Errorf("validate.ProtovalidateUnary: %w", err)
 	}
 
-	tracer := xrequestid.Server
+	tracer := tracing.UnaryServerInterceptor(cfg.Tracing.ServiceName)
 	logger := logInterceptor.LoggerInterceptor()
 	recoverer := recovery.PanicRecoveryInterceptor
 	rateLimiter := rate_limit.RateLimiter(cfg.GRPCRateLimit)

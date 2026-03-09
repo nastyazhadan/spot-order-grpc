@@ -63,10 +63,10 @@ go run ./orderService/cmd/order/main.go
 
 Нужно импортировать два файла и указать директорию с зависимостями:
 
-| Файл | Путь в проекте |
-|---|---|
-| Спецификация Order OrderService | `shared/protos/proto/order/v6/order.proto` |
-| Спецификация Spot OrderService | `shared/protos/proto/spot/v6/spot.proto` |
+| Файл | Путь в проекте                             |
+|---|--------------------------------------------|
+| Спецификация Order OrderService | `shared/protos/proto/order/v1/order.proto` |
+| Спецификация Spot OrderService | `shared/protos/proto/spot/v1/spot.proto`   |
 
 > Можно использовать gRPC Server Reflection — если включить reflection на сервере, инструменты вроде grpcui смогут автоматически подтянуть список сервисов и методов без ручного импорта .proto. Важно подключаться к реальному gRPC-порту сервиса (например, :50051 для OrderService).
 

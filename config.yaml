@@ -33,6 +33,11 @@ order:
     create_order: 5
     get_order_status: 50
     window: "1h"
+  tracing:
+    exporter_otlp_endpoint: "localhost:4317"
+    service_name: "order-service"
+    environment: "development"
+    service_version: "1.0.0"
 
 spot:
   address: ":50052"
@@ -57,3 +62,8 @@ spot:
     idle_timeout: "1m"
     max_conn_lifetime: "30m"
     spot_cache_ttl: "24h"
+  tracing:
+    exporter_otlp_endpoint: "localhost:4317"
+    service_name: "spot-service"
+    environment: "development"
+    service_version: "1.0.0"

@@ -13,7 +13,7 @@ import (
 type contextKey string
 
 const (
-	TraceIDKey contextKey = "x-request-id"
+	TraceIDKey contextKey = "x-trace-id"
 	UserIDKey  contextKey = "user_id"
 )
 
@@ -27,7 +27,7 @@ type logger struct {
 	zapLogger *zap.Logger
 }
 
-func Init(levelStr string, asJSON bool) error {
+func Init(levelStr string, asJSON bool) {
 	initOnce.Do(func() {
 		dynamicLevel = zap.NewAtomicLevelAt(parseLevel(levelStr))
 
@@ -52,8 +52,6 @@ func Init(levelStr string, asJSON bool) error {
 			zapLogger: zapLogger,
 		}
 	})
-
-	return nil
 }
 
 func buildEncoderConfig() zapcore.EncoderConfig {
@@ -69,6 +67,7 @@ func buildEncoderConfig() zapcore.EncoderConfig {
 		EncodeDuration: zapcore.SecondsDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 		EncodeName:     zapcore.FullNameEncoder,
+		EncodeLevel:    zapcore.CapitalLevelEncoder,
 	}
 }
 

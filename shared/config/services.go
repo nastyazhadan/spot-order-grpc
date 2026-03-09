@@ -20,6 +20,7 @@ type OrderConfig struct {
 	PostgresPool   PostgresPoolConfig   `mapstructure:"postgres_pool"`
 	RateLimiter    RateLimiterConfig    `mapstructure:"rate_limiter"`
 	Redis          RedisConfig          `mapstructure:"redis"`
+	Tracing        TracingConfig        `mapstructure:"tracing"`
 }
 
 type SpotConfig struct {
@@ -32,6 +33,7 @@ type SpotConfig struct {
 	GRPCRateLimit  int                `mapstructure:"grpc_rate_limit"`
 	PostgresPool   PostgresPoolConfig `mapstructure:"postgres_pool"`
 	Redis          RedisConfig        `mapstructure:"redis"`
+	Tracing        TracingConfig      `mapstructure:"tracing"`
 }
 
 type CircuitBreakerConfig struct {
@@ -65,6 +67,13 @@ type RateLimiterConfig struct {
 	CreateOrder    int64         `mapstructure:"create_order"`
 	GetOrderStatus int64         `mapstructure:"get_order_status"`
 	Window         time.Duration `mapstructure:"window"`
+}
+
+type TracingConfig struct {
+	CollectorEndpoint string `mapstructure:"exporter_otlp_endpoint"`
+	ServiceName       string `mapstructure:"service_name"`
+	Environment       string `mapstructure:"environment"`
+	ServiceVersion    string `mapstructure:"service_version"`
 }
 
 func (r RedisConfig) Address() string {
