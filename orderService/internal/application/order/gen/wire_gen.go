@@ -28,8 +28,7 @@ func NewContainer(ctx context.Context, marketViewer order.MarketViewer, cfg conf
 	}
 	cacheClient := provideCacheClient(client)
 	rateLimiters := provideRateLimiters(cacheClient, cfg)
-	createTimeout := provideCreateTimeout(cfg)
-	orderService := provideOrderService(orderStore, marketViewer, rateLimiters, createTimeout)
+	orderService := provideOrderService(orderStore, marketViewer, rateLimiters, cfg)
 	container := &Container{
 		OrderService: orderService,
 		RedisClient:  client,

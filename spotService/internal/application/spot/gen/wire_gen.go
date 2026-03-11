@@ -28,8 +28,7 @@ func NewContainer(ctx context.Context, cfg config.SpotConfig) (*Container, error
 	}
 	cacheClient := provideCacheClient(client)
 	marketCacheRepository := provideMarketCacheRepository(cacheClient)
-	cacheTTL := provideCacheTTL(cfg)
-	service := provideSpotService(marketStore, marketCacheRepository, cacheTTL)
+	service := provideSpotService(marketStore, marketCacheRepository, cfg)
 	container := &Container{
 		SpotService:  service,
 		RedisClient:  client,
