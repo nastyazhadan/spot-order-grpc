@@ -36,8 +36,8 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 				return cfg
 			}),
 		fx.Provide(
-			provideSpotConnection,
-			provideMarketClient,
+			provideClientConnection,
+			provideGRPCClient,
 			provideContainer,
 			provideListener,
 			provideGRPCServer,
@@ -79,7 +79,7 @@ func registerTracer(ctx context.Context, lifeCycle fx.Lifecycle, cfg config.Orde
 	return nil
 }
 
-func provideSpotConnection(
+func provideClientConnection(
 	lifeCycle fx.Lifecycle,
 	cfg config.OrderConfig,
 ) (*grpc.ClientConn, error) {
@@ -101,46 +101,34 @@ func provideSpotConnection(
 	return connection, nil
 }
 
-func provideMarketClient(
+func provideGRPCClient(
 	ctx context.Context,
 	connection *grpc.ClientConn,
 	cfg config.OrderConfig,
-) (*grpcClient.Client, error) {
-	client := grpcClient.New(connection, cfg.CircuitBreaker)
+) (*grpcClient.SpotClient, error) {
+	client := grpcClient.NewSpotClient(connection, cfg.CircuitBreaker)
 
 	checkCtx, cancel := context.WithTimeout(ctx, cfg.CheckTimeout)
 	defer cancel()
 
-	if err := checkSpotServiceHealth(checkCtx, connection, cfg.SpotAddress); err != nil {
-		return nil, err
+	healthClient := grpc_health_v1.NewHealthClient(connection)
+
+	response, err := healthClient.Check(checkCtx, &grpc_health_v1.HealthCheckRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("grpc health check failed for %s: %w", cfg.SpotAddress, err)
+	}
+
+	if response.GetStatus() != grpc_health_v1.HealthCheckResponse_SERVING {
+		return nil, fmt.Errorf("spot instrument is not serving at %s: %s", cfg.SpotAddress, response.GetStatus().String())
 	}
 
 	return client, nil
 }
 
-func checkSpotServiceHealth(
-	ctx context.Context,
-	connection *grpc.ClientConn,
-	address string,
-) error {
-	healthClient := grpc_health_v1.NewHealthClient(connection)
-
-	response, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
-	if err != nil {
-		return fmt.Errorf("grpc health check failed for %s: %w", address, err)
-	}
-
-	if response.GetStatus() != grpc_health_v1.HealthCheckResponse_SERVING {
-		return fmt.Errorf("spot instrument is not serving at %s: %s", address, response.GetStatus().String())
-	}
-
-	return nil
-}
-
 func provideContainer(
 	ctx context.Context,
 	lifeCycle fx.Lifecycle,
-	marketClient *grpcClient.Client,
+	marketClient *grpcClient.SpotClient,
 	cfg config.OrderConfig,
 ) (*wireGen.Container, error) {
 	container, err := wireGen.NewContainer(ctx, marketClient, cfg)
@@ -182,7 +170,6 @@ func provideListener(
 }
 
 func provideGRPCServer(
-	lifeCycle fx.Lifecycle,
 	container *wireGen.Container,
 	cfg config.OrderConfig,
 ) (*grpc.Server, error) {
@@ -211,13 +198,6 @@ func provideGRPCServer(
 	health.RegisterService(grpcServer)
 	grpcOrder.Register(grpcServer, container.OrderService)
 
-	lifeCycle.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			grpcServer.GracefulStop()
-			return nil
-		},
-	})
-
 	return grpcServer, nil
 }
 
@@ -235,6 +215,10 @@ func startGRPCServer(
 				}
 			}()
 
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			server.GracefulStop()
 			return nil
 		},
 	})

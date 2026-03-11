@@ -16,12 +16,12 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-type Client struct {
+type SpotClient struct {
 	api            proto.SpotInstrumentServiceClient
 	circuitBreaker *gobreaker.CircuitBreaker[[]models.Market]
 }
 
-func New(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig) *Client {
+func NewSpotClient(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig) *SpotClient {
 	circuitBreaker := gobreaker.NewCircuitBreaker[[]models.Market](gobreaker.Settings{
 		Name:        "spotService",
 		MaxRequests: cfg.MaxRequests,
@@ -43,13 +43,13 @@ func New(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig) *Client {
 		},
 	})
 
-	return &Client{
+	return &SpotClient{
 		api:            proto.NewSpotInstrumentServiceClient(connection),
 		circuitBreaker: circuitBreaker,
 	}
 }
 
-func (c *Client) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models.Market, error) {
+func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models.Market, error) {
 
 	markets, err := c.circuitBreaker.Execute(func() ([]models.Market, error) {
 		userRoles := make([]proto.UserRole, 0, len(roles))

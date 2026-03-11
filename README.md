@@ -157,7 +157,7 @@ OrderService / SpotService
 
 ### Шаг 1 — Создать gRPC-запрос
 
-`New → gRPC Request`
+`NewSpotClient → gRPC Request`
 
 ### Шаг 2 — Загрузить .proto файлы
 
@@ -399,7 +399,7 @@ spotOrder/
 ## Архитектура
 
 ```
-  [Client]
+  [SpotClient]
       │ gRPC
       ▼
 ┌─────────────────────────────┐

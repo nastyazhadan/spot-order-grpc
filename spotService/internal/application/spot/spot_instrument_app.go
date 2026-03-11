@@ -117,7 +117,6 @@ func provideListener(
 }
 
 func provideGRPCServer(
-	lifeCycle fx.Lifecycle,
 	container *wireGen.Container,
 	cfg config.SpotConfig,
 ) (*grpc.Server, error) {
@@ -146,13 +145,6 @@ func provideGRPCServer(
 	health.RegisterService(grpcServer)
 	grpcSpot.Register(grpcServer, container.SpotService)
 
-	lifeCycle.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			grpcServer.GracefulStop()
-			return nil
-		},
-	})
-
 	return grpcServer, nil
 }
 
@@ -171,6 +163,10 @@ func startGRPCServer(
 				}
 			}()
 
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			server.GracefulStop()
 			return nil
 		},
 	})
