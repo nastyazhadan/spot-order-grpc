@@ -7,7 +7,7 @@ import (
 	"time"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/mocks"
 

@@ -12,8 +12,8 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 
-	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/repository"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"

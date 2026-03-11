@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/repository"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/mocks"
 

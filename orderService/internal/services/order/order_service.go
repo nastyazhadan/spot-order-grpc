@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/repository"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 )

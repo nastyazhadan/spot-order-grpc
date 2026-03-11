@@ -9,8 +9,8 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/mocks"
-	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/repository"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 
 	fakeValue "github.com/brianvoe/gofakeit/v6"

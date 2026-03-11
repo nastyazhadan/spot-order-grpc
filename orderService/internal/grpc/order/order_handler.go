@@ -10,8 +10,8 @@ import (
 	dto "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/auth"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 
@@ -53,7 +53,7 @@ func (s *serverAPI) CreateOrder(
 	ctx context.Context,
 	request *proto.CreateOrderRequest,
 ) (*proto.CreateOrderResponse, error) {
-	if err := validateCreateError(request); err != nil {
+	if err := validateErrors(request); err != nil {
 		return nil, err
 	}
 
@@ -61,35 +61,30 @@ func (s *serverAPI) CreateOrder(
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "user_id not found in token")
 	}
-	marketID, err := mustParseUUID(request.GetMarketId())
+	marketID, err := uuid.Parse(request.GetMarketId())
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("market_id must be a valid UUID"))
 	}
 
 	orderType := dto.TypeFromProto(request.GetOrderType())
 	orderPrice := sharedModels.NewDecimal(request.GetPrice().GetValue())
 	orderQuantity := request.GetQuantity()
 
-	orderID, orderStatus, err := s.service.CreateOrder(ctx,
-		userID,
-		marketID,
-		orderType,
-		orderPrice,
-		orderQuantity,
+	orderID, orderStatus, err := s.service.CreateOrder(
+		ctx, userID, marketID, orderType, orderPrice, orderQuantity,
 	)
-
 	if err != nil {
 		if !errors.Is(err, serviceErrors.ErrMarketsNotFound) &&
 			!errors.Is(err, serviceErrors.ErrOrderAlreadyExists) &&
 			!errors.Is(err, serviceErrors.ErrCreatingOrderNotRequired) &&
 			!errors.Is(err, serviceErrors.ErrRateLimitExceeded) {
 			zapLogger.Error(ctx, "failed to create order",
-				zap.String("userId", userID.String()),
+				zap.String("user_id", userID.String()),
+				zap.String("market_id", marketID.String()),
 				zap.Error(err),
 			)
 		}
-
-		return nil, validateServiceError(err)
+		return nil, err
 	}
 
 	return &proto.CreateOrderResponse{
@@ -107,9 +102,9 @@ func (s *serverAPI) GetOrderStatus(
 		return nil, status.Error(codes.InvalidArgument, "order_id is required")
 	}
 
-	orderID, err := mustParseUUID(request.GetOrderId())
+	orderID, err := uuid.Parse(request.GetOrderId())
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("user_id must be a valid UUID"))
 	}
 	userID, ok := auth.UserIDFromContext(ctx)
 	if !ok {
@@ -120,13 +115,12 @@ func (s *serverAPI) GetOrderStatus(
 	if err != nil {
 		if !errors.Is(err, serviceErrors.ErrOrderNotFound) {
 			zapLogger.Error(ctx, "failed to get order status",
-				zap.String("orderId", orderID.String()),
-				zap.String("userId", userID.String()),
+				zap.String("order_id", orderID.String()),
+				zap.String("user_id", userID.String()),
 				zap.Error(err),
 			)
 		}
-
-		return nil, validateServiceError(err)
+		return nil, err
 	}
 
 	return &proto.GetOrderStatusResponse{
@@ -134,7 +128,7 @@ func (s *serverAPI) GetOrderStatus(
 	}, nil
 }
 
-func validateCreateError(request *proto.CreateOrderRequest) error {
+func validateErrors(request *proto.CreateOrderRequest) error {
 	if request.GetMarketId() == "" {
 		return status.Error(codes.InvalidArgument, "market_id is required")
 	}
@@ -161,35 +155,4 @@ func validateCreateError(request *proto.CreateOrderRequest) error {
 	}
 
 	return nil
-}
-
-func validateServiceError(err error) error {
-	switch {
-	case errors.Is(err, serviceErrors.ErrCreatingOrderNotRequired):
-		return status.Error(codes.InvalidArgument, err.Error())
-
-	case errors.Is(err, serviceErrors.ErrOrderAlreadyExists):
-		return status.Error(codes.AlreadyExists, err.Error())
-
-	case errors.Is(err, serviceErrors.ErrMarketsNotFound):
-		return status.Error(codes.NotFound, err.Error())
-
-	case errors.Is(err, serviceErrors.ErrOrderNotFound):
-		return status.Error(codes.NotFound, err.Error())
-
-	case errors.Is(err, serviceErrors.ErrRateLimitExceeded):
-		return status.Error(codes.ResourceExhausted, err.Error())
-
-	default:
-		return status.Error(codes.Internal, "internal error")
-	}
-}
-
-func mustParseUUID(s string) (uuid.UUID, error) {
-	id, err := uuid.Parse(s)
-	if err != nil {
-		return uuid.Nil, status.Error(codes.InvalidArgument, fmt.Sprintf("%q must be a valid UUID", s))
-	}
-
-	return id, nil
 }

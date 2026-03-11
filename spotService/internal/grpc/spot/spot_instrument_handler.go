@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	mapper "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/inbound"
@@ -47,16 +47,13 @@ func (s *serverAPI) ViewMarkets(
 
 	markets, err := s.spotInstrument.ViewMarkets(ctx, userRoles)
 	if err != nil {
-		if errors.Is(err, serviceErrors.ErrUserRoleNotSpecified) {
-			return nil, status.Error(codes.InvalidArgument, err.Error())
+		if !errors.Is(err, serviceErrors.ErrMarketsNotFound) &&
+			!errors.Is(err, serviceErrors.ErrUserRoleNotSpecified) {
+			zapLogger.Error(ctx, "failed to view markets",
+				zap.Error(err),
+			)
 		}
-		if errors.Is(err, serviceErrors.ErrMarketsNotFound) {
-			return nil, status.Error(codes.NotFound, err.Error())
-		}
-
-		zapLogger.Error(ctx, "failed to view markets",
-			zap.Error(err))
-		return nil, status.Error(codes.Internal, "internal error")
+		return nil, err
 	}
 
 	out := make([]*proto.Market, 0, len(markets))

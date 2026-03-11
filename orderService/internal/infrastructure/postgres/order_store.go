@@ -14,7 +14,7 @@ import (
 
 	dto "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 )
 

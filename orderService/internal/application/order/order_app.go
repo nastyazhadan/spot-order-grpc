@@ -19,6 +19,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/auth"
+	grpcErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/rate_limit"
@@ -189,6 +190,7 @@ func provideGRPCServer(
 	logger := logInterceptor.LoggerInterceptor()
 	recoverer := recovery.PanicRecoveryInterceptor
 	authenticator := auth.UnaryServerInterceptor(cfg.JWTSecret)
+	errorsMapper := grpcErrors.ErrorMappingInterceptor()
 	rateLimiter := rate_limit.RateLimiter(cfg.GRPCRateLimit)
 
 	grpcServer := grpc.NewServer(
@@ -201,7 +203,9 @@ func provideGRPCServer(
 			MinTime:             cfg.KeepAlive.MinPingInterval,
 			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
 		}),
-		grpc.ChainUnaryInterceptor(rateLimiter, tracer, logger, recoverer, authenticator, validator),
+		grpc.ChainUnaryInterceptor(
+			rateLimiter, tracer, logger, recoverer, authenticator, errorsMapper, validator,
+		),
 	)
 
 	reflection.Register(grpcServer)
