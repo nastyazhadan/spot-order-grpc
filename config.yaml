@@ -38,6 +38,11 @@ order:
     service_name: "order-service"
     environment: "development"
     service_version: "1.0.0"
+  keep_alive:
+    ping_time: "20s"
+    ping_timeout: "5s"
+    min_ping_interval: "10s"
+    permit_without_stream: true
 
 spot:
   address: ":50052"
@@ -67,3 +72,8 @@ spot:
     service_name: "spot-service"
     environment: "development"
     service_version: "1.0.0"
+  keep_alive:
+    ping_time: "20s"
+    ping_timeout: "5s"
+    min_ping_interval: "10s"
+    permit_without_stream: true

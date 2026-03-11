@@ -21,6 +21,7 @@ type OrderConfig struct {
 	RateLimiter    RateLimiterConfig    `mapstructure:"rate_limiter"`
 	Redis          RedisConfig          `mapstructure:"redis"`
 	Tracing        TracingConfig        `mapstructure:"tracing"`
+	KeepAlive      KeepAliveConfig      `mapstructure:"keep_alive"`
 }
 
 type SpotConfig struct {
@@ -34,6 +35,7 @@ type SpotConfig struct {
 	PostgresPool   PostgresPoolConfig `mapstructure:"postgres_pool"`
 	Redis          RedisConfig        `mapstructure:"redis"`
 	Tracing        TracingConfig      `mapstructure:"tracing"`
+	KeepAlive      KeepAliveConfig    `mapstructure:"keep_alive"`
 }
 
 type CircuitBreakerConfig struct {
@@ -74,6 +76,13 @@ type TracingConfig struct {
 	ServiceName       string `mapstructure:"service_name"`
 	Environment       string `mapstructure:"environment"`
 	ServiceVersion    string `mapstructure:"service_version"`
+}
+
+type KeepAliveConfig struct {
+	PingTime            time.Duration `mapstructure:"ping_time"`
+	PingTimeout         time.Duration `mapstructure:"ping_timeout"`
+	MinPingInterval     time.Duration `mapstructure:"min_ping_interval"`
+	PermitWithoutStream bool          `mapstructure:"permit_without_stream"`
 }
 
 func (r RedisConfig) Address() string {

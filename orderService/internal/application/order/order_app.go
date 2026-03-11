@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
 	wireGen "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
@@ -87,6 +88,11 @@ func provideClientConnection(
 		cfg.SpotAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(tracing.UnaryClientInterceptor(cfg.Tracing.ServiceName)),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                cfg.KeepAlive.PingTime,
+			Timeout:             cfg.KeepAlive.PingTimeout,
+			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
+		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("grpc.NewClient: %w", err)
@@ -185,13 +191,15 @@ func provideGRPCServer(
 
 	grpcServer := grpc.NewServer(
 		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize),
-		grpc.ChainUnaryInterceptor(
-			rateLimiter,
-			tracer,
-			logger,
-			recoverer,
-			validator,
-		),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    cfg.KeepAlive.PingTime,
+			Timeout: cfg.KeepAlive.PingTimeout,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             cfg.KeepAlive.MinPingInterval,
+			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
+		}),
+		grpc.ChainUnaryInterceptor(rateLimiter, tracer, logger, recoverer, validator),
 	)
 
 	reflection.Register(grpcServer)

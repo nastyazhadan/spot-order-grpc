@@ -9,6 +9,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
@@ -122,7 +123,7 @@ func provideGRPCServer(
 ) (*grpc.Server, error) {
 	validator, err := validate.ProtovalidateUnary()
 	if err != nil {
-		return nil, fmt.Errorf("validate.ProtovalidateUnary: %w", err)
+		return nil, fmt.Errorf("spot: validate.ProtovalidateUnary: %w", err)
 	}
 
 	tracer := tracing.UnaryServerInterceptor(cfg.Tracing.ServiceName)
@@ -132,13 +133,15 @@ func provideGRPCServer(
 
 	grpcServer := grpc.NewServer(
 		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize),
-		grpc.ChainUnaryInterceptor(
-			rateLimiter,
-			tracer,
-			logger,
-			recoverer,
-			validator,
-		),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    cfg.KeepAlive.PingTime,
+			Timeout: cfg.KeepAlive.PingTimeout,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             cfg.KeepAlive.MinPingInterval,
+			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
+		}),
+		grpc.ChainUnaryInterceptor(rateLimiter, tracer, logger, recoverer, validator),
 	)
 
 	reflection.Register(grpcServer)
