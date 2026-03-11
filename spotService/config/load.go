@@ -24,5 +24,34 @@ func Load() (*config.SpotConfig, error) {
 		return nil, errors.New("SPOT_DB_URI is required")
 	}
 
+	if err := validateSpotTimeouts(cfg); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
+}
+
+func validateSpotTimeouts(cfg config.SpotConfig) error {
+	if cfg.Redis.ConnectionTimeout >= cfg.LoadMarketsTimeout {
+		return fmt.Errorf(
+			"redis.connection_timeout (%s) must be less than load_markets_timeout (%s)",
+			cfg.Redis.ConnectionTimeout, cfg.LoadMarketsTimeout,
+		)
+	}
+
+	if cfg.KeepAlive.PingTimeout >= cfg.KeepAlive.PingTime {
+		return fmt.Errorf(
+			"keep_alive.ping_timeout (%s) must be less than ping_time (%s)",
+			cfg.KeepAlive.PingTimeout, cfg.KeepAlive.PingTime,
+		)
+	}
+
+	if cfg.KeepAlive.MinPingInterval >= cfg.KeepAlive.PingTime {
+		return fmt.Errorf(
+			"keep_alive.min_ping_interval (%s) must be less than ping_time (%s)",
+			cfg.KeepAlive.MinPingInterval, cfg.KeepAlive.PingTime,
+		)
+	}
+
+	return nil
 }

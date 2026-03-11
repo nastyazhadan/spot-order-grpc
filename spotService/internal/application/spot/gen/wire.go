@@ -26,7 +26,6 @@ func NewContainer(ctx context.Context, cfg config.SpotConfig) (*Container, error
 		provideCacheClient,
 		provideMarketStore,
 		provideMarketCacheRepository,
-		provideCacheTTL,
 		provideSpotService,
 		wire.Struct(new(Container), "*"),
 	)

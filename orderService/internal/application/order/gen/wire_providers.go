@@ -3,7 +3,6 @@ package gen
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -21,8 +20,6 @@ type RateLimiters struct {
 	Create svcOrder.RateLimiter
 	Get    svcOrder.RateLimiter
 }
-
-type CreateTimeout time.Duration
 
 func providePostgresPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.Pool, error) {
 	pool, err := db.SetupDBWithPoolConfig(ctx, cfg.DBURI, migrations.Migrations, db.PoolConfig{
@@ -90,15 +87,11 @@ func provideRateLimiters(client cache.Client, cfg config.OrderConfig) RateLimite
 	}
 }
 
-func provideCreateTimeout(cfg config.OrderConfig) CreateTimeout {
-	return CreateTimeout(cfg.CreateTimeout)
-}
-
 func provideOrderService(
 	store *repoPostgres.OrderStore,
 	marketViewer svcOrder.MarketViewer,
 	rateLimiter RateLimiters,
-	timeout CreateTimeout,
+	cfg config.OrderConfig,
 ) *svcOrder.OrderService {
 	return svcOrder.NewOrderService(
 		store,
@@ -106,6 +99,6 @@ func provideOrderService(
 		marketViewer,
 		rateLimiter.Create,
 		rateLimiter.Get,
-		time.Duration(timeout),
+		cfg.CreateTimeout,
 	)
 }

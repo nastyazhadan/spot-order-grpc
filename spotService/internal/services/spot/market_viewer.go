@@ -20,11 +20,10 @@ import (
 )
 
 const (
-	singleFlightKey    = "load_markets"
-	loadMarketsTimeout = 3 * time.Second
-	roleAdminKey       = "admin"
-	roleViewerKey      = "viewer"
-	roleUserKey        = "user"
+	singleFlightKey = "load_markets"
+	roleAdminKey    = "admin"
+	roleViewerKey   = "viewer"
+	roleUserKey     = "user"
 )
 
 type MarketRepository interface {
@@ -40,14 +39,16 @@ type Service struct {
 	marketRepository      MarketRepository
 	marketCacheRepository MarketCacheRepository
 	cacheTTL              time.Duration
+	loadMarketsTimeout    time.Duration
 	singleFlight          singleflight.Group
 }
 
-func NewService(repo MarketRepository, cacheRepo MarketCacheRepository, ttl time.Duration) *Service {
+func NewService(repo MarketRepository, cacheRepo MarketCacheRepository, ttl, timeout time.Duration) *Service {
 	return &Service{
 		marketRepository:      repo,
 		marketCacheRepository: cacheRepo,
 		cacheTTL:              ttl,
+		loadMarketsTimeout:    timeout,
 	}
 }
 
@@ -111,7 +112,7 @@ func (s *Service) getMarketsWithSingleFlight(ctx context.Context, roleKey string
 	resultKey := singleFlightKey + ":" + roleKey
 
 	result, err, _ := s.singleFlight.Do(resultKey, func() (interface{}, error) {
-		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), loadMarketsTimeout)
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.loadMarketsTimeout)
 		defer cancel()
 
 		return s.loadAndWarmCache(loadCtx, roleKey)

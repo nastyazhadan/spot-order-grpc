@@ -3,7 +3,6 @@ package gen
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -16,8 +15,6 @@ import (
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/migrations"
 )
-
-type CacheTTL time.Duration
 
 func providePostgresPool(ctx context.Context, cfg config.SpotConfig) (*pgxpool.Pool, error) {
 	pool, err := db.SetupDBWithPoolConfig(ctx, cfg.DBURI, migrations.Migrations, db.PoolConfig{
@@ -72,14 +69,10 @@ func provideMarketCacheRepository(client cache.Client) *repoRedis.MarketCacheRep
 	return repoRedis.NewMarketCacheRepository(client)
 }
 
-func provideCacheTTL(cfg config.SpotConfig) CacheTTL {
-	return CacheTTL(cfg.Redis.CacheTTL)
-}
-
 func provideSpotService(
 	repository *repoPostgres.MarketStore,
 	cacheRepository *repoRedis.MarketCacheRepository,
-	cacheTTL CacheTTL,
+	cfg config.SpotConfig,
 ) *svcSpot.Service {
-	return svcSpot.NewService(repository, cacheRepository, time.Duration(cacheTTL))
+	return svcSpot.NewService(repository, cacheRepository, cfg.Redis.CacheTTL, cfg.LoadMarketsTimeout)
 }

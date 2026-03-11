@@ -13,7 +13,6 @@ type OrderConfig struct {
 	CheckTimeout   time.Duration        `mapstructure:"check_timeout"`
 	LogLevel       string               `mapstructure:"log_level"`
 	LogFormat      string               `mapstructure:"log_format"`
-	GSTimeout      time.Duration        `mapstructure:"gs_timeout"`
 	MaxRecvMsgSize int                  `mapstructure:"max_recv_msg_size"`
 	GRPCRateLimit  int                  `mapstructure:"grpc_rate_limit"`
 	CircuitBreaker CircuitBreakerConfig `mapstructure:"circuit_breaker"`
@@ -25,17 +24,17 @@ type OrderConfig struct {
 }
 
 type SpotConfig struct {
-	Address        string             `mapstructure:"address"`
-	DBURI          string             `mapstructure:"db_uri"`
-	LogLevel       string             `mapstructure:"log_level"`
-	LogFormat      string             `mapstructure:"log_format"`
-	GSTimeout      time.Duration      `mapstructure:"gs_timeout"`
-	MaxRecvMsgSize int                `mapstructure:"max_recv_msg_size"`
-	GRPCRateLimit  int                `mapstructure:"grpc_rate_limit"`
-	PostgresPool   PostgresPoolConfig `mapstructure:"postgres_pool"`
-	Redis          RedisConfig        `mapstructure:"redis"`
-	Tracing        TracingConfig      `mapstructure:"tracing"`
-	KeepAlive      KeepAliveConfig    `mapstructure:"keep_alive"`
+	Address            string             `mapstructure:"address"`
+	DBURI              string             `mapstructure:"db_uri"`
+	LogLevel           string             `mapstructure:"log_level"`
+	LogFormat          string             `mapstructure:"log_format"`
+	LoadMarketsTimeout time.Duration      `mapstructure:"load_markets_timeout"`
+	MaxRecvMsgSize     int                `mapstructure:"max_recv_msg_size"`
+	GRPCRateLimit      int                `mapstructure:"grpc_rate_limit"`
+	PostgresPool       PostgresPoolConfig `mapstructure:"postgres_pool"`
+	Redis              RedisConfig        `mapstructure:"redis"`
+	Tracing            TracingConfig      `mapstructure:"tracing"`
+	KeepAlive          KeepAliveConfig    `mapstructure:"keep_alive"`
 }
 
 type CircuitBreakerConfig struct {

@@ -30,7 +30,6 @@ func NewContainer(
 		provideCacheClient,
 		provideOrderStore,
 		provideRateLimiters,
-		provideCreateTimeout,
 		provideOrderService,
 		wire.Struct(new(Container), "*"),
 	)
