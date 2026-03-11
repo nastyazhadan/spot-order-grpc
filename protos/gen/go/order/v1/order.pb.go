@@ -136,7 +136,6 @@ func (OrderType) EnumDescriptor() ([]byte, []int) {
 type GetOrderStatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"` // UUID of the order to get
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`    // UUID of the user
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -174,13 +173,6 @@ func (*GetOrderStatusRequest) Descriptor() ([]byte, []int) {
 func (x *GetOrderStatusRequest) GetOrderId() string {
 	if x != nil {
 		return x.OrderId
-	}
-	return ""
-}
-
-func (x *GetOrderStatusRequest) GetUserId() string {
-	if x != nil {
-		return x.UserId
 	}
 	return ""
 }
@@ -231,7 +223,6 @@ func (x *GetOrderStatusResponse) GetStatus() OrderStatus {
 
 type CreateOrderRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`                                   // UUID of the user to create
 	MarketId      string                 `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`                             // UUID of the market to create
 	OrderType     OrderType              `protobuf:"varint,3,opt,name=order_type,json=orderType,proto3,enum=order.v1.OrderType" json:"order_type,omitempty"` // Type of the order to create
 	Price         *decimal.Decimal       `protobuf:"bytes,4,opt,name=price,proto3" json:"price,omitempty"`                                                   // Price of the order
@@ -268,13 +259,6 @@ func (x *CreateOrderRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use CreateOrderRequest.ProtoReflect.Descriptor instead.
 func (*CreateOrderRequest) Descriptor() ([]byte, []int) {
 	return file_order_v1_order_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *CreateOrderRequest) GetUserId() string {
-	if x != nil {
-		return x.UserId
-	}
-	return ""
 }
 
 func (x *CreateOrderRequest) GetMarketId() string {
@@ -361,20 +345,18 @@ var File_order_v1_order_proto protoreflect.FileDescriptor
 
 const file_order_v1_order_proto_rawDesc = "" +
 	"\n" +
-	"\x14order/v1/order.proto\x12\border.v1\x1a\x19google/type/decimal.proto\x1a\x1bbuf/validate/validate.proto\"_\n" +
+	"\x14order/v1/order.proto\x12\border.v1\x1a\x19google/type/decimal.proto\x1a\x1bbuf/validate/validate.proto\"K\n" +
 	"\x15GetOrderStatusRequest\x12#\n" +
-	"\border_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aorderId\x12!\n" +
-	"\auser_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06userId\"G\n" +
+	"\border_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aorderIdJ\x04\b\x02\x10\x03R\auser_id\"G\n" +
 	"\x16GetOrderStatusResponse\x12-\n" +
-	"\x06status\x18\x01 \x01(\x0e2\x15.order.v1.OrderStatusR\x06status\"\xef\x01\n" +
-	"\x12CreateOrderRequest\x12!\n" +
-	"\auser_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06userId\x12%\n" +
+	"\x06status\x18\x01 \x01(\x0e2\x15.order.v1.OrderStatusR\x06status\"\xdb\x01\n" +
+	"\x12CreateOrderRequest\x12%\n" +
 	"\tmarket_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bmarketId\x12>\n" +
 	"\n" +
 	"order_type\x18\x03 \x01(\x0e2\x13.order.v1.OrderTypeB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\torderType\x12*\n" +
 	"\x05price\x18\x04 \x01(\v2\x14.google.type.DecimalR\x05price\x12#\n" +
-	"\bquantity\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\bquantity\"_\n" +
+	"\bquantity\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\bquantityJ\x04\b\x01\x10\x02R\auser_id\"_\n" +
 	"\x13CreateOrderResponse\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12-\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x15.order.v1.OrderStatusR\x06status*v\n" +

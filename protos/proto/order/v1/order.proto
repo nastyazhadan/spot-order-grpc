@@ -30,7 +30,8 @@ service OrderService {
 
 message GetOrderStatusRequest {
   string order_id = 1 [(buf.validate.field).string.uuid = true]; // UUID of the order to get
-  string user_id = 2 [(buf.validate.field).string.uuid = true]; // UUID of the user
+  reserved 2;
+  reserved "user_id"; // removed: user_id is now taken from JWT token
 }
 
 message GetOrderStatusResponse {
@@ -38,7 +39,8 @@ message GetOrderStatusResponse {
 }
 
 message CreateOrderRequest {
-  string user_id = 1 [(buf.validate.field).string.uuid = true]; // UUID of the user to create
+  reserved 1;
+  reserved "user_id"; // removed: user_id is now taken from JWT token
   string market_id = 2 [(buf.validate.field).string.uuid = true]; // UUID of the market to create
   OrderType order_type = 3 [
     (buf.validate.field).enum = { defined_only: true, not_in: 0 }
