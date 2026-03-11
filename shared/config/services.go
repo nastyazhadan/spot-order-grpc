@@ -9,6 +9,7 @@ type OrderConfig struct {
 	Address        string               `mapstructure:"address"`
 	DBURI          string               `mapstructure:"db_uri"`
 	SpotAddress    string               `mapstructure:"spot_address"`
+	JWTSecret      string               `mapstructure:"jwt_secret"`
 	CreateTimeout  time.Duration        `mapstructure:"create_timeout"`
 	CheckTimeout   time.Duration        `mapstructure:"check_timeout"`
 	LogLevel       string               `mapstructure:"log_level"`

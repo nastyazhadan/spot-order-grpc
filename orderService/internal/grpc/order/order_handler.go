@@ -11,6 +11,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/auth"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 
@@ -56,9 +57,9 @@ func (s *serverAPI) CreateOrder(
 		return nil, err
 	}
 
-	userID, err := mustParseUUID(request.GetUserId())
-	if err != nil {
-		return nil, err
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "user_id not found in token")
 	}
 	marketID, err := mustParseUUID(request.GetMarketId())
 	if err != nil {
@@ -102,17 +103,17 @@ func (s *serverAPI) GetOrderStatus(
 	ctx context.Context,
 	request *proto.GetOrderStatusRequest,
 ) (*proto.GetOrderStatusResponse, error) {
-	if request.GetOrderId() == "" || request.GetUserId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "order_id and user_id are required")
+	if request.GetOrderId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "order_id is required")
 	}
 
 	orderID, err := mustParseUUID(request.GetOrderId())
 	if err != nil {
 		return nil, err
 	}
-	userID, err := mustParseUUID(request.GetUserId())
-	if err != nil {
-		return nil, err
+	userID, ok := auth.UserIDFromContext(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "user_id not found in token")
 	}
 
 	orderStatus, err := s.service.GetOrderStatus(ctx, orderID, userID)
@@ -134,8 +135,8 @@ func (s *serverAPI) GetOrderStatus(
 }
 
 func validateCreateError(request *proto.CreateOrderRequest) error {
-	if request.GetUserId() == "" || request.GetMarketId() == "" {
-		return status.Error(codes.InvalidArgument, "user_id and market_id are required")
+	if request.GetMarketId() == "" {
+		return status.Error(codes.InvalidArgument, "market_id is required")
 	}
 
 	if request.GetOrderType() == proto.OrderType_TYPE_UNSPECIFIED {
