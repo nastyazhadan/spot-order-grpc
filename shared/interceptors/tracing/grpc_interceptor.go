@@ -3,7 +3,7 @@ package tracing
 import (
 	"context"
 
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"

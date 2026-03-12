@@ -6,7 +6,7 @@ import (
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 
 	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"

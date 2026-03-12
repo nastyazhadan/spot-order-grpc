@@ -10,7 +10,7 @@ order:
   circuit_breaker:
     max_requests: 3
     interval: "10s"
-    timeout: "5s"
+    timeout: "3s"
     max_failures: 5
   postgres_pool:
     max_conns: 10
@@ -47,7 +47,7 @@ spot:
   address: ":50052"
   log_level: "info"
   log_format: "console"
-  load_markets_timeout: "3s"
+  load_markets_timeout: "5s"
   max_recv_msg_size: 10485760 # 10MB
   grpc_rate_limit: 1000
   postgres_pool:

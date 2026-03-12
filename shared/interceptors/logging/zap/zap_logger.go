@@ -58,7 +58,7 @@ func buildEncoderConfig() zapcore.EncoderConfig {
 	return zapcore.EncoderConfig{
 		TimeKey:        "timestamp",
 		LevelKey:       "level",
-		NameKey:        "logger",
+		NameKey:        "logging",
 		CallerKey:      "caller",
 		MessageKey:     "message",
 		StacktraceKey:  "stacktrace",

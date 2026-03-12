@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

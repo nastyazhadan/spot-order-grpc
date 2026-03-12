@@ -14,7 +14,7 @@ import (
 
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )

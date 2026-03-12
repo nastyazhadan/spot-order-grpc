@@ -12,7 +12,7 @@ import (
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/auth"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 
 	"github.com/google/uuid"

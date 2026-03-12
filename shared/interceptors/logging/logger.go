@@ -1,11 +1,11 @@
-package logger
+package logging
 
 import (
 	"context"
 	"path"
 	"time"
 
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

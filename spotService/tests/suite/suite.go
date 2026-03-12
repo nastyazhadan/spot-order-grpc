@@ -21,7 +21,7 @@ import (
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db/migrator"
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logger/zap"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
