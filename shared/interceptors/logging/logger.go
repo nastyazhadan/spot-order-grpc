@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func LoggerInterceptor() grpc.UnaryServerInterceptor {
+func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		request interface{},

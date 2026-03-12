@@ -157,7 +157,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
-			recovery.PanicRecoveryInterceptor,
+			recovery.UnaryServerInterceptor,
 			validator,
 		),
 	)

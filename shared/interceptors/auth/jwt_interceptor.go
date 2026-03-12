@@ -16,6 +16,11 @@ type contextKey string
 
 const UserIDKey contextKey = "user_id"
 
+var skipAuthMethods = map[string]struct{}{
+	"/grpc.health.v1.Health/Check": {},
+	"/grpc.health.v1.Health/Watch": {},
+}
+
 type Claims struct {
 	jwt.RegisteredClaims
 	UserID string `json:"user_id"`
@@ -28,6 +33,10 @@ func UnaryServerInterceptor(secret string) grpc.UnaryServerInterceptor {
 		serverInfo *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (any, error) {
+		if _, ok := skipAuthMethods[serverInfo.FullMethod]; ok {
+			return handler(ctx, request)
+		}
+
 		md, found := metadata.FromIncomingContext(ctx)
 		if !found {
 			return nil, status.Error(codes.Unauthenticated, "missing metadata")

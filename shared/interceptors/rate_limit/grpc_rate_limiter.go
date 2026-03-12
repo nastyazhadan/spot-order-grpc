@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func RateLimiter(rps int) grpc.UnaryServerInterceptor {
+func UnaryServerInterceptor(rps int) grpc.UnaryServerInterceptor {
 	limiter := rate.NewLimiter(rate.Limit(rps), rps)
 
 	return func(

@@ -51,7 +51,7 @@ services:
       - "${OTEL_ZPAGES_PORT}:8889"
       - "${OTEL_HEALTH_PORT}:13133"
     healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--spider", "http://localhost:13133/health" ]
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:13133/health" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -78,6 +78,61 @@ services:
       timeout: 3s
       retries: 5
       start_period: 10s
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+  spot-service:
+    build:
+      context: .
+      dockerfile: spotService/Dockerfile
+    container_name: spot-service
+    environment:
+      SPOT_DB_URI: ${SPOT_DB_URI}
+    ports:
+      - "${SPOT_GRPC_PORT}:50052"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: [ "CMD", "grpc_health_probe", "-addr=:50052" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+  order-service:
+    build:
+      context: .
+      dockerfile: orderService/Dockerfile
+    container_name: order-service
+    environment:
+      ORDER_DB_URI: ${ORDER_DB_URI}
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "${ORDER_GRPC_PORT}:50051"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+      spot-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "grpc_health_probe", "-addr=:50051" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
     networks:
       - microservices-net

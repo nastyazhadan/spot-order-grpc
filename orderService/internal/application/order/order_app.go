@@ -187,11 +187,11 @@ func provideGRPCServer(
 	}
 
 	tracer := tracing.UnaryServerInterceptor(cfg.Tracing.ServiceName)
-	logger := logInterceptor.LoggerInterceptor()
-	recoverer := recovery.PanicRecoveryInterceptor
+	logger := logInterceptor.UnaryServerInterceptor()
+	recoverer := recovery.UnaryServerInterceptor
 	authenticator := auth.UnaryServerInterceptor(cfg.JWTSecret)
-	errorsMapper := grpcErrors.ErrorMappingInterceptor()
-	rateLimiter := rate_limit.RateLimiter(cfg.GRPCRateLimit)
+	errorsMapper := grpcErrors.UnaryServerInterceptor()
+	rateLimiter := rate_limit.UnaryServerInterceptor(cfg.GRPCRateLimit)
 
 	grpcServer := grpc.NewServer(
 		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize),

@@ -88,10 +88,28 @@ func SetNopLogger() {
 }
 
 func Sync() error {
-	if globalLogger != nil {
-		return globalLogger.zapLogger.Sync()
+	if globalLogger == nil || globalLogger.zapLogger == nil {
+		return nil
 	}
-	return nil
+
+	err := globalLogger.zapLogger.Sync()
+	if err != nil && isIgnorableSyncError(err) {
+		return nil
+	}
+
+	return err
+}
+
+func isIgnorableSyncError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	msg := strings.ToLower(err.Error())
+
+	return strings.Contains(msg, "sync /dev/stdout: invalid argument") ||
+		strings.Contains(msg, "sync /dev/stderr: invalid argument") ||
+		strings.Contains(msg, "inappropriate ioctl for device")
 }
 
 func With(fields ...zap.Field) *logger {

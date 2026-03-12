@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func ErrorMappingInterceptor() grpc.UnaryServerInterceptor {
+func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		request any,
