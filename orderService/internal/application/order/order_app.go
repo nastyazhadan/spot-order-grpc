@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -22,11 +24,12 @@ import (
 	grpcErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	metricInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/metrics"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/rate_limit"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
-	"google.golang.org/grpc/health/grpc_health_v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
 
 func Run(ctx context.Context, cfg config.OrderConfig) {
@@ -48,6 +51,7 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 		fx.Invoke(
 			registerLogger,
 			registerTracer,
+			registerMetrics,
 			startGRPCServer,
 		),
 	)
@@ -67,7 +71,11 @@ func registerLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) error {
 	return nil
 }
 
-func registerTracer(ctx context.Context, lifeCycle fx.Lifecycle, cfg config.OrderConfig) error {
+func registerTracer(
+	ctx context.Context,
+	lifeCycle fx.Lifecycle,
+	cfg config.OrderConfig,
+) error {
 	err := tracing.InitTracer(ctx, cfg.Tracing)
 	if err != nil {
 		return err
@@ -79,6 +87,39 @@ func registerTracer(ctx context.Context, lifeCycle fx.Lifecycle, cfg config.Orde
 		},
 	})
 
+	return nil
+}
+
+func registerMetrics(
+	ctx context.Context,
+	lifeCycle fx.Lifecycle,
+	cfg config.OrderConfig,
+) error {
+	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, cfg.Tracing)
+	if err != nil {
+		return err
+	}
+
+	httpServer := &http.Server{Addr: cfg.Metrics.HTTPAddress, Handler: promhttp.Handler()}
+
+	lifeCycle.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go func() {
+				if err = httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					zapLogger.Error(ctx, "Failed to start metrics server", zap.Error(err))
+				}
+			}()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			metrics.ShutdownsTotal.WithLabelValues(cfg.Tracing.ServiceName, "graceful").Inc()
+			if err = meterProvider.Shutdown(ctx); err != nil {
+				zapLogger.Error(ctx, "Failed to shutdown metrics provider", zap.Error(err))
+			}
+
+			return httpServer.Shutdown(ctx)
+		},
+	})
 	return nil
 }
 
@@ -119,15 +160,9 @@ func provideGRPCClient(
 	checkCtx, cancel := context.WithTimeout(ctx, cfg.CheckTimeout)
 	defer cancel()
 
-	healthClient := grpc_health_v1.NewHealthClient(connection)
-
-	response, err := healthClient.Check(checkCtx, &grpc_health_v1.HealthCheckRequest{})
+	err := health.CheckHealth(checkCtx, connection)
 	if err != nil {
-		return nil, fmt.Errorf("grpc health check failed for %s: %w", cfg.SpotAddress, err)
-	}
-
-	if response.GetStatus() != grpc_health_v1.HealthCheckResponse_SERVING {
-		return nil, fmt.Errorf("spot instrument is not serving at %s: %s", cfg.SpotAddress, response.GetStatus().String())
+		return nil, fmt.Errorf("spot connection at %s health check: %w", cfg.SpotAddress, err)
 	}
 
 	return client, nil
@@ -191,7 +226,8 @@ func provideGRPCServer(
 	recoverer := recovery.UnaryServerInterceptor
 	authenticator := auth.UnaryServerInterceptor(cfg.JWTSecret)
 	errorsMapper := grpcErrors.UnaryServerInterceptor()
-	rateLimiter := rate_limit.UnaryServerInterceptor(cfg.GRPCRateLimit)
+	rateLimiter := rate_limit.UnaryServerInterceptor(cfg.GRPCRateLimit, cfg.Tracing.ServiceName)
+	meter := metricInterceptor.UnaryServerInterceptor(cfg.Tracing.ServiceName)
 
 	grpcServer := grpc.NewServer(
 		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize),
@@ -204,7 +240,7 @@ func provideGRPCServer(
 			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
 		}),
 		grpc.ChainUnaryInterceptor(
-			rateLimiter, tracer, logger, recoverer, authenticator, errorsMapper, validator,
+			rateLimiter, tracer, meter, logger, recoverer, authenticator, errorsMapper, validator,
 		),
 	)
 

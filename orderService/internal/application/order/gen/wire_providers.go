@@ -100,5 +100,6 @@ func provideOrderService(
 		rateLimiter.Create,
 		rateLimiter.Get,
 		cfg.CreateTimeout,
+		cfg.Tracing.ServiceName,
 	)
 }

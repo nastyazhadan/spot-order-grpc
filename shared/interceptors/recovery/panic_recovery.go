@@ -14,10 +14,10 @@ import (
 
 func UnaryServerInterceptor(
 	ctx context.Context,
-	request interface{},
+	request any,
 	_ *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (response interface{}, err error) {
+) (response any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			zapLogger.Error(ctx, "panic recovered in gRPC handler",

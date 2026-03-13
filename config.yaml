@@ -36,6 +36,9 @@ order:
     service_name: "order-service"
     environment: "development"
     service_version: "1.0.0"
+  metrics:
+    http_address: ":9091"
+    export_interval: "15s"
   keep_alive:
     ping_time: "20s"
     ping_timeout: "5s"
@@ -70,6 +73,9 @@ spot:
     service_name: "spot-service"
     environment: "development"
     service_version: "1.0.0"
+  metrics:
+    http_address: ":9092"
+    export_interval: "15s"
   keep_alive:
     ping_time: "20s"
     ping_timeout: "5s"

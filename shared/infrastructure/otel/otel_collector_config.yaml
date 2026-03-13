@@ -5,11 +5,6 @@ receivers:
         endpoint: 0.0.0.0:4317
         max_recv_msg_size_mib: 64
         read_buffer_size: 512_000
-      http:
-        endpoint: 0.0.0.0:4318
-        cors:
-          allowed_origins: ["*"]
-          allowed_headers: ["*"]
 
 processors:
   batch:
@@ -35,6 +30,9 @@ exporters:
     tls:
       insecure: true
 
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+
   debug:
     verbosity: detailed
 
@@ -57,9 +55,15 @@ service:
   telemetry:
     logs:
       level: "info"
+    metrics:
+      address: 0.0.0.0:8888
 
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, resourcedetection, probabilistic_sampler, batch]
       exporters: [otlp_grpc/jaeger, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheusremotewrite]

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -17,10 +19,12 @@ import (
 	grpcErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	metricInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/metrics"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/rate_limit"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	wireGen "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot/gen"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 )
@@ -42,6 +46,7 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 		fx.Invoke(
 			registerLogger,
 			registerTracer,
+			registerMetrics,
 			startGRPCServer,
 		),
 	)
@@ -61,7 +66,11 @@ func registerLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) error {
 	return nil
 }
 
-func registerTracer(ctx context.Context, lifeCycle fx.Lifecycle, cfg config.SpotConfig) error {
+func registerTracer(
+	ctx context.Context,
+	lifeCycle fx.Lifecycle,
+	cfg config.SpotConfig,
+) error {
 	err := tracing.InitTracer(ctx, cfg.Tracing)
 	if err != nil {
 		return err
@@ -73,6 +82,39 @@ func registerTracer(ctx context.Context, lifeCycle fx.Lifecycle, cfg config.Spot
 		},
 	})
 
+	return nil
+}
+
+func registerMetrics(
+	ctx context.Context,
+	lifeCycle fx.Lifecycle,
+	cfg config.SpotConfig,
+) error {
+	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, cfg.Tracing)
+	if err != nil {
+		return err
+	}
+
+	httpServer := &http.Server{Addr: cfg.Metrics.HTTPAddress, Handler: promhttp.Handler()}
+
+	lifeCycle.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go func() {
+				if err = httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					zapLogger.Error(ctx, "Failed to start metrics server", zap.Error(err))
+				}
+			}()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			metrics.ShutdownsTotal.WithLabelValues(cfg.Tracing.ServiceName, "graceful").Inc()
+			if err = meterProvider.Shutdown(ctx); err != nil {
+				zapLogger.Error(ctx, "Failed to shutdown metrics provider", zap.Error(err))
+			}
+
+			return httpServer.Shutdown(ctx)
+		},
+	})
 	return nil
 }
 
@@ -131,7 +173,8 @@ func provideGRPCServer(
 	logger := logInterceptor.UnaryServerInterceptor()
 	recoverer := recovery.UnaryServerInterceptor
 	errorsMapper := grpcErrors.UnaryServerInterceptor()
-	rateLimiter := rate_limit.UnaryServerInterceptor(cfg.GRPCRateLimit)
+	rateLimiter := rate_limit.UnaryServerInterceptor(cfg.GRPCRateLimit, cfg.Tracing.ServiceName)
+	meter := metricInterceptor.UnaryServerInterceptor(cfg.Tracing.ServiceName)
 
 	grpcServer := grpc.NewServer(
 		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize),
@@ -144,7 +187,7 @@ func provideGRPCServer(
 			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
 		}),
 		grpc.ChainUnaryInterceptor(
-			rateLimiter, tracer, logger, recoverer, errorsMapper, validator,
+			rateLimiter, tracer, meter, logger, recoverer, errorsMapper, validator,
 		),
 	)
 

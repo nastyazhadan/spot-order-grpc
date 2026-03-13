@@ -14,6 +14,7 @@ import (
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
@@ -25,6 +26,8 @@ type OrderService struct {
 	createRateLimiter RateLimiter
 	getRateLimiter    RateLimiter
 	createTimeout     time.Duration
+
+	serviceName string
 }
 
 type Saver interface {
@@ -45,7 +48,8 @@ type RateLimiter interface {
 	Window() time.Duration
 }
 
-func NewOrderService(s Saver, g Getter, mv MarketViewer, create, get RateLimiter, t time.Duration) *OrderService {
+func NewOrderService(s Saver, g Getter, mv MarketViewer, create, get RateLimiter, t time.Duration, name string,
+) *OrderService {
 	return &OrderService{
 		saver:             s,
 		getter:            g,
@@ -53,6 +57,7 @@ func NewOrderService(s Saver, g Getter, mv MarketViewer, create, get RateLimiter
 		createRateLimiter: create,
 		getRateLimiter:    get,
 		createTimeout:     t,
+		serviceName:       name,
 	}
 }
 
@@ -72,7 +77,7 @@ func (s *OrderService) CreateOrder(
 		defer cancel()
 	}
 
-	if err := s.checkRateLimit(ctx, userID, s.createRateLimiter); err != nil {
+	if err := s.checkRateLimit(ctx, userID, s.createRateLimiter, "create_order"); err != nil {
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -85,13 +90,15 @@ func (s *OrderService) CreateOrder(
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
+	metrics.OrdersCreatedTotal.WithLabelValues(s.serviceName).Inc()
+
 	return orderID, orderStatus, nil
 }
 
 func (s *OrderService) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
 	const op = "OrderService.GetOrderStatus"
 
-	if err := s.checkRateLimit(ctx, userID, s.getRateLimiter); err != nil {
+	if err := s.checkRateLimit(ctx, userID, s.getRateLimiter, "get_order_status"); err != nil {
 		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -103,7 +110,7 @@ func (s *OrderService) GetOrderStatus(ctx context.Context, orderID, userID uuid.
 	return order.Status, nil
 }
 
-func (s *OrderService) checkRateLimit(ctx context.Context, userID uuid.UUID, limiter RateLimiter) error {
+func (s *OrderService) checkRateLimit(ctx context.Context, userID uuid.UUID, limiter RateLimiter, method string) error {
 	limit := limiter.Limit()
 	window := limiter.Window()
 
@@ -127,6 +134,7 @@ func (s *OrderService) checkRateLimit(ctx context.Context, userID uuid.UUID, lim
 			Window: window,
 		}
 		span.RecordError(err)
+		metrics.RateLimitRejectedTotal.WithLabelValues(s.serviceName, method).Inc()
 		return err
 	}
 

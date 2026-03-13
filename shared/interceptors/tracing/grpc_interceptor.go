@@ -62,11 +62,9 @@ func UnaryClientInterceptor(serviceName string) grpc.UnaryClientInterceptor {
 		tracer := otel.GetTracerProvider().Tracer(serviceName)
 		propagator := otel.GetTextMapPropagator()
 
-		spanName := formatSpanName(ctx, method)
-
 		ctx, span := tracer.Start(
 			ctx,
-			spanName,
+			method,
 			trace.WithSpanKind(trace.SpanKindClient),
 		)
 		defer span.End()
@@ -84,14 +82,6 @@ func UnaryClientInterceptor(serviceName string) grpc.UnaryClientInterceptor {
 
 		return err
 	}
-}
-
-func formatSpanName(ctx context.Context, method string) string {
-	if !trace.SpanContextFromContext(ctx).IsValid() {
-		return "client." + method
-	}
-
-	return method
 }
 
 func extractOutgoingMetadata(ctx context.Context) metadata.MD {

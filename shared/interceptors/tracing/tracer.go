@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -23,6 +24,7 @@ const (
 	DefaultRetryMaxInterval     = 5 * time.Second
 	DefaultRetryMaxElapsedTime  = 30 * time.Second
 	DefaultTimeout              = 5 * time.Second
+	DefaultTraceRatio           = 1.0
 )
 
 var serviceName string
@@ -33,7 +35,7 @@ func InitTracer(ctx context.Context, cfg config.TracingConfig) error {
 	exporter, err := otlptracegrpc.New(
 		ctx,
 		otlptracegrpc.WithEndpoint(cfg.CollectorEndpoint),
-		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithTLSCredentials(insecure.NewCredentials()),
 		otlptracegrpc.WithTimeout(DefaultTimeout),
 		otlptracegrpc.WithCompressor(DefaultCompressor),
 		otlptracegrpc.WithRetry(otlptracegrpc.RetryConfig{
@@ -66,7 +68,7 @@ func InitTracer(ctx context.Context, cfg config.TracingConfig) error {
 	tracerProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
 		sdktrace.WithResource(attributeResource),
-		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(1.0))),
+		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(DefaultTraceRatio))),
 	)
 
 	otel.SetTracerProvider(tracerProvider)

@@ -3,7 +3,6 @@ package order
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"strconv"
 
@@ -63,7 +62,7 @@ func (s *serverAPI) CreateOrder(
 	}
 	marketID, err := uuid.Parse(request.GetMarketId())
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("market_id must be a valid UUID"))
+		return nil, status.Error(codes.InvalidArgument, "market_id must be a valid UUID")
 	}
 
 	orderType := dto.TypeFromProto(request.GetOrderType())
@@ -104,7 +103,7 @@ func (s *serverAPI) GetOrderStatus(
 
 	orderID, err := uuid.Parse(request.GetOrderId())
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("user_id must be a valid UUID"))
+		return nil, status.Error(codes.InvalidArgument, "user_id must be a valid UUID")
 	}
 	userID, ok := auth.UserIDFromContext(ctx)
 	if !ok {
