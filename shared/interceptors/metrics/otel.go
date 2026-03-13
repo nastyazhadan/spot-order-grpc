@@ -8,7 +8,6 @@ import (
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -19,6 +18,7 @@ func InitOpenTelemetry(
 	ctx context.Context,
 	metricsCfg config.MetricsConfig,
 	tracingCfg config.TracingConfig,
+	res *resource.Resource,
 ) (*sdkmetric.MeterProvider, error) {
 	exporter, err := otlpmetricgrpc.New(
 		ctx,
@@ -27,18 +27,6 @@ func InitOpenTelemetry(
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize OpenTelemetry exporter: %w", err)
-	}
-
-	res, err := resource.New(
-		ctx,
-		resource.WithAttributes(
-			attribute.String("service.name", tracingCfg.ServiceName),
-			attribute.String("service.version", tracingCfg.ServiceVersion),
-			attribute.String("deployment.environment", tracingCfg.Environment),
-		),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create otel resource: %w", err)
 	}
 
 	meterProvider := sdkmetric.NewMeterProvider(

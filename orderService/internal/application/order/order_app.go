@@ -50,8 +50,7 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 		),
 		fx.Invoke(
 			registerLogger,
-			registerTracer,
-			registerMetrics,
+			registerOtel,
 			startGRPCServer,
 		),
 	)
@@ -71,31 +70,21 @@ func registerLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) error {
 	return nil
 }
 
-func registerTracer(
+func registerOtel(
 	ctx context.Context,
 	lifeCycle fx.Lifecycle,
 	cfg config.OrderConfig,
 ) error {
-	err := tracing.InitTracer(ctx, cfg.Tracing)
+	res, err := tracing.NewResource(ctx, cfg.Tracing)
 	if err != nil {
 		return err
 	}
 
-	lifeCycle.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			return tracing.ShutdownTracer(ctx)
-		},
-	})
+	if err = tracing.InitTracer(ctx, cfg.Tracing, res); err != nil {
+		return err
+	}
 
-	return nil
-}
-
-func registerMetrics(
-	ctx context.Context,
-	lifeCycle fx.Lifecycle,
-	cfg config.OrderConfig,
-) error {
-	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, cfg.Tracing)
+	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, cfg.Tracing, res)
 	if err != nil {
 		return err
 	}
@@ -116,7 +105,9 @@ func registerMetrics(
 			if err = meterProvider.Shutdown(ctx); err != nil {
 				zapLogger.Error(ctx, "Failed to shutdown metrics provider", zap.Error(err))
 			}
-
+			if err = tracing.ShutdownTracer(ctx); err != nil {
+				zapLogger.Error(ctx, "Failed to shutdown tracer", zap.Error(err))
+			}
 			return httpServer.Shutdown(ctx)
 		},
 	})

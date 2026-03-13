@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -15,6 +14,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -29,7 +29,22 @@ const (
 
 var serviceName string
 
-func InitTracer(ctx context.Context, cfg config.TracingConfig) error {
+func NewResource(ctx context.Context, cfg config.TracingConfig) (*resource.Resource, error) {
+	return resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceName(cfg.ServiceName),
+			semconv.ServiceVersion(cfg.ServiceVersion),
+			attribute.String("environment", cfg.Environment),
+		),
+		resource.WithHost(),
+		resource.WithOS(),
+		resource.WithProcess(),
+		resource.WithContainer(),
+		resource.WithTelemetrySDK(),
+	)
+}
+
+func InitTracer(ctx context.Context, cfg config.TracingConfig, res *resource.Resource) error {
 	serviceName = cfg.ServiceName
 
 	exporter, err := otlptracegrpc.New(
@@ -49,30 +64,13 @@ func InitTracer(ctx context.Context, cfg config.TracingConfig) error {
 		return err
 	}
 
-	attributeResource, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName(cfg.ServiceName),
-			semconv.ServiceVersion(cfg.ServiceVersion),
-			attribute.String("environment", cfg.Environment),
-		),
-		resource.WithHost(),
-		resource.WithOS(),
-		resource.WithProcess(),
-		resource.WithContainer(),
-		resource.WithTelemetrySDK(),
-	)
-	if err != nil {
-		return err
-	}
-
 	tracerProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(attributeResource),
+		sdktrace.WithResource(res),
 		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(DefaultTraceRatio))),
 	)
 
 	otel.SetTracerProvider(tracerProvider)
-
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
