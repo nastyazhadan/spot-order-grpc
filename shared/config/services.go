@@ -83,6 +83,7 @@ type TracingConfig struct {
 type MetricsConfig struct {
 	HTTPAddress    string        `mapstructure:"http_address"`
 	ExportInterval time.Duration `mapstructure:"export_interval"`
+	PushGatewayURL string        `mapstructure:"push_gateway_url"`
 }
 
 type KeepAliveConfig struct {

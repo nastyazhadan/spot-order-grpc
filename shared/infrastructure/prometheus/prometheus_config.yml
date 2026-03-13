@@ -18,3 +18,8 @@ scrape_configs:
   - job_name: "spot-service"
     static_configs:
       - targets: [ "spot-service:9092" ]
+
+  - job_name: "pushgateway"
+    honor_labels: true
+    static_configs:
+      - targets: [ "pushgateway:9093" ]

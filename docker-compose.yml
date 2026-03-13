@@ -1,5 +1,62 @@
 services:
 
+  spot-service:
+    build:
+      context: .
+      dockerfile: spotService/Dockerfile
+    container_name: spot-service
+    environment:
+      SPOT_DB_URI: ${SPOT_DB_URI}
+    ports:
+      - "${SPOT_GRPC_PORT}:50052"
+      - "${SPOT_METRICS_PORT}:9092"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: [ "CMD", "grpc_health_probe", "-addr=:50052" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+  order-service:
+    build:
+      context: .
+      dockerfile: orderService/Dockerfile
+    container_name: order-service
+    environment:
+      ORDER_DB_URI: ${ORDER_DB_URI}
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "${ORDER_GRPC_PORT}:50051"
+      - "${ORDER_METRICS_PORT}:9091"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+      spot-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "grpc_health_probe", "-addr=:50051" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
   postgres:
     image: postgres:17.0-alpine3.20
     container_name: mypostgres
@@ -58,7 +115,7 @@ services:
     depends_on:
       prometheus:
         condition: service_healthy
-      jaeger:
+      tempo:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -113,78 +170,37 @@ services:
     networks:
       - microservices-net
 
-  jaeger:
-    image: jaegertracing/all-in-one:1.62.0
-    container_name: jaeger
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
-      - SPAN_STORAGE_TYPE=memory
-      - MEMORY_MAX_TRACES=50000
+  tempo:
+    image: grafana/tempo:2.7.2
+    container_name: tempo
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./shared/infrastructure/tempo/tempo.yaml:/etc/tempo.yaml
+      - tempo_data:/var/tempo
     ports:
-      - "${JAEGER_UI_PORT}:16686"
+      - "${TEMPO_HTTP_PORT}:3200"
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:16686" ]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
+      test: [ "CMD", "wget", "--quiet", "--spider", "http://localhost:3200/ready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     restart: unless-stopped
     networks:
       - microservices-net
 
-  spot-service:
-    build:
-      context: .
-      dockerfile: spotService/Dockerfile
-    container_name: spot-service
-    environment:
-      SPOT_DB_URI: ${SPOT_DB_URI}
+  pushgateway:
+    image: prom/pushgateway:v1.10.0
+    container_name: pushgateway
+    command: [ "--web.listen-address=:9093" ]
     ports:
-      - "${SPOT_GRPC_PORT}:50052"
-      - "${SPOT_METRICS_PORT}:9092"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      otel-collector:
-        condition: service_started
+      - "${PUSHGATEWAY_PORT}:9093"
     healthcheck:
-      test: [ "CMD", "grpc_health_probe", "-addr=:50052" ]
+      test: [ "CMD", "wget", "--quiet", "--spider", "http://localhost:9093/-/healthy" ]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
-    restart: unless-stopped
-    networks:
-      - microservices-net
-
-  order-service:
-    build:
-      context: .
-      dockerfile: orderService/Dockerfile
-    container_name: order-service
-    environment:
-      ORDER_DB_URI: ${ORDER_DB_URI}
-      JWT_SECRET: ${JWT_SECRET}
-    ports:
-      - "${ORDER_GRPC_PORT}:50051"
-      - "${ORDER_METRICS_PORT}:9091"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      otel-collector:
-        condition: service_started
-      spot-service:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD", "grpc_health_probe", "-addr=:50051" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+      start_period: 5s
     restart: unless-stopped
     networks:
       - microservices-net
@@ -198,3 +214,4 @@ volumes:
   pgdata:
   prometheus_data:
   grafana_data:
+  tempo_data:

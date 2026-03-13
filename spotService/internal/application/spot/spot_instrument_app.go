@@ -96,7 +96,8 @@ func registerOtel(
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			metrics.ShutdownsTotal.WithLabelValues(cfg.Tracing.ServiceName, "graceful").Inc()
+			metrics.PushShutdownMetric(ctx, cfg.Metrics.PushGatewayURL, cfg.Tracing.ServiceName)
+
 			if err = meterProvider.Shutdown(ctx); err != nil {
 				zapLogger.Error(ctx, "Failed to shutdown metrics provider", zap.Error(err))
 			}

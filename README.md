@@ -2,12 +2,12 @@
 
 Два gRPC-сервиса для работы со спотовыми торговыми инструментами и ордерами.
 
-- **SpotInstrumentService** — справочник рынков (markets) с фильтрацией по ролям пользователя и Redis-кэшом
-- **OrderService** — создание ордеров и получение статуса, с проверкой рынка через SpotService, circuit breaker и per-user rate limiting
+- **SpotInstrumentService** — справочник рынков (`markets`) с фильтрацией по ролям пользователя, Redis-кэшем и `singleflight`
+- **OrderService** — создание ордеров и получение статуса, с проверкой рынка через SpotService, JWT-аутентификацией, circuit breaker и per-user rate limiting
 
 ## Технологический стек
 
-Go · gRPC / Protobuf · PostgreSQL 17 · Redis 7 · OpenTelemetry · Jaeger · Circuit Breaker (gobreaker) · Zap · Goose · Wire · Taskfile
+Go 1.25 · gRPC / Protobuf / Protovalidate · PostgreSQL 17 · Redis 7 · OpenTelemetry · Prometheus · Grafana · Tempo · Circuit Breaker (`gobreaker`) · JWT · Zap · Goose · Taskfile
 
 ---
 
@@ -33,57 +33,70 @@ cp .env.example .env
 ### 2. Запуск инфраструктуры
 
 ```bash
-docker compose up -d
+docker compose up --build -d
 ```
 
-Docker Compose поднимает четыре сервиса:
+Docker Compose поднимает весь стек целиком:
 
-| Контейнер | Описание | Порт |
+| Контейнер | Описание | Порты |
 |---|---|---|
+| `spot-service` | SpotInstrumentService | `50052` gRPC, `9092` metrics |
+| `order-service` | OrderService | `50051` gRPC, `9091` metrics |
 | `mypostgres` | PostgreSQL 17 | `5433` |
 | `myredis` | Redis 7 | `6379` |
-| `otel-collector` | OpenTelemetry Collector | `4317` (gRPC), `4318` (HTTP) |
-| `jaeger` | Jaeger UI (distributed tracing) | `16686` |
+| `otel-collector` | OpenTelemetry Collector | `4317` (OTLP gRPC), `13133` (health), `8888` (collector metrics) |
+| `prometheus` | Prometheus | `9090` |
+| `grafana` | Grafana | `3000` |
+| `tempo` | Tempo | `3200` |
+| `pushgateway` | Prometheus Pushgateway | `9093` |
 
-PostgreSQL при старте автоматически создаёт базы `order_db` и `spot_db`, а также загружает seed-данные рынков.
+PostgreSQL при старте создаёт базы `order_db` и `spot_db`, а сами сервисы затем автоматически применяют SQL-миграции через Goose. Seed-данные рынков загружаются миграцией `spotService`.
 
-> **Примечание:** сервисы (`orderService` и `spotService`) запускаются **локально**, а не в Docker. Подключение к PostgreSQL и Redis идёт через `localhost`.
+Полезные адреса после запуска:
 
-### 3. Запуск сервисов
-
-Из корня проекта в **двух отдельных терминалах**:
-
-```bash
-# Терминал 1 — SpotInstrumentService (порт :50052)
-go run ./spotService/cmd/spot/main.go
-
-# Терминал 2 — OrderService (порт :50051)
-go run ./orderService/cmd/order/main.go
-```
-
-Сервисы при старте автоматически применяют SQL-миграции через Goose.
+| Компонент | Адрес |
+|---|---|
+| OrderService gRPC | `localhost:50051` |
+| SpotInstrumentService gRPC | `localhost:50052` |
+| OrderService metrics | `http://localhost:9091/metrics` |
+| SpotInstrumentService metrics | `http://localhost:9092/metrics` |
+| OTel Collector health | `http://localhost:13133/health` |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` |
+| Pushgateway | `http://localhost:9093` |
 
 ---
 
 ## Конфигурация
 
-Основная конфигурация читается из `config.yaml` (через Viper). Секреты подключения к БД задаются через переменные окружения (`.env`).
+Основная конфигурация читается из `config.yaml` (через Viper). Секреты и строки подключения задаются через переменные окружения (`.env`).
 
 ### Переменные окружения (`.env`)
 
 | Переменная | Описание |
 |---|---|
-| `ORDER_DB_URI` | URI подключения к `order_db` — **обязательна** |
-| `SPOT_DB_URI` | URI подключения к `spot_db` — **обязательна** |
-| `POSTGRES_USER` | Пользователь PostgreSQL (для docker-compose) |
-| `POSTGRES_PASSWORD` | Пароль PostgreSQL (для docker-compose) |
-| `POSTGRES_PORT` | Внешний порт PostgreSQL (по умолчанию `5433`) |
-| `ORDER_DB` | Имя базы для OrderService |
-| `SPOT_DB` | Имя базы для SpotService |
-| `EXTERNAL_REDIS_PORT` | Внешний порт Redis (по умолчанию `6379`) |
-| `OTEL_GRPC_PORT` | gRPC-порт OTel Collector (по умолчанию `4317`) |
-| `OTEL_HEALTH_PORT` | Health-check порт OTel Collector (по умолчанию `13133`) |
-| `JAEGER_UI_PORT` | Порт Jaeger UI (по умолчанию `16686`) |
+| `JWT_SECRET` | секрет для подписи и проверки JWT — **обязателен для OrderService** |
+| `ORDER_DB_URI` | URI подключения к `order_db` — **обязателен** |
+| `SPOT_DB_URI` | URI подключения к `spot_db` — **обязателен** |
+| `POSTGRES_USER` | пользователь PostgreSQL для docker-compose |
+| `POSTGRES_PASSWORD` | пароль PostgreSQL для docker-compose |
+| `POSTGRES_PORT` | внешний порт PostgreSQL (по умолчанию `5433`) |
+| `ORDER_DB` | имя базы для OrderService |
+| `SPOT_DB` | имя базы для SpotService |
+| `EXTERNAL_REDIS_PORT` | внешний порт Redis (по умолчанию `6379`) |
+| `ORDER_GRPC_PORT` | внешний gRPC-порт OrderService |
+| `SPOT_GRPC_PORT` | внешний gRPC-порт SpotInstrumentService |
+| `ORDER_METRICS_PORT` | внешний HTTP-порт метрик OrderService |
+| `SPOT_METRICS_PORT` | внешний HTTP-порт метрик SpotInstrumentService |
+| `OTEL_GRPC_PORT` | OTLP gRPC-порт OTel Collector (по умолчанию `4317`) |
+| `OTEL_HEALTHCHECK_PORT` | health-check порт OTel Collector (по умолчанию `13133`) |
+| `PROMETHEUS_METRICS_PORT` | HTTP-порт метрик самого OTel Collector (`8888`) |
+| `PROMETHEUS_PORT` | внешний порт Prometheus |
+| `PUSHGATEWAY_PORT` | внешний порт Pushgateway |
+| `GRAFANA_PORT` | внешний порт Grafana |
+| `GRAFANA_ADMIN_USER` | логин администратора Grafana |
+| `GRAFANA_ADMIN_PASSWORD` | пароль администратора Grafana |
+| `TEMPO_HTTP_PORT` | внешний HTTP-порт Tempo |
 
 ### Параметры `config.yaml`
 
@@ -93,54 +106,86 @@ go run ./orderService/cmd/order/main.go
 
 | Параметр | Значение по умолчанию | Описание |
 |---|---|---|
-| `address` | `:50051` | Адрес для прослушивания |
-| `spot_address` | `localhost:50052` | Адрес SpotService (для исходящих вызовов) |
-| `create_timeout` | `5s` | Таймаут на создание ордера |
-| `check_timeout` | `15s` | Таймаут health check при старте |
-| `log_level` | `info` | Уровень логов (`debug`, `info`, `warn`, `error`) |
-| `log_format` | `console` | Формат логов (`console` или `json`) |
-| `gs_timeout` | `5s` | Таймаут graceful shutdown |
-| `max_recv_msg_size` | `10485760` | Макс. размер входящего gRPC-сообщения (10 MB) |
-| `grpc_rate_limit` | `1000` | Глобальный RPS-лимит на сервере (token bucket) |
-| `circuit_breaker.max_requests` | `3` | Макс. запросов в полуоткрытом состоянии |
-| `circuit_breaker.interval` | `10s` | Интервал сброса счётчиков ошибок |
-| `circuit_breaker.timeout` | `5s` | Время до перехода из open → half-open |
-| `circuit_breaker.max_failures` | `5` | Порог последовательных отказов для открытия |
-| `postgres_pool.max_conns` | `10` | Макс. соединений в пуле |
-| `postgres_pool.min_conns` | `2` | Мин. соединений в пуле |
-| `redis.host` | `localhost` | Redis host |
+| `address` | `:50051` | адрес для прослушивания |
+| `spot_address` | `spot-service:50052` | адрес SpotService для исходящих вызовов |
+| `create_timeout` | `5s` | таймаут на создание ордера |
+| `check_timeout` | `15s` | таймаут health check при старте |
+| `log_level` | `info` | уровень логов (`debug`, `info`, `warn`, `error`) |
+| `log_format` | `console` | формат логов (`console` или `json`) |
+| `max_recv_msg_size` | `10485760` | макс. размер входящего gRPC-сообщения (10 MB) |
+| `grpc_rate_limit` | `1000` | глобальный RPS-лимит на сервере |
+| `circuit_breaker.max_requests` | `3` | макс. запросов в half-open состоянии |
+| `circuit_breaker.interval` | `10s` | интервал сброса счётчиков ошибок |
+| `circuit_breaker.timeout` | `3s` | время до перехода из open → half-open |
+| `circuit_breaker.max_failures` | `5` | порог последовательных отказов для открытия circuit breaker |
+| `postgres_pool.max_conns` | `10` | макс. соединений в пуле |
+| `postgres_pool.min_conns` | `2` | мин. соединений в пуле |
+| `postgres_pool.max_conn_lifetime` | `30m` | макс. lifetime соединения |
+| `postgres_pool.max_conn_idle_time` | `5m` | макс. idle time соединения |
+| `redis.host` | `myredis` | Redis host |
 | `redis.port` | `6379` | Redis port |
-| `redis.pool_size` | `10` | Размер пула соединений |
-| `rate_limiter.create_order` | `5` | Лимит CreateOrder на пользователя за окно |
-| `rate_limiter.get_order_status` | `50` | Лимит GetOrderStatus на пользователя за окно |
-| `rate_limiter.window` | `1h` | Окно rate limiter |
-| `tracing.exporter_otlp_endpoint` | `localhost:4317` | Адрес OTel Collector |
+| `redis.connection_timeout` | `3s` | таймаут подключения к Redis |
+| `redis.pool_size` | `10` | размер пула соединений |
+| `redis.min_idle` | `2` | минимум idle-соединений |
+| `redis.max_idle` | `10` | максимум idle-соединений |
+| `redis.max_active_conns` | `15` | максимум активных соединений |
+| `redis.idle_timeout` | `1m` | idle timeout |
+| `redis.max_conn_lifetime` | `30m` | max lifetime для соединения |
+| `rate_limiter.create_order` | `5` | лимит `CreateOrder` на пользователя за окно |
+| `rate_limiter.get_order_status` | `50` | лимит `GetOrderStatus` на пользователя за окно |
+| `rate_limiter.window` | `1h` | окно per-user rate limiter |
+| `tracing.exporter_otlp_endpoint` | `otel-collector:4317` | адрес OTel Collector |
+| `tracing.service_name` | `order-service` | имя сервиса в telemetry |
+| `tracing.environment` | `development` | окружение |
+| `tracing.service_version` | `1.0.0` | версия сервиса |
+| `metrics.http_address` | `:9091` | HTTP-адрес Prometheus metrics endpoint |
+| `metrics.export_interval` | `15s` | интервал экспорта OTEL metrics |
+| `metrics.push_gateway_url` | `http://pushgateway:9093` | адрес Pushgateway |
+| `keep_alive.ping_time` | `20s` | интервал server keepalive ping |
+| `keep_alive.ping_timeout` | `5s` | timeout ожидания pong |
+| `keep_alive.min_ping_interval` | `10s` | минимальный интервал клиентских ping |
+| `keep_alive.permit_without_stream` | `true` | разрешить keepalive без активного стрима |
 
 #### `spot` — SpotInstrumentService
 
-Аналогичные секции `address`, `log_level`, `log_format`, `gs_timeout`, `max_recv_msg_size`, `grpc_rate_limit`, `postgres_pool`, `redis`, `tracing`. Дополнительно:
+Аналогичные секции `address`, `log_level`, `log_format`, `max_recv_msg_size`, `grpc_rate_limit`, `postgres_pool`, `redis`, `tracing`, `metrics`, `keep_alive`. 
+Дополнительно:
 
 | Параметр | Значение по умолчанию | Описание |
 |---|---|---|
+| `load_markets_timeout` | `5s` | таймаут загрузки рынков |
 | `redis.spot_cache_ttl` | `24h` | TTL кэша рынков в Redis |
 
 ---
 
-## Трейсинг (OpenTelemetry + Jaeger)
+## Трейсинг и метрики (OpenTelemetry + Prometheus + Grafana + Tempo)
 
-Оба сервиса инструментированы через OpenTelemetry. Трейсы экспортируются в Jaeger через OTel Collector по протоколу OTLP gRPC.
+Что происходит сейчас:
+
+- трейсы экспортируются в `otel-collector`, а дальше уходят в `Tempo`
+- метрики сервисов доступны по HTTP на `:9091/metrics` и `:9092/metrics`
+- OTel metrics также экспортируются через collector в Prometheus Remote Write
+- Grafana подключена к `Prometheus` и `Tempo` через provisioning
+- при shutdown сервисы отправляют служебную метрику в Pushgateway
 
 **Архитектура:**
 ```
 OrderService / SpotService
-        ↓ OTLP gRPC (localhost:4317)
+        ↓ OTLP gRPC (otel-collector:4317)
   otel-collector
-        ↓ OTLP gRPC (jaeger:4317)
-       Jaeger
-        ↑ UI (localhost:16686)
+    ├── traces  → Tempo
+    └── metrics → Prometheus Remote Write
+
+Prometheus ← scrape:
+  - order-service:9091
+  - spot-service:9092
+  - otel-collector:8888
+  - pushgateway:9093
+
+Grafana → Prometheus + Tempo
 ```
 
-Контекст трейса автоматически передаётся между сервисами через метаданные gRPC (W3C TraceContext). В каждый лог-запись автоматически добавляется `x-trace-id` активного спана.
+Контекст трейса автоматически передаётся между сервисами через gRPC metadata (W3C TraceContext). В логах используется zap-логгер с trace-id из контекста.
 
 **Покрытые операции:**
 - `UnaryServerInterceptor` / `UnaryClientInterceptor` — каждый gRPC-вызов
@@ -149,7 +194,9 @@ OrderService / SpotService
 - `postgres.save_order`, `postgres.get_order`, `postgres.list_all_markets`
 - `redis.get_markets`, `redis.set_markets`
 
-**Jaeger UI:** http://localhost:16686
+**Интерфейсы:**
+- Grafana UI: `http://localhost:3000`
+- Prometheus UI: `http://localhost:9090`
 
 ---
 
@@ -168,7 +215,7 @@ OrderService / SpotService
 | Спецификация OrderService | `shared/protos/proto/order/v1/order.proto` |
 | Спецификация SpotService | `shared/protos/proto/spot/v1/spot.proto` |
 
-> Альтернатива: используйте gRPC Server Reflection — сервисы регистрируют рефлексию, поэтому grpcui / grpcurl могут автоматически получить схему без импорта .proto. Подключайтесь к реальному порту сервиса (`:50051` или `:50052`).
+> Альтернатива: используйте gRPC Server Reflection — оба сервиса регистрируют reflection и gRPC Health Checking, поэтому `grpcurl`, `grpcui` и Postman могут получить схему без ручного импорта proto.
 
 ---
 
@@ -213,13 +260,25 @@ OrderService / SpotService
 
 ### OrderService — `localhost:50051`
 
+Для вызовов `OrderService` нужен JWT в metadata / headers:
+
+```text
+authorization: Bearer <token>
+```
+
+Сгенерировать тестовый токен можно из корня проекта:
+
+```bash
+task token:generate
+```
+Текущий генератор создаёт токен с `user_id = 550e8400-e29b-41d4-a716-446655440003`.
+
 #### `OrderService / CreateOrder`
 
 Создаёт ордер. Перед сохранением проверяет, что `market_id` существует и активен в SpotService.
 
 ```json
 {
-  "user_id": "550e8400-e29b-41d4-a716-446655440000",
   "market_id": "",
   "order_type": "TYPE_LIMIT",
   "price": { "value": "45000.50" },
@@ -229,11 +288,12 @@ OrderService / SpotService
 
 | Поле | Тип | Требования                                                        |
 |---|---|-------------------------------------------------------------------|
-| `user_id` | UUID | обязательно                                                       |
 | `market_id` | UUID | обязательно, должен существовать в SpotService                    |
 | `order_type` | enum | `TYPE_LIMIT`, `TYPE_MARKET`, `TYPE_STOP_LOSS`, `TYPE_TAKE_PROFIT` |
 | `price.value` | string | число > 0                                                         |
 | `quantity` | int64 | число > 0                                                         |
+
+> `user_id` больше не передаётся в request — он извлекается из JWT токена unary interceptor-ом.
 
 **Пример ответа:**
 ```json
@@ -243,7 +303,7 @@ OrderService / SpotService
 }
 ```
 
-> ⚠️ **Rate Limiter:** не более **5 ордеров в час** на один `user_id`. При превышении — `RESOURCE_EXHAUSTED`.
+> ⚠️ **Rate Limiter:** не более **5 ордеров в час** на один `user_id` из токена. При превышении — `RESOURCE_EXHAUSTED`.
 
 ---
 
@@ -254,7 +314,6 @@ OrderService / SpotService
 ```json
 {
   "order_id": "",
-  "user_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -265,8 +324,8 @@ OrderService / SpotService
 }
 ```
 
-> Ордер возвращается только если `user_id` совпадает с создателем — иначе `NOT_FOUND`.
-> Rate limit: **50 запросов в час** на `user_id`.
+> Ордер возвращается только если `user_id` из JWT совпадает с создателем — иначе `NOT_FOUND`.
+> Rate limit: **50 запросов в час** на `user_id` из токена.
 
 ---
 
@@ -275,11 +334,12 @@ OrderService / SpotService
 | Код | Причина |
 |---|---|
 | `OK` | Успех |
-| `INVALID_ARGUMENT` | Пустые или некорректные поля, неверный UUID |
+| `INVALID_ARGUMENT` | пустые или некорректные поля, неверный UUID, пустые/дублирующиеся роли |
+| `UNAUTHENTICATED` | отсутствует или невалиден JWT для `OrderService` |
 | `NOT_FOUND` | Рынок или ордер не найден |
 | `ALREADY_EXISTS` | Ордер с таким ID уже существует |
 | `RESOURCE_EXHAUSTED` | Сработал per-user Rate Limiter или глобальный RPS-лимит |
-| `UNAVAILABLE` | Сработал Circuit Breaker (SpotService недоступен) |
+| `UNAVAILABLE` | Сработал Circuit Breaker или недоступен зависимый сервис |
 | `INTERNAL` | Внутренняя ошибка сервера |
 
 ---
@@ -306,16 +366,7 @@ task test:all:race
 task clean:cache
 ```
 
-Если Task не установлен, команды доступны напрямую через `go test`:
-
-```bash
-# Юнит-тесты
-go test ./orderService/... ./spotService/... -v
-
-# Интеграционные тесты
-go test -tags=integration ./orderService/tests/... -v -timeout 10m
-go test -tags=integration ./spotService/tests/... -v -timeout 5m
-```
+Если Task не установлен, команды доступны напрямую через `go test`.
 
 ---
 
@@ -328,10 +379,11 @@ spotOrder/
 │   ├── config/load.go                      # загрузка конфига (viper + env)
 │   ├── internal/
 │   │   ├── application/
+│   │   │   ├── dto/                        # inbound/outbound DTO
 │   │   │   ├── order/order_app.go          # сборка fx-приложения
-│   │   │   └── gen/                        # Wire DI (wire.go, wire_gen.go)
+│   │   │   └── order/gen/                  # Wire DI (wire.go, wire_gen.go)
 │   │   ├── domain/models/order.go          # доменные модели
-│   │   ├── grpc/order/order_handler.go     # gRPC-хэндлеры + маппинг ошибок
+│   │   ├── grpc/order/order_handler.go     # gRPC-хэндлеры + извлечение user_id из JWT context
 │   │   ├── infrastructure/
 │   │   │   ├── postgres/order_store.go     # хранение ордеров
 │   │   │   └── redis/order_rate_limiter.go # per-user rate limiter (Lua-скрипт)
@@ -344,25 +396,25 @@ spotOrder/
 │   ├── config/load.go                      # загрузка конфига (viper + env)
 │   ├── internal/
 │   │   ├── application/
+│   │   │   ├── dto/                        # inbound/outbound DTO
 │   │   │   ├── spot/spot_instrument_app.go # сборка fx-приложения
-│   │   │   └── gen/                        # Wire DI
+│   │   │   └── spot/gen/                   # Wire DI
 │   │   ├── grpc/spot/                      # gRPC-хэндлеры
 │   │   ├── infrastructure/
 │   │   │   ├── postgres/market_store.go    # чтение рынков из БД
 │   │   │   └── redis/market_cache.go       # кэш рынков (TTL, по ролям)
 │   │   └── services/spot/market_viewer.go  # бизнес-логика + singleflight
-│   ├── migrations/                         # SQL-миграции + seed-данные
+│   ├── migrations/                         # SQL-миграции + init DB scripts
 │   └── tests/                              # интеграционные тесты
 │
 ├── shared/
-│   ├── client/grpc/                        # gRPC-клиент OrderService → SpotService
-│   │   └── client_grpc.go                  # circuit breaker + маппинг
+│   ├── client/grpc/                        # gRPC-клиенты между сервисами
+│   │   ├── mapper/                         # маппинг ролей и markets
+│   │   ├── order_client.go                 # клиент OrderService
+│   │   └── spot_client.go                  # клиент SpotService + circuit breaker
 │   ├── config/
 │   │   ├── load.go                         # godotenv + viper
 │   │   └── services.go                     # структуры OrderConfig, SpotConfig
-│   ├── errors/
-│   │   ├── repository/errors.go            # ошибки слоя репозитория
-│   │   └── service/errors.go               # ошибки слоя сервиса
 │   ├── infrastructure/
 │   │   ├── cache/redis_cache_client.go     # обёртка над go-redis
 │   │   ├── db/
@@ -370,16 +422,18 @@ spotOrder/
 │   │   │   └── migrator/                   # Goose-мигратор
 │   │   ├── health/health_checker.go        # gRPC Health Check
 │   │   └── otel/otel_collector_config.yaml # конфиг OTel Collector
+│   │   ├── prometheus/prometheus_config.yml
+│   │   └── tempo/tempo.yaml
 │   ├── interceptors/
-│   │   ├── logger/logger.go                # gRPC unary logger interceptor
-│   │   ├── logger/zap/zap_logger.go        # zap + trace-id из контекста
-│   │   ├── rate_limit/grpc_rate_limiter.go # глобальный RPS-лимит (token bucket)
-│   │   ├── recovery/panic_recovery.go      # перехват паник
-│   │   ├── tracing/
-│   │   │   ├── tracer.go                   # init/shutdown TracerProvider
-│   │   │   ├── grpc_interceptor.go         # server/client tracing interceptors
-│   │   │   └── metadata_carrier.go         # W3C propagation через gRPC metadata
-│   │   └── validate/proto_validator.go     # protovalidate interceptor
+│   │   ├── auth/                           # JWT interceptor + token generator
+│   │   ├── errors/                         # gRPC error mapping
+│   │   ├── logging/                        # gRPC unary logger interceptor
+│   │   ├── metrics/                        # gRPC metrics + OTel meter provider
+│   │   ├── rate_limit/                     # глобальный RPS-лимит
+│   │   ├── recovery/                       # перехват паник
+│   │   ├── tracing/                        # tracing interceptors + propagator
+│   │   └── validate/                       # protovalidate interceptor
+│   ├── metrics/                            # Prometheus-метрики и shutdown push
 │   └── models/                             # общие модели (Market, UserRole, Decimal)
 │
 ├── protos/
@@ -387,8 +441,9 @@ spotOrder/
 │   ├── gen/go/                             # сгенерированный Go-код
 │   └── lib/                                # зависимости (buf/validate, google/type)
 │
+├── grafana/                                # provisioning и dashboards
 ├── config.yaml                             # основная конфигурация обоих сервисов
-├── docker-compose.yml                      # PostgreSQL + Redis + OTel Collector + Jaeger
+├── docker-compose.yml                      # весь локальный стек
 ├── Taskfile.yaml                           # команды для тестов, генерации кода
 ├── go.work                                 # Go workspace
 └── .env.example                            # шаблон переменных окружения
@@ -399,33 +454,41 @@ spotOrder/
 ## Архитектура
 
 ```
-  [SpotClient]
-      │ gRPC
-      ▼
-┌─────────────────────────────┐
-│        OrderService         │  :50051
-│  interceptors (chain):      │
-│   rateLimiter → tracer →    │
-│   logger → recoverer →      │
-│   validator                 │
-│─────────────────────────────│
-│  OrderHandler               │
-│  OrderService (business)    │
-│    ├── RateLimiter (Redis)  │
-│    ├── MarketViewer ────────┼──── gRPC ──→ SpotService
-│    └── OrderStore (PG)      │              (circuit breaker)
-└─────────────────────────────┘
+  [SpotClient / grpcurl / Postman]
+              │ gRPC
+              ▼
+┌────────────────────────────────────┐
+│           OrderService             │  :50051
+│  interceptors (chain):             │
+│   rateLimiter → tracer → meter →   │
+│   logger → recoverer → auth →      │
+│   errorMapper → validator          │
+│────────────────────────────────────│
+│  OrderHandler                      │
+│  OrderService (business)           │
+│    ├── RateLimiter (Redis)         │
+│    ├── SpotClient ─────────────────┼──── gRPC ──→ SpotService
+│    │      (circuit breaker)        │
+│    └── OrderStore (PostgreSQL)     │
+└────────────────────────────────────┘
 
-┌─────────────────────────────┐
-│       SpotService           │  :50052
-│  (те же interceptors)       │
-│─────────────────────────────│
-│  SpotInstrumentHandler      │
-│  MarketViewer (business)    │
-│    ├── MarketCache (Redis)  │
-│    │   └── singleflight     │
-│    └── MarketStore (PG)     │
-└─────────────────────────────┘
+┌────────────────────────────────────┐
+│       SpotInstrumentService        │  :50052
+│  interceptors (chain):             │
+│   rateLimiter → tracer → meter →   │
+│   logger → recoverer →             │
+│   errorMapper → validator          │
+│────────────────────────────────────│
+│  SpotInstrumentHandler             │
+│  MarketViewer (business)           │
+│    ├── MarketCache (Redis)         │
+│    │   └── singleflight            │
+│    └── MarketStore (PostgreSQL)    │
+└────────────────────────────────────┘
 
-Оба сервиса → OTel Collector → Jaeger
+Оба сервиса:
+  - экспортируют traces и metrics через OTel
+  - отдают Prometheus metrics по HTTP
+  - регистрируют gRPC reflection и health check
+  - наблюдаются через Prometheus + Grafana + Tempo
 ```

@@ -116,3 +116,10 @@ tasks:
       - echo "{{.BLUE}}Очистка кэша тестов...{{.NC}}"
       - go clean -testcache
       - echo "{{.GREEN}}Кэш очищен{{.NC}}"
+
+  token:generate:
+    desc: Сгенерировать JWT токен
+    cmds:
+      - echo "{{.BLUE}}Генерация JWT токена...{{.NC}}"
+      - go run ./shared/interceptors/auth/main
+      - echo "{{.GREEN}}JWT токен сгенерирован{{.NC}}"

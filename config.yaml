@@ -39,6 +39,7 @@ order:
   metrics:
     http_address: ":9091"
     export_interval: "15s"
+    push_gateway_url: "http://pushgateway:9093"
   keep_alive:
     ping_time: "20s"
     ping_timeout: "5s"
@@ -76,6 +77,7 @@ spot:
   metrics:
     http_address: ":9092"
     export_interval: "15s"
+    push_gateway_url: "http://pushgateway:9093"
   keep_alive:
     ping_time: "20s"
     ping_timeout: "5s"
