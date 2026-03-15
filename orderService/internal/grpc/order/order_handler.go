@@ -3,7 +3,7 @@ package order
 import (
 	"context"
 
-	dto "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound"
+	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/auth"
@@ -63,15 +63,14 @@ func (s *serverAPI) CreateOrder(
 	if err != nil {
 		return nil, err
 	}
+	orderType := mapper.TypeFromProto(request.GetOrderType())
+	orderQuantity := request.GetQuantity()
 
 	ctx = zapLogger.WithFields(ctx,
 		zap.String("market_id", marketID.String()),
-		zap.String("order_type", request.GetOrderType().String()),
-		zap.Int64("quantity", request.GetQuantity()),
+		zap.String("price", orderPrice.String()),
+		zap.Int64("quantity", orderQuantity),
 	)
-
-	orderType := dto.TypeFromProto(request.GetOrderType())
-	orderQuantity := request.GetQuantity()
 
 	orderID, orderStatus, err := s.service.CreateOrder(
 		ctx, userID, marketID, orderType, orderPrice, orderQuantity,
@@ -82,7 +81,7 @@ func (s *serverAPI) CreateOrder(
 
 	return &proto.CreateOrderResponse{
 		OrderId: orderID.String(),
-		Status:  dto.StatusToProto(orderStatus),
+		Status:  mapper.StatusToProto(orderStatus),
 	}, nil
 
 }
@@ -99,8 +98,8 @@ func (s *serverAPI) GetOrderStatus(
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "order_id must be a valid UUID")
 	}
-	userID, ok := auth.UserIDFromContext(ctx)
-	if !ok {
+	userID, found := auth.UserIDFromContext(ctx)
+	if !found {
 		return nil, status.Error(codes.Unauthenticated, "user_id not found in token")
 	}
 
@@ -114,7 +113,7 @@ func (s *serverAPI) GetOrderStatus(
 	}
 
 	return &proto.GetOrderStatusResponse{
-		Status: dto.StatusToProto(orderStatus),
+		Status: mapper.StatusToProto(orderStatus),
 	}, nil
 }
 
@@ -139,18 +138,19 @@ func validateCreateRequest(request *proto.CreateOrderRequest) error {
 }
 
 func validatePrice(request *proto.CreateOrderRequest) (models.Decimal, error) {
-	if request.GetPrice() == nil {
+	price := request.GetPrice()
+	if price == nil {
 		return models.Decimal{}, status.Error(codes.InvalidArgument, "price is required")
 	}
 
-	price, err := dto.DecimalFromProto(request.GetPrice())
+	validPrice, err := models.NewDecimal(price.Value)
 	if err != nil {
 		return models.Decimal{}, status.Error(codes.InvalidArgument, "price must be a valid decimal number")
 	}
 
-	if !price.IsPositive() {
+	if !validPrice.IsPositive() {
 		return models.Decimal{}, status.Error(codes.InvalidArgument, "price must be > 0")
 	}
 
-	return price, nil
+	return validPrice, nil
 }

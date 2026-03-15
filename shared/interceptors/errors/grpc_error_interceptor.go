@@ -50,6 +50,7 @@ func mapError(ctx context.Context, err error) error {
 		return status.Error(codes.ResourceExhausted, err.Error())
 
 	case errors.Is(err, serviceErrors.ErrUserRoleNotSpecified):
+		zapLogger.Error(ctx, "user role not specified", zap.Error(err))
 		return status.Error(codes.InvalidArgument, err.Error())
 
 	case errors.Is(err, gobreaker.ErrOpenState),

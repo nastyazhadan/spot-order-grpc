@@ -123,3 +123,14 @@ tasks:
       - echo "{{.BLUE}}Генерация JWT токена...{{.NC}}"
       - go run ./shared/interceptors/auth/main
       - echo "{{.GREEN}}JWT токен сгенерирован{{.NC}}"
+
+  tidy:
+    desc: Синхронизировать go.mod, go.sum и go.work
+    cmds:
+      - echo "{{.BLUE}}Синхронизация go.mod, go.sum и go.work...{{.NC}}"
+      - go mod tidy -C ./shared
+      - go mod tidy -C ./orderService
+      - go mod tidy -C ./spotService
+      - go mod tidy -C ./protos
+      - go work sync
+      - echo "{{.GREEN}}Синхронизация завершена{{.NC}}"
