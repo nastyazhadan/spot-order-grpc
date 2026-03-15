@@ -1,12 +1,11 @@
 package outbound
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
 type Order struct {
@@ -20,17 +19,22 @@ type Order struct {
 	CreatedAt time.Time `db:"created_at"`
 }
 
-func (o Order) ToDomain() models.Order {
+func (o Order) ToDomain() (models.Order, error) {
+	price, err := models.NewDecimal(o.Price)
+	if err != nil {
+		return models.Order{}, fmt.Errorf("invalid order price from db: %w", err)
+	}
+
 	return models.Order{
 		ID:        o.ID,
 		UserID:    o.UserID,
 		MarketID:  o.MarketID,
 		Type:      models.OrderType(o.Type),
-		Price:     sharedModels.NewDecimal(o.Price),
+		Price:     price,
 		Quantity:  o.Quantity,
 		Status:    models.OrderStatus(o.Status),
 		CreatedAt: o.CreatedAt,
-	}
+	}, nil
 }
 
 func FromDomain(order models.Order) Order {
@@ -39,7 +43,7 @@ func FromDomain(order models.Order) Order {
 		UserID:    order.UserID,
 		MarketID:  order.MarketID,
 		Type:      int16(order.Type),
-		Price:     order.Price.Value(),
+		Price:     order.Price.String(),
 		Quantity:  order.Quantity,
 		Status:    int16(order.Status),
 		CreatedAt: order.CreatedAt,

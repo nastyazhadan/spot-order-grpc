@@ -1,10 +1,11 @@
 package models
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nastyazhadan/spot-order-grpc/shared/models"
+	"github.com/shopspring/decimal"
 )
 
 type Order struct {
@@ -12,7 +13,7 @@ type Order struct {
 	UserID    uuid.UUID
 	MarketID  uuid.UUID
 	Type      OrderType
-	Price     models.Decimal
+	Price     Decimal
 	Quantity  int64
 	Status    OrderStatus
 	CreatedAt time.Time
@@ -37,3 +38,26 @@ const (
 	OrderStatusFilled
 	OrderStatusCancelled
 )
+
+type Decimal struct {
+	value decimal.Decimal
+}
+
+func NewDecimal(raw string) (Decimal, error) {
+	raw = strings.TrimSpace(raw)
+
+	v, err := decimal.NewFromString(raw)
+	if err != nil {
+		return Decimal{}, err
+	}
+
+	return Decimal{value: v}, nil
+}
+
+func (d Decimal) String() string {
+	return d.value.String()
+}
+
+func (d Decimal) IsPositive() bool {
+	return d.value.IsPositive()
+}

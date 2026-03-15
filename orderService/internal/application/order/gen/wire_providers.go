@@ -16,11 +16,6 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
 )
 
-type RateLimiters struct {
-	Create svcOrder.RateLimiter
-	Get    svcOrder.RateLimiter
-}
-
 func providePostgresPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.Pool, error) {
 	pool, err := db.SetupDBWithPoolConfig(ctx, cfg.DBURI, migrations.Migrations, db.PoolConfig{
 		MaxConnections:  cfg.PostgresPool.MaxConnections,
@@ -35,7 +30,7 @@ func providePostgresPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.
 	return pool, nil
 }
 
-func provideRedisClient(cfg config.OrderConfig) (*redis.Client, error) {
+func provideRedisClient(ctx context.Context, cfg config.OrderConfig) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr: cfg.Redis.Address(),
 
@@ -52,10 +47,11 @@ func provideRedisClient(cfg config.OrderConfig) (*redis.Client, error) {
 		ConnMaxLifetime: cfg.Redis.ConnMaxLifetime,
 	})
 
-	pingCtx, cancel := context.WithTimeout(context.Background(), cfg.Redis.ConnectionTimeout)
+	pingCtx, cancel := context.WithTimeout(ctx, cfg.Redis.ConnectionTimeout)
 	defer cancel()
 
 	if err := client.Ping(pingCtx).Err(); err != nil {
+		_ = client.Close()
 		return nil, fmt.Errorf("redis.Ping: %w", err)
 	}
 
@@ -70,8 +66,8 @@ func provideOrderStore(pool *pgxpool.Pool) *repoPostgres.OrderStore {
 	return repoPostgres.NewOrderStore(pool)
 }
 
-func provideRateLimiters(client cache.Client, cfg config.OrderConfig) RateLimiters {
-	return RateLimiters{
+func provideRateLimiters(client cache.Client, cfg config.OrderConfig) svcOrder.RateLimiters {
+	return svcOrder.RateLimiters{
 		Create: repoRedis.NewOrderRateLimiter(
 			client,
 			cfg.RateLimiter.CreateOrder,
@@ -87,19 +83,24 @@ func provideRateLimiters(client cache.Client, cfg config.OrderConfig) RateLimite
 	}
 }
 
+func provideOrderServiceConfig(cfg config.OrderConfig) svcOrder.OrderServiceConfig {
+	return svcOrder.OrderServiceConfig{
+		Timeout:     cfg.ServiceTimeout,
+		ServiceName: cfg.Tracing.ServiceName,
+	}
+}
+
 func provideOrderService(
 	store *repoPostgres.OrderStore,
 	marketViewer svcOrder.MarketViewer,
-	rateLimiter RateLimiters,
-	cfg config.OrderConfig,
+	rateLimiters svcOrder.RateLimiters,
+	config svcOrder.OrderServiceConfig,
 ) *svcOrder.OrderService {
 	return svcOrder.NewOrderService(
 		store,
 		store,
 		marketViewer,
-		rateLimiter.Create,
-		rateLimiter.Get,
-		cfg.CreateTimeout,
-		cfg.Tracing.ServiceName,
+		rateLimiters,
+		config,
 	)
 }

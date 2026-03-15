@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	mapper "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/inbound"

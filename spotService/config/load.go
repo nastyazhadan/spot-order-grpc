@@ -32,10 +32,10 @@ func Load() (*config.SpotConfig, error) {
 }
 
 func validateSpotTimeouts(cfg config.SpotConfig) error {
-	if cfg.Redis.ConnectionTimeout >= cfg.LoadMarketsTimeout {
+	if cfg.Redis.ConnectionTimeout >= cfg.ServiceTimeout {
 		return fmt.Errorf(
-			"redis.connection_timeout (%s) must be less than load_markets_timeout (%s)",
-			cfg.Redis.ConnectionTimeout, cfg.LoadMarketsTimeout,
+			"redis.connection_timeout (%s) must be less than service_timeout (%s)",
+			cfg.Redis.ConnectionTimeout, cfg.ServiceTimeout,
 		)
 	}
 

@@ -13,7 +13,6 @@ import (
 	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
 
 type SpotClient struct {
@@ -57,13 +56,9 @@ func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) (
 			userRoles = append(userRoles, mapper.UserRoleToProto(role))
 		}
 
-		var header metadata.MD
-
 		response, err := c.api.ViewMarkets(ctx, &proto.ViewMarketsRequest{
 			UserRoles: userRoles,
-		},
-			grpc.Header(&header),
-		)
+		})
 		if err != nil {
 			zapLogger.Error(ctx, "ViewMarkets failed", zap.Error(err))
 			return nil, err

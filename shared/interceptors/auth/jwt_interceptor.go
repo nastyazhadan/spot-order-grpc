@@ -10,11 +10,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
-
-type contextKey string
-
-const UserIDKey contextKey = "user_id"
 
 var skipAuthMethods = map[string]struct{}{
 	"/grpc.health.v1.Health/Check": {},
@@ -43,34 +41,44 @@ func UnaryServerInterceptor(secret string) grpc.UnaryServerInterceptor {
 		}
 
 		values := md.Get("authorization")
-		if len(values) == 0 {
+		if len(values) == 0 || !strings.HasPrefix(strings.ToLower(values[0]), "bearer ") {
 			return nil, status.Error(codes.Unauthenticated, "missing authorization token")
 		}
 
-		tokenString := strings.TrimPrefix(values[0], "Bearer ")
-
-		claims := &Claims{}
-		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, status.Error(codes.Unauthenticated, "unexpected signing method")
-			}
-			return []byte(secret), nil
-		})
-		if err != nil || !token.Valid {
-			return nil, status.Error(codes.Unauthenticated, "invalid token")
-		}
-
-		userID, err := uuid.Parse(claims.UserID)
+		authHeader := values[0]
+		userID, err := parseUserIDFromToken(secret, authHeader)
 		if err != nil {
-			return nil, status.Error(codes.Unauthenticated, "invalid user_id in token")
+			return nil, err
 		}
 
-		ctx = context.WithValue(ctx, UserIDKey, userID)
+		ctx = context.WithValue(ctx, zapLogger.UserIDKey, userID)
 		return handler(ctx, request)
 	}
 }
 
 func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
-	userID, found := ctx.Value(UserIDKey).(uuid.UUID)
+	userID, found := ctx.Value(zapLogger.UserIDKey).(uuid.UUID)
 	return userID, found
+}
+
+func parseUserIDFromToken(secret, authHeader string) (uuid.UUID, error) {
+	tokenString := authHeader[len("bearer "):]
+
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, status.Error(codes.Unauthenticated, "unexpected signing method")
+		}
+		return []byte(secret), nil
+	})
+	if err != nil || !token.Valid {
+		return uuid.Nil, status.Error(codes.Unauthenticated, "invalid token")
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return uuid.Nil, status.Error(codes.Unauthenticated, "invalid user_id in token")
+	}
+
+	return userID, nil
 }

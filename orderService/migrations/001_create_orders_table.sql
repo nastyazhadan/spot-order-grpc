@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS orders
     CONSTRAINT chk_orders_status_valid CHECK (status BETWEEN 0 AND 4)
 );
 
-CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_market_id ON orders(market_id);
+CREATE INDEX IF NOT EXISTS idx_orders_user_id_created_at ON orders (user_id, created_at DESC);
 
 -- +goose Down
 DROP TABLE if EXISTS orders;

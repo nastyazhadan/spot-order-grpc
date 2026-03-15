@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -39,13 +40,15 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 				return cfg
 			}),
 		fx.Provide(
+			provideTracingResource,
 			provideContainer,
 			provideListener,
 			provideGRPCServer,
 		),
 		fx.Invoke(
 			registerLogger,
-			registerOtel,
+			registerTracing,
+			registerMetrics,
 			startGRPCServer,
 		),
 	)
@@ -65,48 +68,69 @@ func registerLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) error {
 	return nil
 }
 
-func registerOtel(
+func provideTracingResource(ctx context.Context, cfg config.SpotConfig) (*resource.Resource, error) {
+	return tracing.NewResource(ctx, cfg.Tracing)
+}
+
+func registerTracing(
 	ctx context.Context,
 	lifeCycle fx.Lifecycle,
 	cfg config.SpotConfig,
+	resource *resource.Resource,
 ) error {
-	res, err := tracing.NewResource(ctx, cfg.Tracing)
+	if err := tracing.InitTracer(ctx, cfg.Tracing, resource); err != nil {
+		return err
+	}
+
+	lifeCycle.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			if err := tracing.ShutdownTracer(ctx); err != nil {
+				zapLogger.Error(ctx, "Failed to shutdown tracer", zap.Error(err))
+			}
+			return nil
+		},
+	})
+
+	return nil
+}
+
+func registerMetrics(
+	ctx context.Context,
+	lifeCycle fx.Lifecycle,
+	cfg config.SpotConfig,
+	resource *resource.Resource,
+) error {
+	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, cfg.Tracing, resource)
 	if err != nil {
 		return err
 	}
 
-	if err = tracing.InitTracer(ctx, cfg.Tracing, res); err != nil {
-		return err
+	httpServer := &http.Server{
+		Addr:         cfg.Metrics.HTTPAddress,
+		Handler:      promhttp.Handler(),
+		ReadTimeout:  cfg.Metrics.ReadTimeout,
+		WriteTimeout: cfg.Metrics.WriteTimeout,
+		IdleTimeout:  cfg.Metrics.IdleTimeout,
 	}
-
-	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, cfg.Tracing, res)
-	if err != nil {
-		return err
-	}
-
-	httpServer := &http.Server{Addr: cfg.Metrics.HTTPAddress, Handler: promhttp.Handler()}
 
 	lifeCycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			go func() {
-				if err = httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					zapLogger.Error(ctx, "Failed to start metrics server", zap.Error(err))
+				if startErr := httpServer.ListenAndServe(); startErr != nil && !errors.Is(startErr, http.ErrServerClosed) {
+					zapLogger.Error(ctx, "Failed to start metrics server", zap.Error(startErr))
 				}
 			}()
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			metrics.PushShutdownMetric(ctx, cfg.Metrics.PushGatewayURL, cfg.Tracing.ServiceName)
-
-			if err = meterProvider.Shutdown(ctx); err != nil {
-				zapLogger.Error(ctx, "Failed to shutdown metrics provider", zap.Error(err))
-			}
-			if err = tracing.ShutdownTracer(ctx); err != nil {
-				zapLogger.Error(ctx, "Failed to shutdown tracer", zap.Error(err))
+			if stopErr := meterProvider.Shutdown(ctx); stopErr != nil {
+				zapLogger.Error(ctx, "Failed to shutdown metrics provider", zap.Error(stopErr))
 			}
 			return httpServer.Shutdown(ctx)
 		},
 	})
+
 	return nil
 }
 
@@ -179,7 +203,7 @@ func provideGRPCServer(
 			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
 		}),
 		grpc.ChainUnaryInterceptor(
-			rateLimiter, tracer, meter, logger, recoverer, errorsMapper, validator,
+			rateLimiter, tracer, meter, logger, errorsMapper, recoverer, validator,
 		),
 	)
 

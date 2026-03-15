@@ -48,6 +48,9 @@ func newPgxPool(
 	dbURI string,
 	config PoolConfig,
 ) (*pgxpool.Pool, error) {
+	if err := config.validate(); err != nil {
+		return nil, err
+	}
 
 	cfg, err := pgxpool.ParseConfig(dbURI)
 	if err != nil {
@@ -67,11 +70,6 @@ func newPgxPool(
 		cfg.MaxConnIdleTime = config.MaxConnIdleTime
 	}
 
-	if config.MaxConnections > 0 && config.MinConnections > config.MaxConnections {
-		return nil, fmt.Errorf("invalid pool config: MinConns (%d) > MaxConns (%d)",
-			config.MinConnections, config.MaxConnections)
-	}
-
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool.NewWithConfig: %w", err)
@@ -83,4 +81,18 @@ func newPgxPool(
 	}
 
 	return pool, nil
+}
+
+func (c PoolConfig) validate() error {
+	if c.MaxConnections > 0 && c.MinConnections > c.MaxConnections {
+		return fmt.Errorf("invalid pool config: MinConns (%d) > MaxConns (%d)",
+			c.MinConnections, c.MaxConnections)
+	}
+
+	if c.MaxConnections == 0 && c.MinConnections > 0 {
+		return fmt.Errorf("invalid pool config: MinConns (%d) set but MaxConns is not",
+			c.MinConnections)
+	}
+
+	return nil
 }

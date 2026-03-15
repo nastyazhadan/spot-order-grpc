@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
-	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound/redis"
@@ -59,6 +59,7 @@ func (m *MarketCacheRepository) GetAll(
 
 	var redisViews []dto.MarketRedisView
 	if err = json.Unmarshal(data, &redisViews); err != nil {
+		span.RecordError(err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -66,6 +67,7 @@ func (m *MarketCacheRepository) GetAll(
 	for _, redisView := range redisViews {
 		market, err := redisView.ToDomain()
 		if err != nil {
+			span.RecordError(err)
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 		markets = append(markets, market)
@@ -98,6 +100,7 @@ func (m *MarketCacheRepository) SetAll(
 
 	data, err := json.Marshal(redisViews)
 	if err != nil {
+		span.RecordError(err)
 		return fmt.Errorf("%s: %w", op, err)
 	}
 

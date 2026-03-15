@@ -44,7 +44,7 @@ func NewOrderRateLimiter(
 func (r *OrderRateLimiter) Allow(ctx context.Context, userID uuid.UUID) (bool, error) {
 	const op = "OrderRateLimiter.Allow"
 
-	key := r.prefix + userID.String()
+	key := r.prefix + ":" + userID.String()
 
 	raw, err := r.client.RunScript(ctx, rateLimitScript, []string{key}, int(r.window.Seconds()))
 	if err != nil {

@@ -1,8 +1,11 @@
 package inbound
 
 import (
+	"fmt"
+
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
+	"google.golang.org/genproto/googleapis/type/decimal"
 )
 
 func TypeFromProto(orderType proto.OrderType) models.OrderType {
@@ -33,4 +36,12 @@ func StatusToProto(orderStatus models.OrderStatus) proto.OrderStatus {
 	default:
 		return proto.OrderStatus_STATUS_UNSPECIFIED
 	}
+}
+
+func DecimalFromProto(dec *decimal.Decimal) (models.Decimal, error) {
+	if dec == nil {
+		return models.Decimal{}, fmt.Errorf("decimal is nil")
+	}
+
+	return models.NewDecimal(dec.Value)
 }

@@ -12,13 +12,13 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	dto "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound"
+	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/repository"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 )
 
-const ErrorCodePostgres = "23505"
+const uniqueViolationCode = "23505"
 
 type OrderStore struct {
 	pool *pgxpool.Pool
@@ -42,7 +42,7 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 	)
 	defer span.End()
 
-	orderDTO := dto.FromDomain(order)
+	orderDTO := mapper.FromDomain(order)
 
 	_, err := o.pool.Exec(ctx,
 		`INSERT INTO orders (id, user_id, market_id, type, price, quantity, status, created_at)
@@ -70,7 +70,7 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 }
 
 func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, error) {
-	const op = "infrastructure.OrderStore.GetOrderStatus"
+	const op = "infrastructure.OrderStore.GetOrder"
 
 	ctx, span := tracing.StartSpan(ctx, "postgres.get_order",
 		trace.WithAttributes(
@@ -82,8 +82,7 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 	rows, err := o.pool.Query(ctx,
 		`SELECT id, user_id, market_id, type, price, quantity, status, created_at
 		 FROM orders
-		 WHERE id = $1
-		 LIMIT 1`,
+		 WHERE id = $1`,
 		id,
 	)
 	if err != nil {
@@ -91,7 +90,7 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	orderDTO, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[dto.Order])
+	orderDTO, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[mapper.Order])
 	if err != nil {
 		span.RecordError(err)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -101,14 +100,20 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	return orderDTO.ToDomain(), nil
+	order, err := orderDTO.ToDomain()
+	if err != nil {
+		span.RecordError(err)
+		return models.Order{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return order, nil
 }
 
 func isDuplicateKey(err error) bool {
 	var postgresErr *pgconn.PgError
 
 	if errors.As(err, &postgresErr) {
-		return postgresErr.Code == ErrorCodePostgres
+		return postgresErr.Code == uniqueViolationCode
 	}
 
 	return false

@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/repository"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
@@ -22,12 +22,18 @@ type OrderService struct {
 	saver        Saver
 	getter       Getter
 	marketViewer MarketViewer
+	rateLimiters RateLimiters
+	config       OrderServiceConfig
+}
 
-	createRateLimiter RateLimiter
-	getRateLimiter    RateLimiter
-	createTimeout     time.Duration
+type OrderServiceConfig struct {
+	Timeout     time.Duration
+	ServiceName string
+}
 
-	serviceName string
+type RateLimiters struct {
+	Create RateLimiter
+	Get    RateLimiter
 }
 
 type Saver interface {
@@ -48,16 +54,13 @@ type RateLimiter interface {
 	Window() time.Duration
 }
 
-func NewOrderService(s Saver, g Getter, mv MarketViewer, create, get RateLimiter, t time.Duration, name string,
-) *OrderService {
+func NewOrderService(s Saver, g Getter, mv MarketViewer, rl RateLimiters, cfg OrderServiceConfig) *OrderService {
 	return &OrderService{
-		saver:             s,
-		getter:            g,
-		marketViewer:      mv,
-		createRateLimiter: create,
-		getRateLimiter:    get,
-		createTimeout:     t,
-		serviceName:       name,
+		saver:        s,
+		getter:       g,
+		marketViewer: mv,
+		rateLimiters: rl,
+		config:       cfg,
 	}
 }
 
@@ -66,18 +69,18 @@ func (s *OrderService) CreateOrder(
 	userID uuid.UUID,
 	marketID uuid.UUID,
 	orderType models.OrderType,
-	price sharedModels.Decimal,
+	price models.Decimal,
 	quantity int64,
 ) (uuid.UUID, models.OrderStatus, error) {
 	const op = "OrderService.CreateOrder"
 
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.createTimeout)
+		ctx, cancel = context.WithTimeout(ctx, s.config.Timeout)
 		defer cancel()
 	}
 
-	if err := s.checkRateLimit(ctx, userID, s.createRateLimiter, "create_order"); err != nil {
+	if err := s.checkRateLimit(ctx, userID, s.rateLimiters.Create, "create_order"); err != nil {
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -90,15 +93,24 @@ func (s *OrderService) CreateOrder(
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
-	metrics.OrdersCreatedTotal.WithLabelValues(s.serviceName).Inc()
+	metrics.OrdersCreatedTotal.WithLabelValues(s.config.ServiceName).Inc()
 
 	return orderID, orderStatus, nil
 }
 
-func (s *OrderService) GetOrderStatus(ctx context.Context, orderID, userID uuid.UUID) (models.OrderStatus, error) {
+func (s *OrderService) GetOrderStatus(
+	ctx context.Context,
+	orderID, userID uuid.UUID,
+) (models.OrderStatus, error) {
 	const op = "OrderService.GetOrderStatus"
 
-	if err := s.checkRateLimit(ctx, userID, s.getRateLimiter, "get_order_status"); err != nil {
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.config.Timeout)
+		defer cancel()
+	}
+
+	if err := s.checkRateLimit(ctx, userID, s.rateLimiters.Get, "get_order_status"); err != nil {
 		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -110,7 +122,12 @@ func (s *OrderService) GetOrderStatus(ctx context.Context, orderID, userID uuid.
 	return order.Status, nil
 }
 
-func (s *OrderService) checkRateLimit(ctx context.Context, userID uuid.UUID, limiter RateLimiter, method string) error {
+func (s *OrderService) checkRateLimit(
+	ctx context.Context,
+	userID uuid.UUID,
+	limiter RateLimiter,
+	method string,
+) error {
 	limit := limiter.Limit()
 	window := limiter.Window()
 
@@ -134,14 +151,17 @@ func (s *OrderService) checkRateLimit(ctx context.Context, userID uuid.UUID, lim
 			Window: window,
 		}
 		span.RecordError(err)
-		metrics.RateLimitRejectedTotal.WithLabelValues(s.serviceName, method).Inc()
+		metrics.RateLimitRejectedTotal.WithLabelValues(s.config.ServiceName, method).Inc()
 		return err
 	}
 
 	return nil
 }
 
-func (s *OrderService) validateMarket(ctx context.Context, marketID uuid.UUID) error {
+func (s *OrderService) validateMarket(
+	ctx context.Context,
+	marketID uuid.UUID,
+) error {
 	ctx, span := tracing.StartSpan(ctx, "order.validate_market",
 		trace.WithAttributes(
 			attributeUUID("market_id", marketID),
@@ -161,7 +181,7 @@ func (s *OrderService) validateMarket(ctx context.Context, marketID uuid.UUID) e
 		}
 	}
 
-	err = serviceErrors.ErrMarketsNotFound
+	err = serviceErrors.ErrMarketNotFound{ID: marketID}
 	span.RecordError(err)
 	return err
 }
@@ -171,7 +191,7 @@ func (s *OrderService) saveOrder(
 	userID uuid.UUID,
 	marketID uuid.UUID,
 	orderType models.OrderType,
-	price sharedModels.Decimal,
+	price models.Decimal,
 	quantity int64,
 ) (uuid.UUID, models.OrderStatus, error) {
 	orderID := uuid.New()
@@ -182,7 +202,7 @@ func (s *OrderService) saveOrder(
 			attributeUUID("order_id", orderID),
 			attributeUUID("user_id", userID),
 			attributeUUID("market_id", marketID),
-			attribute.String("price", price.Value()),
+			attribute.String("price", price.String()),
 			attribute.Int64("quantity", quantity),
 		),
 	)
@@ -211,7 +231,10 @@ func (s *OrderService) saveOrder(
 	return orderID, orderStatus, nil
 }
 
-func (s *OrderService) fetchOrder(ctx context.Context, orderID, userID uuid.UUID) (models.Order, error) {
+func (s *OrderService) fetchOrder(
+	ctx context.Context,
+	orderID, userID uuid.UUID,
+) (models.Order, error) {
 	ctx, span := tracing.StartSpan(ctx, "order.fetch_order",
 		trace.WithAttributes(
 			attributeUUID("user_id", userID),

@@ -23,10 +23,10 @@ var (
 		[]string{"service", "method"},
 	)
 
-	ActiveConnections = promauto.NewGaugeVec(
+	InFlightRequests = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "spotorder_grpc_active_connections",
-			Help: "Number of currently in-flight gRPC requests",
+			Name: "spotorder_in_flight_requests",
+			Help: "Number of currently active gRPC requests",
 		},
 		[]string{"service"},
 	)

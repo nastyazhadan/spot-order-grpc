@@ -117,6 +117,8 @@ services:
         condition: service_healthy
       tempo:
         condition: service_healthy
+      pushgateway:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - microservices-net

@@ -1,7 +1,7 @@
 order:
   address: ":50051"
   spot_address: "spot-service:50052"
-  create_timeout: "5s"
+  service_timeout: "5s"
   check_timeout: "15s"
   log_level: "info"
   log_format: "console"
@@ -38,6 +38,9 @@ order:
     service_version: "1.0.0"
   metrics:
     http_address: ":9091"
+    read_timeout: 5s
+    write_timeout: 10s
+    idle_timeout: 60s
     export_interval: "15s"
     push_gateway_url: "http://pushgateway:9093"
   keep_alive:
@@ -50,7 +53,7 @@ spot:
   address: ":50052"
   log_level: "info"
   log_format: "console"
-  load_markets_timeout: "5s"
+  service_timeout: "5s"
   max_recv_msg_size: 10485760 # 10MB
   grpc_rate_limit: 1000
   postgres_pool:
@@ -76,6 +79,9 @@ spot:
     service_version: "1.0.0"
   metrics:
     http_address: ":9092"
+    read_timeout: 5s
+    write_timeout: 10s
+    idle_timeout: 60s
     export_interval: "15s"
     push_gateway_url: "http://pushgateway:9093"
   keep_alive:

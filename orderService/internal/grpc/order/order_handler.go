@@ -2,17 +2,12 @@ package order
 
 import (
 	"context"
-	"errors"
-	"math"
-	"strconv"
 
 	dto "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/auth"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -21,14 +16,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const EmptyValue = 0
+const minQuantity = 0
 
 type OrderService interface {
 	CreateOrder(ctx context.Context,
 		userID uuid.UUID,
 		marketID uuid.UUID,
 		orderType models.OrderType,
-		price sharedModels.Decimal,
+		price models.Decimal,
 		quantity int64,
 	) (uuid.UUID, models.OrderStatus, error)
 
@@ -42,8 +37,8 @@ type serverAPI struct {
 	service OrderService
 }
 
-func Register(grpc *grpc.Server, service OrderService) {
-	proto.RegisterOrderServiceServer(grpc, &serverAPI{
+func Register(server *grpc.Server, service OrderService) {
+	proto.RegisterOrderServiceServer(server, &serverAPI{
 		service: service,
 	})
 }
@@ -52,7 +47,7 @@ func (s *serverAPI) CreateOrder(
 	ctx context.Context,
 	request *proto.CreateOrderRequest,
 ) (*proto.CreateOrderResponse, error) {
-	if err := validateErrors(request); err != nil {
+	if err := validateCreateRequest(request); err != nil {
 		return nil, err
 	}
 
@@ -64,25 +59,24 @@ func (s *serverAPI) CreateOrder(
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "market_id must be a valid UUID")
 	}
+	orderPrice, err := validatePrice(request)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx = zapLogger.WithFields(ctx,
+		zap.String("market_id", marketID.String()),
+		zap.String("order_type", request.GetOrderType().String()),
+		zap.Int64("quantity", request.GetQuantity()),
+	)
 
 	orderType := dto.TypeFromProto(request.GetOrderType())
-	orderPrice := sharedModels.NewDecimal(request.GetPrice().GetValue())
 	orderQuantity := request.GetQuantity()
 
 	orderID, orderStatus, err := s.service.CreateOrder(
 		ctx, userID, marketID, orderType, orderPrice, orderQuantity,
 	)
 	if err != nil {
-		if !errors.Is(err, serviceErrors.ErrMarketsNotFound) &&
-			!errors.Is(err, serviceErrors.ErrOrderAlreadyExists) &&
-			!errors.Is(err, serviceErrors.ErrCreatingOrderNotRequired) &&
-			!errors.Is(err, serviceErrors.ErrRateLimitExceeded) {
-			zapLogger.Error(ctx, "failed to create order",
-				zap.String("user_id", userID.String()),
-				zap.String("market_id", marketID.String()),
-				zap.Error(err),
-			)
-		}
 		return nil, err
 	}
 
@@ -103,22 +97,19 @@ func (s *serverAPI) GetOrderStatus(
 
 	orderID, err := uuid.Parse(request.GetOrderId())
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "user_id must be a valid UUID")
+		return nil, status.Error(codes.InvalidArgument, "order_id must be a valid UUID")
 	}
 	userID, ok := auth.UserIDFromContext(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "user_id not found in token")
 	}
 
+	ctx = zapLogger.WithFields(ctx,
+		zap.String("order_id", orderID.String()),
+	)
+
 	orderStatus, err := s.service.GetOrderStatus(ctx, orderID, userID)
 	if err != nil {
-		if !errors.Is(err, serviceErrors.ErrOrderNotFound) {
-			zapLogger.Error(ctx, "failed to get order status",
-				zap.String("order_id", orderID.String()),
-				zap.String("user_id", userID.String()),
-				zap.Error(err),
-			)
-		}
 		return nil, err
 	}
 
@@ -127,7 +118,11 @@ func (s *serverAPI) GetOrderStatus(
 	}, nil
 }
 
-func validateErrors(request *proto.CreateOrderRequest) error {
+func validateCreateRequest(request *proto.CreateOrderRequest) error {
+	if request == nil {
+		return status.Error(codes.InvalidArgument, "request is required")
+	}
+
 	if request.GetMarketId() == "" {
 		return status.Error(codes.InvalidArgument, "market_id is required")
 	}
@@ -136,22 +131,26 @@ func validateErrors(request *proto.CreateOrderRequest) error {
 		return status.Error(codes.InvalidArgument, "order_type is required")
 	}
 
-	if request.GetPrice() == nil || request.GetPrice().GetValue() == "" {
-		return status.Error(codes.InvalidArgument, "price is required")
-	}
-
-	price, err := strconv.ParseFloat(request.GetPrice().GetValue(), 64)
-	if err != nil || math.IsNaN(price) || math.IsInf(price, 0) {
-		return status.Error(codes.InvalidArgument, "price must be a number")
-	}
-
-	if price <= EmptyValue {
-		return status.Error(codes.InvalidArgument, "price must be > 0")
-	}
-
-	if request.GetQuantity() <= EmptyValue {
+	if request.GetQuantity() <= minQuantity {
 		return status.Error(codes.InvalidArgument, "quantity must be > 0")
 	}
 
 	return nil
+}
+
+func validatePrice(request *proto.CreateOrderRequest) (models.Decimal, error) {
+	if request.GetPrice() == nil {
+		return models.Decimal{}, status.Error(codes.InvalidArgument, "price is required")
+	}
+
+	price, err := dto.DecimalFromProto(request.GetPrice())
+	if err != nil {
+		return models.Decimal{}, status.Error(codes.InvalidArgument, "price must be a valid decimal number")
+	}
+
+	if !price.IsPositive() {
+		return models.Decimal{}, status.Error(codes.InvalidArgument, "price must be > 0")
+	}
+
+	return price, nil
 }

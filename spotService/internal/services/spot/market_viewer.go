@@ -1,10 +1,11 @@
 package spot
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -12,8 +13,8 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 
-	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/repository"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
@@ -39,7 +40,7 @@ type Service struct {
 	marketRepository      MarketRepository
 	marketCacheRepository MarketCacheRepository
 	cacheTTL              time.Duration
-	loadMarketsTimeout    time.Duration
+	serviceTimeout        time.Duration
 	singleFlight          singleflight.Group
 }
 
@@ -48,7 +49,7 @@ func NewService(repo MarketRepository, cacheRepo MarketCacheRepository, ttl, tim
 		marketRepository:      repo,
 		marketCacheRepository: cacheRepo,
 		cacheTTL:              ttl,
-		loadMarketsTimeout:    timeout,
+		serviceTimeout:        timeout,
 	}
 }
 
@@ -112,7 +113,7 @@ func (s *Service) getMarketsWithSingleFlight(ctx context.Context, roleKey string
 	resultKey := singleFlightKey + ":" + roleKey
 
 	result, err, _ := s.singleFlight.Do(resultKey, func() (interface{}, error) {
-		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.loadMarketsTimeout)
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.serviceTimeout)
 		defer cancel()
 
 		return s.loadAndWarmCache(loadCtx, roleKey)
@@ -174,8 +175,8 @@ func (s *Service) getMarketsFromRepo(ctx context.Context) ([]models.Market, erro
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	sort.Slice(allMarkets, func(i, j int) bool {
-		return allMarkets[i].Name < allMarkets[j].Name
+	slices.SortFunc(allMarkets, func(a, b models.Market) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 
 	return allMarkets, nil

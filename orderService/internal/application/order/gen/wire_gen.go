@@ -22,13 +22,14 @@ func NewContainer(ctx context.Context, marketViewer order.MarketViewer, cfg conf
 		return nil, err
 	}
 	orderStore := provideOrderStore(pool)
-	client, err := provideRedisClient(cfg)
+	client, err := provideRedisClient(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	cacheClient := provideCacheClient(client)
 	rateLimiters := provideRateLimiters(cacheClient, cfg)
-	orderService := provideOrderService(orderStore, marketViewer, rateLimiters, cfg)
+	orderServiceConfig := provideOrderServiceConfig(cfg)
+	orderService := provideOrderService(orderStore, marketViewer, rateLimiters, orderServiceConfig)
 	container := &Container{
 		OrderService: orderService,
 		RedisClient:  client,

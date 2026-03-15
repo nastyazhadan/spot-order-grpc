@@ -13,8 +13,8 @@ import (
 
 func UnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, serverInfo *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		metrics.ActiveConnections.WithLabelValues(serviceName).Inc()
-		defer metrics.ActiveConnections.WithLabelValues(serviceName).Dec()
+		metrics.InFlightRequests.WithLabelValues(serviceName).Inc()
+		defer metrics.InFlightRequests.WithLabelValues(serviceName).Dec()
 
 		start := time.Now()
 		response, err := handler(ctx, request)

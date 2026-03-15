@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
-
-	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 )
 
 func main() {
@@ -18,8 +18,10 @@ func main() {
 		}
 	}
 
-	var cfg config.OrderConfig
-	cfg.JWTSecret = os.Getenv("JWT_SECRET")
+	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
+	if secret == "" {
+		log.Fatal("JWT_SECRET environment variable must be set")
+	}
 
 	claims := jwt.MapClaims{
 		"user_id": "550e8400-e29b-41d4-a716-446655440003",
@@ -27,9 +29,9 @@ func main() {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString([]byte(cfg.JWTSecret))
+	signed, err := token.SignedString([]byte(secret))
 	if err != nil {
-		panic(err)
+		log.Fatalf("failed to sign token: %v", err)
 	}
 
 	fmt.Println(signed)

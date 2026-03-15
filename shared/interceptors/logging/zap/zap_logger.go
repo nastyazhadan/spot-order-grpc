@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -13,9 +14,20 @@ import (
 type contextKey string
 
 const (
-	TraceIDKey contextKey = "x-trace-id"
-	UserIDKey  contextKey = "user_id"
+	TraceIDKey     contextKey = "x-trace-id"
+	UserIDKey      contextKey = "user_id"
+	extraFieldsKey contextKey = "log_extra_fields"
 )
+
+func WithFields(ctx context.Context, fields ...zap.Field) context.Context {
+	existing, _ := ctx.Value(extraFieldsKey).([]zap.Field)
+
+	merged := make([]zap.Field, len(existing), len(existing)+len(fields))
+	copy(merged, existing)
+	merged = append(merged, fields...)
+
+	return context.WithValue(ctx, extraFieldsKey, merged)
+}
 
 var (
 	globalLogger *logger
@@ -194,8 +206,12 @@ func fieldsFromContext(ctx context.Context) []zap.Field {
 		fields = append(fields, zap.String(string(TraceIDKey), traceID))
 	}
 
-	if userID, found := ctx.Value(UserIDKey).(string); found && userID != "" {
-		fields = append(fields, zap.String(string(UserIDKey), userID))
+	if userID, found := ctx.Value(UserIDKey).(uuid.UUID); found {
+		fields = append(fields, zap.String("user_id", userID.String()))
+	}
+
+	if extra, found := ctx.Value(extraFieldsKey).([]zap.Field); found {
+		fields = append(fields, extra...)
 	}
 
 	return fields

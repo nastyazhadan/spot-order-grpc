@@ -109,12 +109,12 @@
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
       "targets": [
         {
-          "expr": "spotorder_grpc_active_connections",
+          "expr": "spotorder_grpc_in_flight_requests",
           "legendFormat": "{{service}}",
           "refId": "A"
         }
       ],
-      "title": "Active Connections (in-flight)",
+      "title": "In-flight requests",
       "type": "stat"
     },
     {

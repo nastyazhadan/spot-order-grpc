@@ -9,12 +9,12 @@ import (
 )
 
 var (
-	ErrOrderNotFound            = ErrNotFound{}
-	ErrOrderAlreadyExists       = ErrAlreadyExists{}
-	ErrRateLimitExceeded        = ErrLimitExceeded{}
-	ErrMarketsNotFound          = errors.New("markets not found")
-	ErrCreatingOrderNotRequired = errors.New("creating order not required")
-	ErrUserRoleNotSpecified     = errors.New("user role not specified")
+	ErrOrderNotFound        = ErrNotFound{}
+	ErrOrderAlreadyExists   = ErrAlreadyExists{}
+	ErrRateLimitExceeded    = ErrLimitExceeded{}
+	ErrMrktNotFound         = ErrMarketNotFound{}
+	ErrMarketsNotFound      = errors.New("markets not found")
+	ErrUserRoleNotSpecified = errors.New("user role not specified")
 )
 
 type ErrNotFound struct {
@@ -54,5 +54,18 @@ func (e ErrLimitExceeded) Error() string {
 
 func (e ErrLimitExceeded) Is(target error) bool {
 	var errorType ErrLimitExceeded
+	return errors.As(target, &errorType)
+}
+
+type ErrMarketNotFound struct {
+	ID uuid.UUID
+}
+
+func (e ErrMarketNotFound) Error() string {
+	return fmt.Sprintf("market with id=%s not found", e.ID)
+}
+
+func (e ErrMarketNotFound) Is(target error) bool {
+	var errorType ErrMarketNotFound
 	return errors.As(target, &errorType)
 }

@@ -30,7 +30,7 @@ func providePostgresPool(ctx context.Context, cfg config.SpotConfig) (*pgxpool.P
 	return pool, nil
 }
 
-func provideRedisClient(cfg config.SpotConfig) (*redis.Client, error) {
+func provideRedisClient(ctx context.Context, cfg config.SpotConfig) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr: cfg.Redis.Address(),
 
@@ -47,10 +47,11 @@ func provideRedisClient(cfg config.SpotConfig) (*redis.Client, error) {
 		ConnMaxLifetime: cfg.Redis.ConnMaxLifetime,
 	})
 
-	pingCtx, cancel := context.WithTimeout(context.Background(), cfg.Redis.ConnectionTimeout)
+	pingCtx, cancel := context.WithTimeout(ctx, cfg.Redis.ConnectionTimeout)
 	defer cancel()
 
 	if err := client.Ping(pingCtx).Err(); err != nil {
+		_ = client.Close()
 		return nil, fmt.Errorf("redis.Ping: %w", err)
 	}
 
@@ -74,5 +75,10 @@ func provideSpotService(
 	cacheRepository *repoRedis.MarketCacheRepository,
 	cfg config.SpotConfig,
 ) *svcSpot.Service {
-	return svcSpot.NewService(repository, cacheRepository, cfg.Redis.CacheTTL, cfg.LoadMarketsTimeout)
+	return svcSpot.NewService(
+		repository,
+		cacheRepository,
+		cfg.Redis.CacheTTL,
+		cfg.ServiceTimeout,
+	)
 }

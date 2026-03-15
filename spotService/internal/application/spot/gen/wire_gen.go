@@ -22,7 +22,7 @@ func NewContainer(ctx context.Context, cfg config.SpotConfig) (*Container, error
 		return nil, err
 	}
 	marketStore := provideMarketStore(pool)
-	client, err := provideRedisClient(cfg)
+	client, err := provideRedisClient(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}

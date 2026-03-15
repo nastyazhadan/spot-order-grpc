@@ -9,7 +9,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/mocks"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors/service"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 
 	fakeValue "github.com/brianvoe/gofakeit/v6"
 	"github.com/google/uuid"

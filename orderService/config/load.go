@@ -37,17 +37,17 @@ func Load() (*config.OrderConfig, error) {
 }
 
 func validateOrderTimeouts(cfg config.OrderConfig) error {
-	if cfg.Redis.ConnectionTimeout >= cfg.CreateTimeout {
+	if cfg.Redis.ConnectionTimeout >= cfg.ServiceTimeout {
 		return fmt.Errorf(
-			"redis.connection_timeout (%s) must be less than create_timeout (%s)",
-			cfg.Redis.ConnectionTimeout, cfg.CreateTimeout,
+			"redis.connection_timeout (%s) must be less than service_timeout (%s)",
+			cfg.Redis.ConnectionTimeout, cfg.ServiceTimeout,
 		)
 	}
 
-	if cfg.CircuitBreaker.Timeout >= cfg.CreateTimeout {
+	if cfg.CircuitBreaker.Timeout >= cfg.ServiceTimeout {
 		return fmt.Errorf(
-			"circuit_breaker.timeout (%s) must be less than create_timeout (%s)",
-			cfg.CircuitBreaker.Timeout, cfg.CreateTimeout,
+			"circuit_breaker.timeout (%s) must be less than service_timeout (%s)",
+			cfg.CircuitBreaker.Timeout, cfg.ServiceTimeout,
 		)
 	}
 
