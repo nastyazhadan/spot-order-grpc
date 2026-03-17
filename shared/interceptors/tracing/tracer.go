@@ -22,7 +22,7 @@ const (
 	DefaultRetryEnabled         = true
 	DefaultRetryInitialInterval = 500 * time.Millisecond
 	DefaultRetryMaxInterval     = 5 * time.Second
-	DefaultRetryMaxElapsedTime  = 30 * time.Second
+	DefaultRetryMaxElapsedTime  = 4 * time.Minute // Нужно больше - 4-7 минут
 	DefaultTimeout              = 5 * time.Second
 	DefaultTraceRatio           = 1.0
 )

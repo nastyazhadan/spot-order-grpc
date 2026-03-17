@@ -46,7 +46,7 @@ func validateOrderTimeouts(cfg config.OrderConfig) error {
 
 	if cfg.CircuitBreaker.Timeout >= cfg.ServiceTimeout {
 		return fmt.Errorf(
-			"circuit_breaker.timeout (%s) must be less than service_timeout (%s)",
+			"breaker.timeout (%s) must be less than service_timeout (%s)",
 			cfg.CircuitBreaker.Timeout, cfg.ServiceTimeout,
 		)
 	}

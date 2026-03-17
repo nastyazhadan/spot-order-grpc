@@ -16,7 +16,7 @@ type OrderConfig struct {
 	LogFormat      string               `mapstructure:"log_format"`
 	MaxRecvMsgSize int                  `mapstructure:"max_recv_msg_size"`
 	GRPCRateLimit  int                  `mapstructure:"grpc_rate_limit"`
-	CircuitBreaker CircuitBreakerConfig `mapstructure:"circuit_breaker"`
+	CircuitBreaker CircuitBreakerConfig `mapstructure:"breaker"`
 	PostgresPool   PostgresPoolConfig   `mapstructure:"postgres_pool"`
 	RateLimiter    RateLimiterConfig    `mapstructure:"rate_limiter"`
 	Redis          RedisConfig          `mapstructure:"redis"`

@@ -26,7 +26,7 @@ import (
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	metricInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/metrics"
-	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/rate_limit"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/ratelimit"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
@@ -242,7 +242,7 @@ func provideGRPCServer(
 	recoverer := recovery.UnaryServerInterceptor
 	authenticator := auth.UnaryServerInterceptor(cfg.JWTSecret)
 	errorsMapper := grpcErrors.UnaryServerInterceptor()
-	rateLimiter := rate_limit.UnaryServerInterceptor(cfg.GRPCRateLimit, cfg.Tracing.ServiceName)
+	rateLimiter := ratelimit.UnaryServerInterceptor(cfg.GRPCRateLimit, cfg.Tracing.ServiceName)
 	meter := metricInterceptor.UnaryServerInterceptor(cfg.Tracing.ServiceName)
 
 	grpcServer := grpc.NewServer(
