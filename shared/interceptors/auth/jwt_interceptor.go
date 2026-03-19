@@ -4,13 +4,13 @@ import (
 	"context"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 )
@@ -20,20 +20,8 @@ const (
 	bearerPrefix        = "bearer "
 )
 
-type Claims struct {
-	jwt.RegisteredClaims
-	UserID string `json:"user_id"`
-}
-
-func UnaryServerInterceptor(secret string, cfg config.AuthConfig) grpc.UnaryServerInterceptor {
-	skipMethods := make(map[string]struct{}, len(cfg.SkipMethods))
-	for _, method := range cfg.SkipMethods {
-		method = strings.TrimSpace(method)
-		if method == "" {
-			continue
-		}
-		skipMethods[method] = struct{}{}
-	}
+func UnaryServerInterceptor(jwtManager authjwt.Manager, cfg config.AuthConfig) grpc.UnaryServerInterceptor {
+	skipMethods := makeSkipMethods(cfg.SkipMethods)
 
 	return func(
 		ctx context.Context,
@@ -41,23 +29,23 @@ func UnaryServerInterceptor(secret string, cfg config.AuthConfig) grpc.UnaryServ
 		serverInfo *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (any, error) {
-		if _, ok := skipMethods[serverInfo.FullMethod]; ok {
+		if shouldSkip(serverInfo.FullMethod, skipMethods) {
 			return handler(ctx, request)
 		}
 
-		md, found := metadata.FromIncomingContext(ctx)
-		if !found {
-			return nil, status.Error(codes.Unauthenticated, "missing metadata")
-		}
-
-		values := md.Get(authorizationHeader)
-		if len(values) == 0 || !strings.HasPrefix(strings.ToLower(values[0]), bearerPrefix) {
-			return nil, status.Error(codes.Unauthenticated, "missing authorization token")
-		}
-
-		userID, err := parseUserIDFromToken(secret, values[0])
+		tokenString, err := bearerTokenFromContext(ctx)
 		if err != nil {
 			return nil, err
+		}
+
+		claims, err := jwtManager.ParseToken(tokenString, authjwt.TokenTypeAccess)
+		if err != nil {
+			return nil, err
+		}
+
+		userID, err := uuid.Parse(claims.UserID)
+		if err != nil {
+			return nil, status.Error(codes.Unauthenticated, "invalid user_id in token")
 		}
 
 		ctx = requestctx.ContextWithUserID(ctx, userID)
@@ -65,24 +53,45 @@ func UnaryServerInterceptor(secret string, cfg config.AuthConfig) grpc.UnaryServ
 	}
 }
 
-func parseUserIDFromToken(secret, authHeader string) (uuid.UUID, error) {
-	tokenString := strings.TrimSpace(authHeader[len(bearerPrefix):])
-
-	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, status.Error(codes.Unauthenticated, "unexpected signing method")
+func makeSkipMethods(methods []string) map[string]struct{} {
+	skipMethods := make(map[string]struct{}, len(methods))
+	for _, method := range methods {
+		method = strings.TrimSpace(method)
+		if method == "" {
+			continue
 		}
-		return []byte(secret), nil
-	})
-	if err != nil || !token.Valid {
-		return uuid.Nil, status.Error(codes.Unauthenticated, "invalid token")
+		skipMethods[method] = struct{}{}
 	}
 
-	userID, err := uuid.Parse(claims.UserID)
-	if err != nil {
-		return uuid.Nil, status.Error(codes.Unauthenticated, "invalid user_id in token")
+	return skipMethods
+}
+
+func shouldSkip(fullMethod string, skipMethods map[string]struct{}) bool {
+	_, ok := skipMethods[fullMethod]
+
+	return ok
+}
+
+func bearerTokenFromContext(ctx context.Context) (string, error) {
+	md, found := metadata.FromIncomingContext(ctx)
+	if !found {
+		return "", status.Error(codes.Unauthenticated, "missing metadata")
 	}
 
-	return userID, nil
+	values := md.Get(authorizationHeader)
+	if len(values) == 0 {
+		return "", status.Error(codes.Unauthenticated, "missing authorization token")
+	}
+
+	authHeader := strings.TrimSpace(values[0])
+	if !strings.HasPrefix(strings.ToLower(authHeader), bearerPrefix) {
+		return "", status.Error(codes.Unauthenticated, "missing authorization token")
+	}
+
+	tokenString := strings.TrimSpace(authHeader[len(bearerPrefix):])
+	if tokenString == "" {
+		return "", status.Error(codes.Unauthenticated, "missing authorization token")
+	}
+
+	return tokenString, nil
 }

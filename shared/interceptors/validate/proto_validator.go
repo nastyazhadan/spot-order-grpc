@@ -24,8 +24,8 @@ func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 		handler grpc.UnaryHandler,
 	) (any, error) {
 		if message, ok := request.(proto.Message); ok {
-			if err = validator.Validate(message); err != nil {
-				return nil, status.Error(codes.InvalidArgument, err.Error())
+			if validateErr := validator.Validate(message); validateErr != nil {
+				return nil, status.Error(codes.InvalidArgument, validateErr.Error())
 			}
 		}
 		return handler(context, request)

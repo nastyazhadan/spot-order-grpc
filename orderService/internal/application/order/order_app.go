@@ -17,7 +17,9 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	wireGen "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
+	grpcAuth "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/auth"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
+	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
@@ -107,7 +109,7 @@ func registerMetrics(
 	resource *resource.Resource,
 	logger *zapLogger.Logger,
 ) error {
-	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, cfg.Tracing, resource, logger)
+	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, resource, logger)
 	if err != nil {
 		return err
 	}
@@ -235,13 +237,14 @@ func provideListener(
 func provideGRPCServer(
 	container *wireGen.Container,
 	cfg config.OrderConfig,
+	jwtManager authjwt.Manager,
 	appLogger *zapLogger.Logger,
 ) (*grpc.Server, error) {
 	validator := validate.UnaryServerInterceptor()
 	recoverer := recovery.UnaryServerInterceptor(appLogger)
 	tracer := tracing.UnaryServerInterceptor()
 	logger := logInterceptor.UnaryServerInterceptor(appLogger)
-	authenticator := auth.UnaryServerInterceptor(cfg.JWTSecret, cfg.Auth)
+	authenticator := auth.UnaryServerInterceptor(jwtManager, cfg.Auth)
 	errorsMapper := grpcErrors.UnaryServerInterceptor(appLogger)
 	rateLimiter := ratelimit.OrderUnaryServerInterceptor(cfg, appLogger)
 	meter := metricInterceptor.UnaryServerInterceptor(cfg.ServiceName)
@@ -257,12 +260,13 @@ func provideGRPCServer(
 			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
 		}),
 		grpc.ChainUnaryInterceptor(
-			recoverer, rateLimiter, tracer, meter, authenticator, logger, errorsMapper, validator,
+			recoverer, tracer, meter, authenticator, logger, rateLimiter, errorsMapper, validator,
 		),
 	)
 
 	reflection.Register(grpcServer)
 	health.RegisterService(grpcServer)
+	grpcAuth.Register(grpcServer, container.AuthService)
 	grpcOrder.Register(grpcServer, container.OrderService)
 
 	return grpcServer, nil

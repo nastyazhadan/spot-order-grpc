@@ -2,10 +2,13 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 )
 
 type Store struct {
@@ -48,37 +51,14 @@ func (s *Store) SetWithTTL(ctx context.Context, key string, value interface{}, t
 
 func (s *Store) Get(ctx context.Context, key string) ([]byte, error) {
 	result, err := s.redis.Get(ctx, key).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, sharedErrors.ErrCacheNotFound
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get key %s: %w", key, err)
 	}
 
 	return result, nil
-}
-
-func (s *Store) GetHashAll(ctx context.Context, key string) (map[string]string, bool, error) {
-	result, err := s.hGetAll(ctx, key)
-	if err != nil {
-		return nil, false, err
-	}
-	if len(result) == 0 {
-		return nil, false, nil
-	}
-
-	return result, true, nil
-}
-
-func (s *Store) SetHash(ctx context.Context, key string, values map[string]any, ttl time.Duration) error {
-	if err := s.hSet(ctx, key, values); err != nil {
-		return err
-	}
-
-	if ttl > 0 {
-		if err := s.expire(ctx, key, ttl); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (s *Store) Delete(ctx context.Context, key string) error {
@@ -98,27 +78,10 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 	return result > 0, nil
 }
 
-func (s *Store) expire(ctx context.Context, key string, ttl time.Duration) error {
+func (s *Store) Expire(ctx context.Context, key string, ttl time.Duration) error {
 	if err := s.redis.Expire(ctx, key, ttl).Err(); err != nil {
 		return fmt.Errorf("failed to set expiration for key %s: %w", key, err)
 	}
 
 	return nil
-}
-
-func (s *Store) hSet(ctx context.Context, key string, values any) error {
-	if err := s.redis.HSet(ctx, key, values).Err(); err != nil {
-		return fmt.Errorf("failed to hash set key %s: %w", key, err)
-	}
-
-	return nil
-}
-
-func (s *Store) hGetAll(ctx context.Context, key string) (map[string]string, error) {
-	result, err := s.redis.HGetAll(ctx, key).Result()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get key %s: %w", key, err)
-	}
-
-	return result, nil
 }

@@ -9,20 +9,22 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/auth"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
 type Container struct {
-	OrderService *svcOrder.OrderService
+	OrderService *order.OrderService
+	AuthService  *auth.AuthService
 	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }
 
 func NewContainer(
 	ctx context.Context,
-	marketViewer svcOrder.MarketViewer,
+	marketViewer order.MarketViewer,
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) (*Container, error) {
@@ -32,6 +34,9 @@ func NewContainer(
 		provideCacheStore,
 		provideOrderStore,
 		provideRateLimiters,
+		provideJWTManager,
+		provideRefreshTokenStore,
+		provideAuthService,
 		provideOrderServiceConfig,
 		provideOrderService,
 		wire.Struct(new(Container), "*"),

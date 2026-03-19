@@ -9,6 +9,7 @@ package gen
 import (
 	"context"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/auth"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -31,8 +32,12 @@ func NewContainer(ctx context.Context, marketViewer order.MarketViewer, cfg conf
 	rateLimiters := provideRateLimiters(store, cfg)
 	orderServiceConfig := provideOrderServiceConfig(cfg)
 	orderService := provideOrderService(orderStore, marketViewer, rateLimiters, orderServiceConfig, logger)
+	manager := provideJWTManager(cfg)
+	refreshTokenStore := provideRefreshTokenStore(store, cfg)
+	authService := provideAuthService(manager, refreshTokenStore)
 	container := &Container{
 		OrderService: orderService,
+		AuthService:  authService,
 		RedisClient:  client,
 		PostgresPool: pool,
 	}
@@ -43,6 +48,7 @@ func NewContainer(ctx context.Context, marketViewer order.MarketViewer, cfg conf
 
 type Container struct {
 	OrderService *order.OrderService
+	AuthService  *auth.AuthService
 	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }

@@ -102,7 +102,7 @@ func registerMetrics(
 	resource *resource.Resource,
 	logger *zapLogger.Logger,
 ) error {
-	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, cfg.Tracing, resource, logger)
+	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, resource, logger)
 	if err != nil {
 		return err
 	}

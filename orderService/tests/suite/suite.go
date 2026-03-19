@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/redis/go-redis/v9"
+	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/order"
 	"github.com/testcontainers/testcontainers-go"
 	pgContainer "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -22,7 +22,6 @@ import (
 
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
 	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
-	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"

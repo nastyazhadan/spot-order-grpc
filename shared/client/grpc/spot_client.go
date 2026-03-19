@@ -12,7 +12,6 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 
 	"github.com/sony/gobreaker/v2"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
@@ -41,7 +40,6 @@ func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) (
 			UserRoles: userRoles,
 		})
 		if err != nil {
-			c.logger.Error(ctx, "spotService.ViewMarkets failed", zap.Error(err))
 			return nil, err
 		}
 		return resp, nil

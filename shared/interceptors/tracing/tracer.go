@@ -79,9 +79,6 @@ func InitTracer(ctx context.Context, cfg config.TracingConfig, res *resource.Res
 
 func ShutdownTracer(ctx context.Context) error {
 	provider := otel.GetTracerProvider()
-	if provider == nil {
-		return nil
-	}
 
 	tracerProvider, ok := provider.(*sdktrace.TracerProvider)
 	if !ok {

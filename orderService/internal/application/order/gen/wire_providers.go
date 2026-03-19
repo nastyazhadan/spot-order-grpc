@@ -8,9 +8,12 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
-	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis"
+	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/auth"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/order"
+	svcAuth "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/auth"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
+	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
@@ -69,19 +72,35 @@ func provideOrderStore(pool *pgxpool.Pool) *repoPostgres.OrderStore {
 
 func provideRateLimiters(store *cache.Store, cfg config.OrderConfig) svcOrder.RateLimiters {
 	return svcOrder.RateLimiters{
-		Create: repoRedis.NewOrderRateLimiter(
+		Create: order.NewOrderRateLimiter(
 			store,
 			cfg.RateLimitByUser.CreateOrder,
 			cfg.RateLimitByUser.Window,
 			"rate:order:create:",
 		),
-		Get: repoRedis.NewOrderRateLimiter(
+		Get: order.NewOrderRateLimiter(
 			store,
 			cfg.RateLimitByUser.GetOrderStatus,
 			cfg.RateLimitByUser.Window,
 			"rate:order:get:",
 		),
 	}
+}
+
+func provideJWTManager(cfg config.OrderConfig) authjwt.Manager {
+	return authjwt.NewManager(
+		cfg.JWTSecret,
+		cfg.Auth.AccessTokenTTL,
+		cfg.Auth.RefreshTokenTTL,
+	)
+}
+
+func provideRefreshTokenStore(store *cache.Store, cfg config.OrderConfig) *repoRedis.RefreshTokenStore {
+	return repoRedis.NewRefreshTokenStore(store, cfg.Auth.RefreshTokenTTL)
+}
+
+func provideAuthService(jwtManager authjwt.Manager, store *repoRedis.RefreshTokenStore) *svcAuth.AuthService {
+	return svcAuth.NewService(jwtManager, store)
 }
 
 func provideOrderServiceConfig(cfg config.OrderConfig) svcOrder.OrderServiceConfig {

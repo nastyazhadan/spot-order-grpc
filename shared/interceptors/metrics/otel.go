@@ -17,13 +17,12 @@ import (
 func InitOpenTelemetry(
 	ctx context.Context,
 	metricsCfg config.MetricsConfig,
-	tracingCfg config.TracingConfig,
 	res *resource.Resource,
 	logger *zapLogger.Logger,
 ) (*sdkmetric.MeterProvider, error) {
 	exporter, err := otlpmetricgrpc.New(
 		ctx,
-		otlpmetricgrpc.WithEndpoint(tracingCfg.CollectorEndpoint),
+		otlpmetricgrpc.WithEndpoint(metricsCfg.CollectorEndpoint),
 		otlpmetricgrpc.WithTLSCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {

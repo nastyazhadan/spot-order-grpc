@@ -36,7 +36,6 @@ func UnaryServerInterceptor(logger *zapLogger.Logger) grpc.UnaryServerIntercepto
 				zap.String("method", method),
 				zap.String("code", stat.Code().String()),
 				zap.Duration("duration", duration),
-				zap.Error(err),
 			)
 		} else {
 			logger.Info(ctx, "gRPC request completed",

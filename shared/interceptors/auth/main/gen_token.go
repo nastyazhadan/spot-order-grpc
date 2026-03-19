@@ -7,8 +7,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
+
+	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
+)
+
+const (
+	defaultUserID          = "550e8400-e29b-41d4-a716-446655440003"
+	defaultAccessTokenTTL  = 5 * time.Minute
+	defaultRefreshTokenTTL = 10 * time.Minute
 )
 
 func main() {
@@ -23,16 +31,21 @@ func main() {
 		log.Fatal("JWT_SECRET environment variable must be set")
 	}
 
-	claims := jwt.MapClaims{
-		"user_id": "550e8400-e29b-41d4-a716-446655440003",
-		"exp":     time.Now().Add(24 * time.Hour).Unix(),
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString([]byte(secret))
+	userID, err := uuid.Parse(defaultUserID)
 	if err != nil {
-		log.Fatalf("failed to sign token: %v", err)
+		log.Fatalf("invalid default user id: %v", err)
 	}
 
-	fmt.Println(signed)
+	jwtManager := authjwt.NewManager(
+		secret,
+		defaultAccessTokenTTL,
+		defaultRefreshTokenTTL,
+	)
+
+	accessToken, err := jwtManager.GenerateAccessToken(userID)
+	if err != nil {
+		log.Fatalf("failed to generate access token: %v", err)
+	}
+
+	fmt.Println(accessToken)
 }

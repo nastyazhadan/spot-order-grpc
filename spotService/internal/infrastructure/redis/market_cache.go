@@ -13,7 +13,6 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound/redis"
 
-	redisGo "github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -49,7 +48,7 @@ func (m *MarketCacheRepository) GetAll(
 
 	data, err := m.cacheStore.Get(ctx, cacheKey(roleKey))
 	if err != nil {
-		if errors.Is(err, redisGo.Nil) {
+		if errors.Is(err, repositoryErrors.ErrCacheNotFound) {
 			return nil, repositoryErrors.ErrMarketCacheNotFound
 		}
 

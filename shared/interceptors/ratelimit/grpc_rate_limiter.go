@@ -13,7 +13,6 @@ import (
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -57,14 +56,8 @@ func newUnaryServerInterceptor(
 		}
 
 		if !limiter.Allow() {
-			address := "unknown"
-			if p, ok := peer.FromContext(ctx); ok {
-				address = p.Addr.String()
-			}
-
-			logger.Warn(ctx, "rate limit exceeded",
+			logger.Warn(ctx, "global rate limit exceeded",
 				zap.String("method", serverInfo.FullMethod),
-				zap.String("peer", address),
 			)
 
 			metrics.RateLimitRejectedTotal.

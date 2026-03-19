@@ -28,7 +28,7 @@ type OrderService interface {
 	) (uuid.UUID, models.OrderStatus, error)
 
 	GetOrderStatus(ctx context.Context,
-		orderId, userID uuid.UUID,
+		orderID, userID uuid.UUID,
 	) (models.OrderStatus, error)
 }
 
@@ -83,7 +83,6 @@ func (s *serverAPI) CreateOrder(
 		OrderId: orderID.String(),
 		Status:  mapper.StatusToProto(orderStatus),
 	}, nil
-
 }
 
 func (s *serverAPI) GetOrderStatus(
@@ -94,13 +93,13 @@ func (s *serverAPI) GetOrderStatus(
 		return nil, status.Error(codes.InvalidArgument, "order_id is required")
 	}
 
-	orderID, err := uuid.Parse(request.GetOrderId())
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "order_id must be a valid UUID")
-	}
 	userID, found := requestctx.UserIDFromContext(ctx)
 	if !found {
 		return nil, status.Error(codes.Unauthenticated, "user_id not found in token")
+	}
+	orderID, err := uuid.Parse(request.GetOrderId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "order_id must be a valid UUID")
 	}
 
 	ctx = zapLogger.WithFields(ctx,

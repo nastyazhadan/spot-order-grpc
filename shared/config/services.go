@@ -92,12 +92,13 @@ type TracingConfig struct {
 }
 
 type MetricsConfig struct {
-	HTTPAddress    string        `mapstructure:"http_address"`
-	ReadTimeout    time.Duration `mapstructure:"read_timeout"`
-	WriteTimeout   time.Duration `mapstructure:"write_timeout"`
-	IdleTimeout    time.Duration `mapstructure:"idle_timeout"`
-	ExportInterval time.Duration `mapstructure:"export_interval"`
-	PushGatewayURL string        `mapstructure:"push_gateway_url"`
+	HTTPAddress       string        `mapstructure:"http_address"`
+	CollectorEndpoint string        `mapstructure:"collector_endpoint"`
+	ReadTimeout       time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout      time.Duration `mapstructure:"write_timeout"`
+	IdleTimeout       time.Duration `mapstructure:"idle_timeout"`
+	ExportInterval    time.Duration `mapstructure:"export_interval"`
+	PushGatewayURL    string        `mapstructure:"push_gateway_url"`
 }
 
 type KeepAliveConfig struct {
@@ -108,7 +109,9 @@ type KeepAliveConfig struct {
 }
 
 type AuthConfig struct {
-	SkipMethods []string `mapstructure:"skip_methods"`
+	SkipMethods     []string      `mapstructure:"skip_methods"`
+	AccessTokenTTL  time.Duration `mapstructure:"access_token_ttl"`
+	RefreshTokenTTL time.Duration `mapstructure:"refresh_token_ttl"`
 }
 
 func (r RedisConfig) Address() string {
