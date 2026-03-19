@@ -19,8 +19,8 @@ func Load() (*config.SpotConfig, error) {
 		return nil, fmt.Errorf("unmarshal spot config: %w", err)
 	}
 
-	cfg.DBURI = os.Getenv("SPOT_DB_URI")
-	if cfg.DBURI == "" {
+	cfg.Service.DBURI = os.Getenv("SPOT_DB_URI")
+	if cfg.Service.DBURI == "" {
 		return nil, errors.New("SPOT_DB_URI is required")
 	}
 
@@ -32,10 +32,10 @@ func Load() (*config.SpotConfig, error) {
 }
 
 func validateSpotTimeouts(cfg config.SpotConfig) error {
-	if cfg.Redis.ConnectionTimeout >= cfg.ServiceTimeout {
+	if cfg.Redis.ConnectionTimeout >= cfg.Timeouts.Service {
 		return fmt.Errorf(
 			"redis.connection_timeout (%s) must be less than service_timeout (%s)",
-			cfg.Redis.ConnectionTimeout, cfg.ServiceTimeout,
+			cfg.Redis.ConnectionTimeout, cfg.Timeouts.Service,
 		)
 	}
 

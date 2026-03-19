@@ -20,13 +20,13 @@ func OrderUnaryServerInterceptor(cfg config.OrderConfig, logger *zapLogger.Logge
 	return newUnaryServerInterceptor(map[string]int{
 		orderProto.OrderService_CreateOrder_FullMethodName:    cfg.GRPCRateLimit.CreateOrder,
 		orderProto.OrderService_GetOrderStatus_FullMethodName: cfg.GRPCRateLimit.GetOrderStatus,
-	}, cfg.ServiceName, logger)
+	}, cfg.Service.Name, logger)
 }
 
 func SpotUnaryServerInterceptor(cfg config.SpotConfig, logger *zapLogger.Logger) grpc.UnaryServerInterceptor {
 	return newUnaryServerInterceptor(map[string]int{
 		spotProto.SpotInstrumentService_ViewMarkets_FullMethodName: cfg.GRPCRateLimit.ViewMarkets,
-	}, cfg.ServiceName, logger)
+	}, cfg.Service.Name, logger)
 }
 
 func newUnaryServerInterceptor(

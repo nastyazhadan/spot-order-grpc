@@ -6,16 +6,11 @@ import (
 )
 
 type OrderConfig struct {
-	Address         string                   `mapstructure:"address"`
-	ServiceName     string                   `mapstructure:"service_name"`
-	DBURI           string                   `mapstructure:"db_uri"`
+	Service         ServiceConfig            `mapstructure:"service"`
 	SpotAddress     string                   `mapstructure:"spot_address"`
 	JWTSecret       string                   `mapstructure:"jwt_secret"`
-	ServiceTimeout  time.Duration            `mapstructure:"service_timeout"`
-	CheckTimeout    time.Duration            `mapstructure:"check_timeout"`
-	LogLevel        string                   `mapstructure:"log_level"`
-	LogFormat       string                   `mapstructure:"log_format"`
-	MaxRecvMsgSize  int                      `mapstructure:"max_recv_msg_size"`
+	Timeouts        TimeoutsConfig           `mapstructure:"timeouts"`
+	Log             LogConfig                `mapstructure:"log"`
 	Auth            AuthConfig               `mapstructure:"auth"`
 	CircuitBreaker  CircuitBreakerConfig     `mapstructure:"circuit_breaker"`
 	PostgresPool    PostgresPoolConfig       `mapstructure:"postgres_pool"`
@@ -28,19 +23,32 @@ type OrderConfig struct {
 }
 
 type SpotConfig struct {
-	Address        string                  `mapstructure:"address"`
-	ServiceName    string                  `mapstructure:"service_name"`
-	DBURI          string                  `mapstructure:"db_uri"`
-	LogLevel       string                  `mapstructure:"log_level"`
-	LogFormat      string                  `mapstructure:"log_format"`
-	ServiceTimeout time.Duration           `mapstructure:"service_timeout"`
-	MaxRecvMsgSize int                     `mapstructure:"max_recv_msg_size"`
-	PostgresPool   PostgresPoolConfig      `mapstructure:"postgres_pool"`
-	GRPCRateLimit  SpotGRPCRateLimitConfig `mapstructure:"grpc_rate_limit"`
-	Redis          RedisConfig             `mapstructure:"redis"`
-	Tracing        TracingConfig           `mapstructure:"tracing"`
-	Metrics        MetricsConfig           `mapstructure:"metrics"`
-	KeepAlive      KeepAliveConfig         `mapstructure:"keep_alive"`
+	Service       ServiceConfig           `mapstructure:"service"`
+	Log           LogConfig               `mapstructure:"log"`
+	Timeouts      TimeoutsConfig          `mapstructure:"timeouts"`
+	PostgresPool  PostgresPoolConfig      `mapstructure:"postgres_pool"`
+	GRPCRateLimit SpotGRPCRateLimitConfig `mapstructure:"grpc_rate_limit"`
+	Redis         RedisConfig             `mapstructure:"redis"`
+	Tracing       TracingConfig           `mapstructure:"tracing"`
+	Metrics       MetricsConfig           `mapstructure:"metrics"`
+	KeepAlive     KeepAliveConfig         `mapstructure:"keep_alive"`
+}
+
+type ServiceConfig struct {
+	Address        string `mapstructure:"address"`
+	Name           string `mapstructure:"name"`
+	MaxRecvMsgSize int    `mapstructure:"max_recv_msg_size"`
+	DBURI          string `mapstructure:"db_uri"`
+}
+
+type LogConfig struct {
+	Level  string `mapstructure:"level"`
+	Format string `mapstructure:"format"`
+}
+
+type TimeoutsConfig struct {
+	Service time.Duration `mapstructure:"service"`
+	Check   time.Duration `mapstructure:"check"`
 }
 
 type CircuitBreakerConfig struct {

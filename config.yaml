@@ -1,12 +1,15 @@
 order:
-  address: ":50051"
+  service:
+    address: ":50051"
+    name: "order-service"
+    max_recv_msg_size: 10485760 # 10MB
   spot_address: "spot-service:50052"
-  service_name: "order-service"
-  service_timeout: "5s"
-  check_timeout: "15s"
-  log_level: "info"
-  log_format: "console"
-  max_recv_msg_size: 10485760 # 10MB
+  timeouts:
+    service: "5s"
+    check: "15s"
+  log:
+    level: "info"
+    format: "console"
   auth:
     skip_methods:
       - "/grpc.health.v1.Health/Check"
@@ -60,12 +63,15 @@ order:
     permit_without_stream: true
 
 spot:
-  address: ":50052"
-  service_name: "spot-service"
-  log_level: "info"
-  log_format: "console"
-  service_timeout: "5s"
-  max_recv_msg_size: 10485760 # 10MB
+  service:
+    address: ":50052"
+    name: "spot-service"
+    max_recv_msg_size: 10485760 # 10MB
+  timeouts:
+    service: "5s"
+  log:
+    level: "info"
+    format: "console"
   grpc_rate_limit:
     view_markets: 1000
   postgres_pool:

@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
+
+	"github.com/google/uuid"
 	redisGo "github.com/redis/go-redis/v9"
 )
 

@@ -21,7 +21,7 @@ import (
 )
 
 func providePostgresPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.Pool, error) {
-	pool, err := db.SetupDBWithPoolConfig(ctx, cfg.DBURI, migrations.Migrations, db.PoolConfig{
+	pool, err := db.SetupDBWithPoolConfig(ctx, cfg.Service.DBURI, migrations.Migrations, db.PoolConfig{
 		MaxConnections:  cfg.PostgresPool.MaxConnections,
 		MinConnections:  cfg.PostgresPool.MinConnections,
 		MaxConnLifetime: cfg.PostgresPool.MaxConnLifetime,
@@ -105,8 +105,8 @@ func provideAuthService(jwtManager authjwt.Manager, store *repoRedis.RefreshToke
 
 func provideOrderServiceConfig(cfg config.OrderConfig) svcOrder.OrderServiceConfig {
 	return svcOrder.OrderServiceConfig{
-		Timeout:     cfg.ServiceTimeout,
-		ServiceName: cfg.ServiceName,
+		Timeout:     cfg.Timeouts.Service,
+		ServiceName: cfg.Service.Name,
 	}
 }
 

@@ -18,7 +18,7 @@ import (
 )
 
 func providePostgresPool(ctx context.Context, cfg config.SpotConfig) (*pgxpool.Pool, error) {
-	pool, err := db.SetupDBWithPoolConfig(ctx, cfg.DBURI, migrations.Migrations, db.PoolConfig{
+	pool, err := db.SetupDBWithPoolConfig(ctx, cfg.Service.DBURI, migrations.Migrations, db.PoolConfig{
 		MaxConnections:  cfg.PostgresPool.MaxConnections,
 		MinConnections:  cfg.PostgresPool.MinConnections,
 		MaxConnLifetime: cfg.PostgresPool.MaxConnLifetime,
@@ -81,7 +81,7 @@ func provideSpotService(
 		repository,
 		cacheRepository,
 		cfg.Redis.CacheTTL,
-		cfg.ServiceTimeout,
+		cfg.Timeouts.Service,
 		logger,
 	)
 }

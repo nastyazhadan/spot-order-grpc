@@ -19,8 +19,8 @@ func Load() (*config.OrderConfig, error) {
 		return nil, fmt.Errorf("unmarshal order config: %w", err)
 	}
 
-	cfg.DBURI = os.Getenv("ORDER_DB_URI")
-	if cfg.DBURI == "" {
+	cfg.Service.DBURI = os.Getenv("ORDER_DB_URI")
+	if cfg.Service.DBURI == "" {
 		return nil, errors.New("ORDER_DB_URI is required")
 	}
 
@@ -37,17 +37,17 @@ func Load() (*config.OrderConfig, error) {
 }
 
 func validateOrderTimeouts(cfg config.OrderConfig) error {
-	if cfg.Redis.ConnectionTimeout >= cfg.ServiceTimeout {
+	if cfg.Redis.ConnectionTimeout >= cfg.Timeouts.Service {
 		return fmt.Errorf(
 			"redis.connection_timeout (%s) must be less than service_timeout (%s)",
-			cfg.Redis.ConnectionTimeout, cfg.ServiceTimeout,
+			cfg.Redis.ConnectionTimeout, cfg.Timeouts.Service,
 		)
 	}
 
-	if cfg.CircuitBreaker.Timeout >= cfg.ServiceTimeout {
+	if cfg.CircuitBreaker.Timeout >= cfg.Timeouts.Service {
 		return fmt.Errorf(
 			"breaker.timeout (%s) must be less than service_timeout (%s)",
-			cfg.CircuitBreaker.Timeout, cfg.ServiceTimeout,
+			cfg.CircuitBreaker.Timeout, cfg.Timeouts.Service,
 		)
 	}
 

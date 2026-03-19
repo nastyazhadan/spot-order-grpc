@@ -63,7 +63,7 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 }
 
 func provideLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*zapLogger.Logger, error) {
-	logger := zapLogger.New(cfg.LogLevel, cfg.LogFormat == "json")
+	logger := zapLogger.New(cfg.Log.Level, cfg.Log.Format == "json")
 
 	lifeCycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
@@ -75,7 +75,7 @@ func provideLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*zapLogger.L
 }
 
 func provideTracingResource(ctx context.Context, cfg config.OrderConfig) (*resource.Resource, error) {
-	return tracing.NewResource(ctx, cfg.ServiceName, cfg.Tracing)
+	return tracing.NewResource(ctx, cfg.Service.Name, cfg.Tracing)
 }
 
 func registerTracing(
@@ -131,7 +131,7 @@ func registerMetrics(
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			metrics.PushShutdownMetric(ctx, cfg.Metrics.PushGatewayURL, cfg.ServiceName)
+			metrics.PushShutdownMetric(ctx, cfg.Metrics.PushGatewayURL, cfg.Service.Name)
 			if stopErr := meterProvider.Shutdown(ctx); stopErr != nil {
 				logger.Error(ctx, "Failed to shutdown metrics provider", zap.Error(stopErr))
 			}
@@ -177,7 +177,7 @@ func provideGRPCClient(
 ) (*grpcClient.SpotClient, error) {
 	client := grpcClient.NewSpotClient(connection, cfg.CircuitBreaker, logger)
 
-	checkCtx, cancel := context.WithTimeout(ctx, cfg.CheckTimeout)
+	checkCtx, cancel := context.WithTimeout(ctx, cfg.Timeouts.Check)
 	defer cancel()
 
 	err := health.CheckHealth(checkCtx, connection)
@@ -214,7 +214,7 @@ func provideListener(
 	lifeCycle fx.Lifecycle,
 	cfg config.OrderConfig,
 ) (net.Listener, error) {
-	listener, err := net.Listen("tcp", cfg.Address)
+	listener, err := net.Listen("tcp", cfg.Service.Address)
 	if err != nil {
 		return nil, fmt.Errorf("net.Listen: %w", err)
 	}
@@ -245,10 +245,10 @@ func provideGRPCServer(
 	authenticator := auth.UnaryServerInterceptor(container.JWTManager, cfg.Auth)
 	errorsMapper := grpcErrors.UnaryServerInterceptor(appLogger)
 	rateLimiter := ratelimit.OrderUnaryServerInterceptor(cfg, appLogger)
-	meter := metricInterceptor.UnaryServerInterceptor(cfg.ServiceName)
+	meter := metricInterceptor.UnaryServerInterceptor(cfg.Service.Name)
 
 	grpcServer := grpc.NewServer(
-		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize),
+		grpc.MaxRecvMsgSize(cfg.Service.MaxRecvMsgSize),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			Time:    cfg.KeepAlive.PingTime,
 			Timeout: cfg.KeepAlive.PingTimeout,
