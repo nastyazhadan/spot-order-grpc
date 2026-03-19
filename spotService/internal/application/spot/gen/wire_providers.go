@@ -10,6 +10,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	repoPostgres "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres"
 	repoRedis "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis"
 	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
@@ -58,27 +59,29 @@ func provideRedisClient(ctx context.Context, cfg config.SpotConfig) (*redis.Clie
 	return client, nil
 }
 
-func provideCacheClient(client *redis.Client) cache.Client {
-	return cache.NewClient(client)
+func provideCacheStore(client *redis.Client) *cache.Store {
+	return cache.New(client)
 }
 
 func provideMarketStore(pool *pgxpool.Pool) *repoPostgres.MarketStore {
 	return repoPostgres.NewMarketStore(pool)
 }
 
-func provideMarketCacheRepository(client cache.Client) *repoRedis.MarketCacheRepository {
-	return repoRedis.NewMarketCacheRepository(client)
+func provideMarketCacheRepository(store *cache.Store) *repoRedis.MarketCacheRepository {
+	return repoRedis.NewMarketCacheRepository(store)
 }
 
 func provideSpotService(
 	repository *repoPostgres.MarketStore,
 	cacheRepository *repoRedis.MarketCacheRepository,
 	cfg config.SpotConfig,
+	logger *zapLogger.Logger,
 ) *svcSpot.Service {
 	return svcSpot.NewService(
 		repository,
 		cacheRepository,
 		cfg.Redis.CacheTTL,
 		cfg.ServiceTimeout,
+		logger,
 	)
 }

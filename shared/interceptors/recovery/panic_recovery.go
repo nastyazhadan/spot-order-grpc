@@ -3,7 +3,7 @@ package recovery
 import (
 	"context"
 	"fmt"
-	"runtime"
+	"runtime/debug"
 
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 
@@ -13,24 +13,24 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func UnaryServerInterceptor(
-	ctx context.Context,
-	request any,
-	_ *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (response any, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			buffer := make([]byte, 4096)
-			count := runtime.Stack(buffer, false)
+func UnaryServerInterceptor(logger *zapLogger.Logger) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		request any,
+		_ *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (response any, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error(ctx, "panic recovered in gRPC handler",
+					zap.String("panic", fmt.Sprintf("%v", r)),
+					zap.ByteString("stack", debug.Stack()),
+				)
 
-			zapLogger.Error(ctx, "panic recovered in gRPC handler",
-				zap.String("panic", fmt.Sprintf("%v", r)),
-				zap.ByteString("stack", buffer[:count]),
-			)
-			err = status.Errorf(codes.Internal, "internal error")
-		}
-	}()
+				err = status.Error(codes.Internal, "internal error")
+			}
+		}()
 
-	return handler(ctx, request)
+		return handler(ctx, request)
+	}
 }

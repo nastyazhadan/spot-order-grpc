@@ -2,6 +2,7 @@ package validate
 
 import (
 	"context"
+	"fmt"
 
 	"buf.build/go/protovalidate"
 	"google.golang.org/grpc"
@@ -10,23 +11,23 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func ProtovalidateUnary() (grpc.UnaryServerInterceptor, error) {
+func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	validator, err := protovalidate.New()
 	if err != nil {
-		return nil, err
+		panic(fmt.Errorf("protovalidate.New: %w", err))
 	}
 
 	return func(
 		context context.Context,
-		request interface{},
+		request any,
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
-	) (interface{}, error) {
-		if message, found := request.(proto.Message); found {
-			if err := validator.Validate(message); err != nil {
+	) (any, error) {
+		if message, ok := request.(proto.Message); ok {
+			if err = validator.Validate(message); err != nil {
 				return nil, status.Error(codes.InvalidArgument, err.Error())
 			}
 		}
 		return handler(context, request)
-	}, nil
+	}
 }

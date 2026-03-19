@@ -19,6 +19,7 @@ func InitOpenTelemetry(
 	metricsCfg config.MetricsConfig,
 	tracingCfg config.TracingConfig,
 	res *resource.Resource,
+	logger *zapLogger.Logger,
 ) (*sdkmetric.MeterProvider, error) {
 	exporter, err := otlpmetricgrpc.New(
 		ctx,
@@ -40,7 +41,7 @@ func InitOpenTelemetry(
 	)
 
 	otel.SetMeterProvider(meterProvider)
-	zapLogger.Info(ctx, "OpenTelemetry metrics initialized successfully")
+	logger.Info(ctx, "OpenTelemetry metrics initialized successfully")
 
 	return meterProvider, nil
 }

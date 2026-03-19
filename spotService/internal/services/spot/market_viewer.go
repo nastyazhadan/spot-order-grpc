@@ -42,14 +42,21 @@ type Service struct {
 	cacheTTL              time.Duration
 	serviceTimeout        time.Duration
 	singleFlight          singleflight.Group
+	logger                *zapLogger.Logger
 }
 
-func NewService(repo MarketRepository, cacheRepo MarketCacheRepository, ttl, timeout time.Duration) *Service {
+func NewService(
+	repo MarketRepository,
+	cacheRepo MarketCacheRepository,
+	ttl, timeout time.Duration,
+	logger *zapLogger.Logger,
+) *Service {
 	return &Service{
 		marketRepository:      repo,
 		marketCacheRepository: cacheRepo,
 		cacheTTL:              ttl,
 		serviceTimeout:        timeout,
+		logger:                logger,
 	}
 }
 
@@ -101,7 +108,7 @@ func (s *Service) getMarkets(ctx context.Context, roleKey string) ([]models.Mark
 	}
 
 	if !errors.Is(err, repositoryErrors.ErrMarketCacheNotFound) {
-		zapLogger.Error(ctx, "internal cache error", zap.Error(err))
+		s.logger.Error(ctx, "internal cache error", zap.Error(err))
 	}
 
 	return s.getMarketsWithSingleFlight(ctx, roleKey)
@@ -153,7 +160,7 @@ func (s *Service) loadAndWarmCache(ctx context.Context, roleKey string) ([]model
 
 	if err = s.marketCacheRepository.SetAll(ctx, filtered, roleKey, s.cacheTTL); err != nil {
 		span.RecordError(err)
-		zapLogger.Warn(ctx, "failed to update cache", zap.Error(err))
+		s.logger.Warn(ctx, "failed to update cache", zap.Error(err))
 	}
 
 	return filtered, nil

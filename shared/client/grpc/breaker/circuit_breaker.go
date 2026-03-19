@@ -13,6 +13,7 @@ import (
 func New[T any](
 	name string,
 	cfg config.CircuitBreakerConfig,
+	logger *zapLogger.Logger,
 ) *gobreaker.CircuitBreaker[T] {
 	return gobreaker.NewCircuitBreaker[T](gobreaker.Settings{
 		Name:        name,
@@ -23,7 +24,7 @@ func New[T any](
 			shouldTrip := counts.ConsecutiveFailures >= cfg.MaxFailures
 
 			if shouldTrip {
-				zapLogger.Warn(context.Background(), "circuit breaker is about to open",
+				logger.Warn(context.Background(), "circuit breaker is about to open",
 					zap.String("name", name),
 					zap.Uint32("consecutive_failures", counts.ConsecutiveFailures),
 					zap.Uint32("total_failures", counts.TotalFailures),
@@ -42,13 +43,13 @@ func New[T any](
 
 			switch to {
 			case gobreaker.StateOpen:
-				zapLogger.Warn(context.Background(), "circuit breaker is open", fields...)
+				logger.Warn(context.Background(), "circuit breaker is open", fields...)
 			case gobreaker.StateHalfOpen:
-				zapLogger.Info(context.Background(), "circuit breaker is half-open", fields...)
+				logger.Info(context.Background(), "circuit breaker is half-open", fields...)
 			case gobreaker.StateClosed:
-				zapLogger.Info(context.Background(), "circuit breaker is closed", fields...)
+				logger.Info(context.Background(), "circuit breaker is closed", fields...)
 			default:
-				zapLogger.Info(context.Background(), "circuit breaker state changed", fields...)
+				logger.Info(context.Background(), "circuit breaker state changed", fields...)
 			}
 		},
 	})

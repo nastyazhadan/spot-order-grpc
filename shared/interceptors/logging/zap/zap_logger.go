@@ -4,66 +4,60 @@ import (
 	"context"
 	"os"
 	"strings"
-	"sync"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 )
 
 type contextKey string
 
 const (
-	TraceIDKey     contextKey = "x-trace-id"
-	UserIDKey      contextKey = "user_id"
 	extraFieldsKey contextKey = "log_extra_fields"
 )
 
-func WithFields(ctx context.Context, fields ...zap.Field) context.Context {
-	existing, _ := ctx.Value(extraFieldsKey).([]zap.Field)
-
-	merged := make([]zap.Field, len(existing), len(existing)+len(fields))
-	copy(merged, existing)
-	merged = append(merged, fields...)
-
-	return context.WithValue(ctx, extraFieldsKey, merged)
+type extraFields struct {
+	parent *extraFields
+	fields []zap.Field
+	total  int
 }
 
-var (
-	globalLogger *logger
-	initOnce     sync.Once
+type Logger struct {
+	zapLogger    *zap.Logger
 	dynamicLevel zap.AtomicLevel
-)
-
-type logger struct {
-	zapLogger *zap.Logger
 }
 
-func Init(levelStr string, asJSON bool) {
-	initOnce.Do(func() {
-		dynamicLevel = zap.NewAtomicLevelAt(parseLevel(levelStr))
+func New(levelStr string, asJSON bool) *Logger {
+	level := zap.NewAtomicLevelAt(parseLevel(levelStr))
 
-		encoderCfg := buildEncoderConfig()
+	encoderCfg := buildEncoderConfig()
 
-		var encoder zapcore.Encoder
-		if asJSON {
-			encoder = zapcore.NewJSONEncoder(encoderCfg)
-		} else {
-			encoder = zapcore.NewConsoleEncoder(encoderCfg)
-		}
+	var encoder zapcore.Encoder
+	if asJSON {
+		encoder = zapcore.NewJSONEncoder(encoderCfg)
+	} else {
+		encoder = zapcore.NewConsoleEncoder(encoderCfg)
+	}
 
-		core := zapcore.NewCore(
-			encoder,
-			zapcore.AddSync(os.Stdout),
-			dynamicLevel,
-		)
+	core := zapcore.NewCore(
+		encoder,
+		zapcore.AddSync(os.Stdout),
+		level,
+	)
 
-		zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(2))
+	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(2))
 
-		globalLogger = &logger{
-			zapLogger: zapLogger,
-		}
-	})
+	return &Logger{
+		zapLogger:    logger,
+		dynamicLevel: level,
+	}
+}
+
+func NewNop() *Logger {
+	return &Logger{
+		zapLogger: zap.NewNop(),
+	}
 }
 
 func buildEncoderConfig() zapcore.EncoderConfig {
@@ -83,28 +77,20 @@ func buildEncoderConfig() zapcore.EncoderConfig {
 	}
 }
 
-func Logger() *logger {
-	return globalLogger
-}
-
-func SetLevel(levelStr string) {
-	if dynamicLevel == (zap.AtomicLevel{}) {
+func (l *Logger) SetLevel(levelStr string) {
+	if l == nil {
 		return
 	}
 
-	dynamicLevel.SetLevel(parseLevel(levelStr))
+	l.dynamicLevel.SetLevel(parseLevel(levelStr))
 }
 
-func SetNopLogger() {
-	globalLogger = &logger{zapLogger: zap.NewNop()}
-}
-
-func Sync() error {
-	if globalLogger == nil || globalLogger.zapLogger == nil {
+func (l *Logger) Sync() error {
+	if l == nil || l.zapLogger == nil {
 		return nil
 	}
 
-	err := globalLogger.zapLogger.Sync()
+	err := l.zapLogger.Sync()
 	if err != nil && isIgnorableSyncError(err) {
 		return nil
 	}
@@ -124,97 +110,144 @@ func isIgnorableSyncError(err error) bool {
 		strings.Contains(msg, "inappropriate ioctl for device")
 }
 
-func With(fields ...zap.Field) *logger {
-	if globalLogger == nil {
-		return &logger{zapLogger: zap.NewNop()}
+func (l *Logger) With(fields ...zap.Field) *Logger {
+	if l == nil || l.zapLogger == nil {
+		return NewNop()
 	}
-	return &logger{zapLogger: globalLogger.zapLogger.With(fields...)}
-}
-
-func WithContext(ctx context.Context) *logger {
-	if globalLogger == nil {
-		return &logger{zapLogger: zap.NewNop()}
+	if len(fields) == 0 {
+		return l
 	}
-	return &logger{zapLogger: globalLogger.zapLogger.With(fieldsFromContext(ctx)...)}
-}
 
-func ContextWithTraceID(ctx context.Context, traceID string) context.Context {
-	return context.WithValue(ctx, TraceIDKey, traceID)
-}
-
-func TraceIDFromContext(ctx context.Context) string {
-	if value, found := ctx.Value(TraceIDKey).(string); found {
-		return value
-	}
-	return ""
-}
-
-func Debug(ctx context.Context, message string, fields ...zap.Field) {
-	if globalLogger != nil {
-		globalLogger.Debug(ctx, message, fields...)
+	return &Logger{
+		zapLogger:    l.zapLogger.With(fields...),
+		dynamicLevel: l.dynamicLevel,
 	}
 }
 
-func Info(ctx context.Context, message string, fields ...zap.Field) {
-	if globalLogger != nil {
-		globalLogger.Info(ctx, message, fields...)
+func WithFields(ctx context.Context, fields ...zap.Field) context.Context {
+	if len(fields) == 0 {
+		return ctx
+	}
+
+	parent, _ := ctx.Value(extraFieldsKey).(*extraFields)
+
+	node := &extraFields{
+		parent: parent,
+		fields: fields,
+		total:  len(fields),
+	}
+	if parent != nil {
+		node.total += parent.total
+	}
+
+	return context.WithValue(ctx, extraFieldsKey, node)
+}
+
+func (l *Logger) WithContext(ctx context.Context) *Logger {
+	if l == nil || l.zapLogger == nil {
+		return NewNop()
+	}
+
+	ctxFields := fieldsFromContext(ctx)
+	if len(ctxFields) == 0 {
+		return l
+	}
+
+	return &Logger{
+		zapLogger:    l.zapLogger.With(ctxFields...),
+		dynamicLevel: l.dynamicLevel,
 	}
 }
 
-func Warn(ctx context.Context, message string, fields ...zap.Field) {
-	if globalLogger != nil {
-		globalLogger.Warn(ctx, message, fields...)
+func (l *Logger) Debug(ctx context.Context, message string, fields ...zap.Field) {
+	l.log(ctx, zapcore.DebugLevel, message, fields...)
+}
+
+func (l *Logger) Info(ctx context.Context, message string, fields ...zap.Field) {
+	l.log(ctx, zapcore.InfoLevel, message, fields...)
+}
+
+func (l *Logger) Warn(ctx context.Context, message string, fields ...zap.Field) {
+	l.log(ctx, zapcore.WarnLevel, message, fields...)
+}
+
+func (l *Logger) Error(ctx context.Context, message string, fields ...zap.Field) {
+	l.log(ctx, zapcore.ErrorLevel, message, fields...)
+}
+
+func (l *Logger) Fatal(ctx context.Context, message string, fields ...zap.Field) {
+	l.log(ctx, zapcore.FatalLevel, message, fields...)
+}
+
+func (l *Logger) log(ctx context.Context, level zapcore.Level, message string, fields ...zap.Field) {
+	if l == nil || l.zapLogger == nil {
+		return
 	}
-}
 
-func Error(ctx context.Context, message string, fields ...zap.Field) {
-	if globalLogger != nil {
-		globalLogger.Error(ctx, message, fields...)
+	checked := l.zapLogger.Check(level, message)
+	if checked == nil {
+		return
 	}
-}
 
-func Fatal(ctx context.Context, message string, fields ...zap.Field) {
-	if globalLogger != nil {
-		globalLogger.Fatal(ctx, message, fields...)
+	ctxFields := fieldsFromContext(ctx)
+
+	switch {
+	case len(ctxFields) == 0:
+		checked.Write(fields...)
+	case len(fields) == 0:
+		checked.Write(ctxFields...)
+	default:
+		merged := make([]zap.Field, 0, len(ctxFields)+len(fields))
+		merged = append(merged, ctxFields...)
+		merged = append(merged, fields...)
+		checked.Write(merged...)
 	}
-}
-
-func (l *logger) Debug(ctx context.Context, message string, fields ...zap.Field) {
-	l.zapLogger.Debug(message, append(fieldsFromContext(ctx), fields...)...)
-}
-
-func (l *logger) Info(ctx context.Context, message string, fields ...zap.Field) {
-	l.zapLogger.Info(message, append(fieldsFromContext(ctx), fields...)...)
-}
-
-func (l *logger) Warn(ctx context.Context, message string, fields ...zap.Field) {
-	l.zapLogger.Warn(message, append(fieldsFromContext(ctx), fields...)...)
-}
-
-func (l *logger) Error(ctx context.Context, message string, fields ...zap.Field) {
-	l.zapLogger.Error(message, append(fieldsFromContext(ctx), fields...)...)
-}
-
-func (l *logger) Fatal(ctx context.Context, message string, fields ...zap.Field) {
-	l.zapLogger.Fatal(message, append(fieldsFromContext(ctx), fields...)...)
 }
 
 func fieldsFromContext(ctx context.Context) []zap.Field {
-	var fields []zap.Field
+	traceID, hasTraceID := requestctx.TraceIDFromContext(ctx)
+	userID, hasUserID := requestctx.UserIDFromContext(ctx)
+	extra, _ := ctx.Value(extraFieldsKey).(*extraFields)
 
-	if traceID, found := ctx.Value(TraceIDKey).(string); found && traceID != "" {
-		fields = append(fields, zap.String(string(TraceIDKey), traceID))
+	totalFields := 0
+	if hasTraceID {
+		totalFields++
+	}
+	if hasUserID {
+		totalFields++
+	}
+	if extra != nil {
+		totalFields += extra.total
 	}
 
-	if userID, found := ctx.Value(UserIDKey).(uuid.UUID); found {
+	if totalFields == 0 {
+		return nil
+	}
+
+	fields := make([]zap.Field, 0, totalFields)
+
+	if hasTraceID {
+		fields = append(fields, zap.String(requestctx.TraceIDField, traceID))
+	}
+	if hasUserID {
 		fields = append(fields, zap.String("user_id", userID.String()))
 	}
-
-	if extra, found := ctx.Value(extraFieldsKey).([]zap.Field); found {
-		fields = append(fields, extra...)
+	if extra != nil {
+		fields = appendExtraFields(fields, extra)
 	}
 
 	return fields
+}
+
+func appendExtraFields(fields []zap.Field, node *extraFields) []zap.Field {
+	if node == nil {
+		return fields
+	}
+	if node.parent != nil {
+		fields = appendExtraFields(fields, node.parent)
+	}
+
+	return append(fields, node.fields...)
 }
 
 func parseLevel(levelString string) zapcore.Level {

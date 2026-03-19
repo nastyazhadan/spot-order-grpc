@@ -18,21 +18,21 @@ import (
 )
 
 const (
-	DefaultCompressor           = "gzip"
-	DefaultRetryEnabled         = true
-	DefaultRetryInitialInterval = 500 * time.Millisecond
-	DefaultRetryMaxInterval     = 5 * time.Second
-	DefaultRetryMaxElapsedTime  = 4 * time.Minute // Нужно больше - 4-7 минут
-	DefaultTimeout              = 5 * time.Second
-	DefaultTraceRatio           = 1.0
+	defaultCompressor           = "gzip"
+	defaultRetryEnabled         = true
+	defaultRetryInitialInterval = 500 * time.Millisecond
+	defaultRetryMaxInterval     = 5 * time.Second
+	defaultRetryMaxElapsedTime  = 4 * time.Minute // Нужно больше - 4-7 минут
+	defaultTimeout              = 5 * time.Second
+	defaultTraceRatio           = 1.0
+
+	instrumentationName = "spot-order-grpc/tracing"
 )
 
-var serviceName string
-
-func NewResource(ctx context.Context, cfg config.TracingConfig) (*resource.Resource, error) {
+func NewResource(ctx context.Context, serviceName string, cfg config.TracingConfig) (*resource.Resource, error) {
 	return resource.New(ctx,
 		resource.WithAttributes(
-			semconv.ServiceName(cfg.ServiceName),
+			semconv.ServiceName(serviceName),
 			semconv.ServiceVersion(cfg.ServiceVersion),
 			attribute.String("environment", cfg.Environment),
 		),
@@ -45,19 +45,17 @@ func NewResource(ctx context.Context, cfg config.TracingConfig) (*resource.Resou
 }
 
 func InitTracer(ctx context.Context, cfg config.TracingConfig, res *resource.Resource) error {
-	serviceName = cfg.ServiceName
-
 	exporter, err := otlptracegrpc.New(
 		ctx,
 		otlptracegrpc.WithEndpoint(cfg.CollectorEndpoint),
 		otlptracegrpc.WithTLSCredentials(insecure.NewCredentials()),
-		otlptracegrpc.WithTimeout(DefaultTimeout),
-		otlptracegrpc.WithCompressor(DefaultCompressor),
+		otlptracegrpc.WithTimeout(defaultTimeout),
+		otlptracegrpc.WithCompressor(defaultCompressor),
 		otlptracegrpc.WithRetry(otlptracegrpc.RetryConfig{
-			Enabled:         DefaultRetryEnabled,
-			InitialInterval: DefaultRetryInitialInterval,
-			MaxInterval:     DefaultRetryMaxInterval,
-			MaxElapsedTime:  DefaultRetryMaxElapsedTime,
+			Enabled:         defaultRetryEnabled,
+			InitialInterval: defaultRetryInitialInterval,
+			MaxInterval:     defaultRetryMaxInterval,
+			MaxElapsedTime:  defaultRetryMaxElapsedTime,
 		}),
 	)
 	if err != nil {
@@ -67,7 +65,7 @@ func InitTracer(ctx context.Context, cfg config.TracingConfig, res *resource.Res
 	tracerProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
 		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(DefaultTraceRatio))),
+		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(defaultTraceRatio))),
 	)
 
 	otel.SetTracerProvider(tracerProvider)
@@ -90,27 +88,13 @@ func ShutdownTracer(ctx context.Context) error {
 		return nil
 	}
 
-	err := tracerProvider.Shutdown(ctx)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return tracerProvider.Shutdown(ctx)
 }
 
 func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
-	return otel.Tracer(serviceName).Start(ctx, name, opts...)
+	return otel.Tracer(instrumentationName).Start(ctx, name, opts...)
 }
 
 func SpanFromContext(ctx context.Context) trace.Span {
 	return trace.SpanFromContext(ctx)
-}
-
-func TraceIDFromContext(ctx context.Context) string {
-	span := trace.SpanFromContext(ctx)
-	if !span.SpanContext().IsValid() {
-		return ""
-	}
-
-	return span.SpanContext().TraceID().String()
 }

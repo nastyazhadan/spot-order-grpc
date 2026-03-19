@@ -11,6 +11,7 @@ import (
 
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
 type Container struct {
@@ -23,11 +24,12 @@ func NewContainer(
 	ctx context.Context,
 	marketViewer svcOrder.MarketViewer,
 	cfg config.OrderConfig,
+	logger *zapLogger.Logger,
 ) (*Container, error) {
 	wire.Build(
 		providePostgresPool,
 		provideRedisClient,
-		provideCacheClient,
+		provideCacheStore,
 		provideOrderStore,
 		provideRateLimiters,
 		provideOrderServiceConfig,

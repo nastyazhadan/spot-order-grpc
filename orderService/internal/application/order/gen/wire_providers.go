@@ -14,6 +14,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
 func providePostgresPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.Pool, error) {
@@ -58,26 +59,26 @@ func provideRedisClient(ctx context.Context, cfg config.OrderConfig) (*redis.Cli
 	return client, nil
 }
 
-func provideCacheClient(client *redis.Client) cache.Client {
-	return cache.NewClient(client)
+func provideCacheStore(client *redis.Client) *cache.Store {
+	return cache.New(client)
 }
 
 func provideOrderStore(pool *pgxpool.Pool) *repoPostgres.OrderStore {
 	return repoPostgres.NewOrderStore(pool)
 }
 
-func provideRateLimiters(client cache.Client, cfg config.OrderConfig) svcOrder.RateLimiters {
+func provideRateLimiters(store *cache.Store, cfg config.OrderConfig) svcOrder.RateLimiters {
 	return svcOrder.RateLimiters{
 		Create: repoRedis.NewOrderRateLimiter(
-			client,
-			cfg.RateLimiter.CreateOrder,
-			cfg.RateLimiter.Window,
+			store,
+			cfg.RateLimitByUser.CreateOrder,
+			cfg.RateLimitByUser.Window,
 			"rate:order:create:",
 		),
 		Get: repoRedis.NewOrderRateLimiter(
-			client,
-			cfg.RateLimiter.GetOrderStatus,
-			cfg.RateLimiter.Window,
+			store,
+			cfg.RateLimitByUser.GetOrderStatus,
+			cfg.RateLimitByUser.Window,
 			"rate:order:get:",
 		),
 	}
@@ -86,7 +87,7 @@ func provideRateLimiters(client cache.Client, cfg config.OrderConfig) svcOrder.R
 func provideOrderServiceConfig(cfg config.OrderConfig) svcOrder.OrderServiceConfig {
 	return svcOrder.OrderServiceConfig{
 		Timeout:     cfg.ServiceTimeout,
-		ServiceName: cfg.Tracing.ServiceName,
+		ServiceName: cfg.ServiceName,
 	}
 }
 
@@ -95,6 +96,7 @@ func provideOrderService(
 	marketViewer svcOrder.MarketViewer,
 	rateLimiters svcOrder.RateLimiters,
 	config svcOrder.OrderServiceConfig,
+	logger *zapLogger.Logger,
 ) *svcOrder.OrderService {
 	return svcOrder.NewOrderService(
 		store,
@@ -102,5 +104,6 @@ func provideOrderService(
 		marketViewer,
 		rateLimiters,
 		config,
+		logger,
 	)
 }

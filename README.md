@@ -466,7 +466,7 @@ spotOrder/
 │────────────────────────────────────│
 │  OrderHandler                      │
 │  OrderService (business)           │
-│    ├── RateLimiter (Redis)         │
+│    ├── RateLimitByUser (Redis)         │
 │    ├── SpotClient ─────────────────┼──── gRPC ──→ SpotService
 │    │      (circuit breaker)        │
 │    └── OrderStore (PostgreSQL)     │

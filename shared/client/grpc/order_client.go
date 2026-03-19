@@ -7,6 +7,7 @@ import (
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/client/grpc/breaker"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 
 	"github.com/sony/gobreaker/v2"
 	"google.golang.org/grpc"
@@ -21,11 +22,12 @@ type OrderClient struct {
 func NewOrderClient(
 	connection *grpc.ClientConn,
 	cfg config.CircuitBreakerConfig,
+	logger *zapLogger.Logger,
 ) *OrderClient {
 	return &OrderClient{
 		api:                   proto.NewOrderServiceClient(connection),
-		createOrderBreaker:    breaker.New[*proto.CreateOrderResponse]("orderService.CreateOrder", cfg),
-		getOrderStatusBreaker: breaker.New[*proto.GetOrderStatusResponse]("orderService.GetOrderStatus", cfg),
+		createOrderBreaker:    breaker.New[*proto.CreateOrderResponse]("orderService.CreateOrder", cfg, logger),
+		getOrderStatusBreaker: breaker.New[*proto.GetOrderStatusResponse]("orderService.GetOrderStatus", cfg, logger),
 	}
 }
 

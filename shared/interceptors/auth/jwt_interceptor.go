@@ -11,27 +11,37 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 )
 
-var skipAuthMethods = map[string]struct{}{
-	"/grpc.health.v1.Health/Check": {},
-	"/grpc.health.v1.Health/Watch": {},
-}
+const (
+	authorizationHeader = "authorization"
+	bearerPrefix        = "bearer "
+)
 
 type Claims struct {
 	jwt.RegisteredClaims
 	UserID string `json:"user_id"`
 }
 
-func UnaryServerInterceptor(secret string) grpc.UnaryServerInterceptor {
+func UnaryServerInterceptor(secret string, cfg config.AuthConfig) grpc.UnaryServerInterceptor {
+	skipMethods := make(map[string]struct{}, len(cfg.SkipMethods))
+	for _, method := range cfg.SkipMethods {
+		method = strings.TrimSpace(method)
+		if method == "" {
+			continue
+		}
+		skipMethods[method] = struct{}{}
+	}
+
 	return func(
 		ctx context.Context,
 		request any,
 		serverInfo *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (any, error) {
-		if _, ok := skipAuthMethods[serverInfo.FullMethod]; ok {
+		if _, ok := skipMethods[serverInfo.FullMethod]; ok {
 			return handler(ctx, request)
 		}
 
@@ -40,29 +50,23 @@ func UnaryServerInterceptor(secret string) grpc.UnaryServerInterceptor {
 			return nil, status.Error(codes.Unauthenticated, "missing metadata")
 		}
 
-		values := md.Get("authorization")
-		if len(values) == 0 || !strings.HasPrefix(strings.ToLower(values[0]), "bearer ") {
+		values := md.Get(authorizationHeader)
+		if len(values) == 0 || !strings.HasPrefix(strings.ToLower(values[0]), bearerPrefix) {
 			return nil, status.Error(codes.Unauthenticated, "missing authorization token")
 		}
 
-		authHeader := values[0]
-		userID, err := parseUserIDFromToken(secret, authHeader)
+		userID, err := parseUserIDFromToken(secret, values[0])
 		if err != nil {
 			return nil, err
 		}
 
-		ctx = context.WithValue(ctx, zapLogger.UserIDKey, userID)
+		ctx = requestctx.ContextWithUserID(ctx, userID)
 		return handler(ctx, request)
 	}
 }
 
-func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
-	userID, found := ctx.Value(zapLogger.UserIDKey).(uuid.UUID)
-	return userID, found
-}
-
 func parseUserIDFromToken(secret, authHeader string) (uuid.UUID, error) {
-	tokenString := authHeader[len("bearer "):]
+	tokenString := strings.TrimSpace(authHeader[len(bearerPrefix):])
 
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {

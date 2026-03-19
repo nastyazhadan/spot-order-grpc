@@ -6,38 +6,41 @@ import (
 )
 
 type OrderConfig struct {
-	Address        string               `mapstructure:"address"`
-	DBURI          string               `mapstructure:"db_uri"`
-	SpotAddress    string               `mapstructure:"spot_address"`
-	JWTSecret      string               `mapstructure:"jwt_secret"`
-	ServiceTimeout time.Duration        `mapstructure:"service_timeout"`
-	CheckTimeout   time.Duration        `mapstructure:"check_timeout"`
-	LogLevel       string               `mapstructure:"log_level"`
-	LogFormat      string               `mapstructure:"log_format"`
-	MaxRecvMsgSize int                  `mapstructure:"max_recv_msg_size"`
-	GRPCRateLimit  int                  `mapstructure:"grpc_rate_limit"`
-	CircuitBreaker CircuitBreakerConfig `mapstructure:"breaker"`
-	PostgresPool   PostgresPoolConfig   `mapstructure:"postgres_pool"`
-	RateLimiter    RateLimiterConfig    `mapstructure:"rate_limiter"`
-	Redis          RedisConfig          `mapstructure:"redis"`
-	Tracing        TracingConfig        `mapstructure:"tracing"`
-	Metrics        MetricsConfig        `mapstructure:"metrics"`
-	KeepAlive      KeepAliveConfig      `mapstructure:"keep_alive"`
+	Address         string                   `mapstructure:"address"`
+	ServiceName     string                   `mapstructure:"service_name"`
+	DBURI           string                   `mapstructure:"db_uri"`
+	SpotAddress     string                   `mapstructure:"spot_address"`
+	JWTSecret       string                   `mapstructure:"jwt_secret"`
+	ServiceTimeout  time.Duration            `mapstructure:"service_timeout"`
+	CheckTimeout    time.Duration            `mapstructure:"check_timeout"`
+	LogLevel        string                   `mapstructure:"log_level"`
+	LogFormat       string                   `mapstructure:"log_format"`
+	MaxRecvMsgSize  int                      `mapstructure:"max_recv_msg_size"`
+	Auth            AuthConfig               `mapstructure:"auth"`
+	CircuitBreaker  CircuitBreakerConfig     `mapstructure:"circuit_breaker"`
+	PostgresPool    PostgresPoolConfig       `mapstructure:"postgres_pool"`
+	GRPCRateLimit   OrderGRPCRateLimitConfig `mapstructure:"grpc_rate_limit"`
+	RateLimitByUser RateLimiterByUserConfig  `mapstructure:"rate_limit_by_user"`
+	Redis           RedisConfig              `mapstructure:"redis"`
+	Tracing         TracingConfig            `mapstructure:"tracing"`
+	Metrics         MetricsConfig            `mapstructure:"metrics"`
+	KeepAlive       KeepAliveConfig          `mapstructure:"keep_alive"`
 }
 
 type SpotConfig struct {
-	Address        string             `mapstructure:"address"`
-	DBURI          string             `mapstructure:"db_uri"`
-	LogLevel       string             `mapstructure:"log_level"`
-	LogFormat      string             `mapstructure:"log_format"`
-	ServiceTimeout time.Duration      `mapstructure:"service_timeout"`
-	MaxRecvMsgSize int                `mapstructure:"max_recv_msg_size"`
-	GRPCRateLimit  int                `mapstructure:"grpc_rate_limit"`
-	PostgresPool   PostgresPoolConfig `mapstructure:"postgres_pool"`
-	Redis          RedisConfig        `mapstructure:"redis"`
-	Tracing        TracingConfig      `mapstructure:"tracing"`
-	Metrics        MetricsConfig      `mapstructure:"metrics"`
-	KeepAlive      KeepAliveConfig    `mapstructure:"keep_alive"`
+	Address        string                  `mapstructure:"address"`
+	ServiceName    string                  `mapstructure:"service_name"`
+	DBURI          string                  `mapstructure:"db_uri"`
+	LogLevel       string                  `mapstructure:"log_level"`
+	LogFormat      string                  `mapstructure:"log_format"`
+	ServiceTimeout time.Duration           `mapstructure:"service_timeout"`
+	MaxRecvMsgSize int                     `mapstructure:"max_recv_msg_size"`
+	PostgresPool   PostgresPoolConfig      `mapstructure:"postgres_pool"`
+	GRPCRateLimit  SpotGRPCRateLimitConfig `mapstructure:"grpc_rate_limit"`
+	Redis          RedisConfig             `mapstructure:"redis"`
+	Tracing        TracingConfig           `mapstructure:"tracing"`
+	Metrics        MetricsConfig           `mapstructure:"metrics"`
+	KeepAlive      KeepAliveConfig         `mapstructure:"keep_alive"`
 }
 
 type CircuitBreakerConfig struct {
@@ -67,15 +70,23 @@ type RedisConfig struct {
 	CacheTTL          time.Duration `mapstructure:"spot_cache_ttl"`
 }
 
-type RateLimiterConfig struct {
+type RateLimiterByUserConfig struct {
 	CreateOrder    int64         `mapstructure:"create_order"`
 	GetOrderStatus int64         `mapstructure:"get_order_status"`
 	Window         time.Duration `mapstructure:"window"`
 }
 
+type OrderGRPCRateLimitConfig struct {
+	CreateOrder    int `mapstructure:"create_order"`
+	GetOrderStatus int `mapstructure:"get_order_status"`
+}
+
+type SpotGRPCRateLimitConfig struct {
+	ViewMarkets int `mapstructure:"view_markets"`
+}
+
 type TracingConfig struct {
 	CollectorEndpoint string `mapstructure:"exporter_otlp_endpoint"`
-	ServiceName       string `mapstructure:"service_name"`
 	Environment       string `mapstructure:"environment"`
 	ServiceVersion    string `mapstructure:"service_version"`
 }
@@ -94,6 +105,10 @@ type KeepAliveConfig struct {
 	PingTimeout         time.Duration `mapstructure:"ping_timeout"`
 	MinPingInterval     time.Duration `mapstructure:"min_ping_interval"`
 	PermitWithoutStream bool          `mapstructure:"permit_without_stream"`
+}
+
+type AuthConfig struct {
+	SkipMethods []string `mapstructure:"skip_methods"`
 }
 
 func (r RedisConfig) Address() string {

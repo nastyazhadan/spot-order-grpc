@@ -12,17 +12,17 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
+func UnaryServerInterceptor(logger *zapLogger.Logger) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
-		request interface{},
-		info *grpc.UnaryServerInfo,
+		request any,
+		serverInfo *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
-	) (interface{}, error) {
-		method := path.Base(info.FullMethod)
+	) (any, error) {
+		method := path.Base(serverInfo.FullMethod)
 		startTime := time.Now()
 
-		zapLogger.Info(ctx, "gRPC request started",
+		logger.Info(ctx, "gRPC request started",
 			zap.String("method", method),
 		)
 
@@ -32,14 +32,14 @@ func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 
 		if err != nil {
 			stat, _ := status.FromError(err)
-			zapLogger.Error(ctx, "gRPC request failed",
+			logger.Error(ctx, "gRPC request failed",
 				zap.String("method", method),
 				zap.String("code", stat.Code().String()),
 				zap.Duration("duration", duration),
 				zap.Error(err),
 			)
 		} else {
-			zapLogger.Info(ctx, "gRPC request completed",
+			logger.Info(ctx, "gRPC request completed",
 				zap.String("method", method),
 				zap.Duration("duration", duration),
 			)

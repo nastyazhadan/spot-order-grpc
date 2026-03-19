@@ -3,6 +3,9 @@ package ratelimit
 import (
 	"context"
 
+	orderProto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
+	spotProto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 
@@ -14,27 +17,58 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func UnaryServerInterceptor(rps int, serviceName string) grpc.UnaryServerInterceptor {
-	limiter := rate.NewLimiter(rate.Limit(rps), rps)
+func OrderUnaryServerInterceptor(cfg config.OrderConfig, logger *zapLogger.Logger) grpc.UnaryServerInterceptor {
+	return newUnaryServerInterceptor(map[string]int{
+		orderProto.OrderService_CreateOrder_FullMethodName:    cfg.GRPCRateLimit.CreateOrder,
+		orderProto.OrderService_GetOrderStatus_FullMethodName: cfg.GRPCRateLimit.GetOrderStatus,
+	}, cfg.ServiceName, logger)
+}
+
+func SpotUnaryServerInterceptor(cfg config.SpotConfig, logger *zapLogger.Logger) grpc.UnaryServerInterceptor {
+	return newUnaryServerInterceptor(map[string]int{
+		spotProto.SpotInstrumentService_ViewMarkets_FullMethodName: cfg.GRPCRateLimit.ViewMarkets,
+	}, cfg.ServiceName, logger)
+}
+
+func newUnaryServerInterceptor(
+	methodsLimit map[string]int,
+	serviceName string,
+	logger *zapLogger.Logger,
+) grpc.UnaryServerInterceptor {
+	limiters := make(map[string]*rate.Limiter, len(methodsLimit))
+
+	for method, rps := range methodsLimit {
+		if rps <= 0 {
+			continue
+		}
+
+		limiters[method] = rate.NewLimiter(rate.Limit(rps), rps)
+	}
 
 	return func(
 		ctx context.Context,
 		request any,
-		info *grpc.UnaryServerInfo,
+		serverInfo *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (any, error) {
+		limiter, ok := limiters[serverInfo.FullMethod]
+		if !ok {
+			return handler(ctx, request)
+		}
+
 		if !limiter.Allow() {
 			address := "unknown"
 			if p, ok := peer.FromContext(ctx); ok {
 				address = p.Addr.String()
 			}
 
-			zapLogger.Warn(ctx, "global rate limit exceeded",
-				zap.String("method", info.FullMethod),
+			logger.Warn(ctx, "rate limit exceeded",
+				zap.String("method", serverInfo.FullMethod),
 				zap.String("peer", address),
 			)
 
-			metrics.RateLimitRejectedTotal.WithLabelValues(serviceName, info.FullMethod).Inc()
+			metrics.RateLimitRejectedTotal.
+				WithLabelValues(serviceName, serverInfo.FullMethod).Inc()
 
 			return nil, status.Error(codes.ResourceExhausted, "too many requests")
 		}

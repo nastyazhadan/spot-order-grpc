@@ -144,15 +144,15 @@ func New(test *testing.T) (context.Context, *Suite) {
 		_ = redisPool.Close()
 	})
 
-	redisClient := cache.NewClient(redisPool, zapLogger.With(), redisConnectionTimeout)
+	redisClient := cache.New(redisPool, zapLogger.With(), redisConnectionTimeout)
 
 	marketRepo := repoPostgres.NewMarketStore(pool)
 	cacheRepo := repoRedis.NewMarketCacheRepository(redisClient)
 	marketSvc := svcSpot.NewService(marketRepo, cacheRepo, cacheTTL)
 
-	validator, err := validate.ProtovalidateUnary()
+	validator, err := validate.UnaryServerInterceptor()
 	if err != nil {
-		test.Fatalf("validate.ProtovalidateUnary: %v", err)
+		test.Fatalf("validate.UnaryServerInterceptor: %v", err)
 	}
 
 	grpcServer := grpc.NewServer(

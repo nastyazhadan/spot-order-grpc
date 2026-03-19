@@ -167,7 +167,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 		_ = redisPool.Close()
 	})
 
-	redisClient := cache.NewClient(redisPool, zapLogger.With(), redisConnectionTimeout)
+	redisClient := cache.New(redisPool, zapLogger.With(), redisConnectionTimeout)
 	createLimiter := repoRedis.NewOrderRateLimiter(redisClient, createRateLimit, createRateWindow, createRedisPrefix)
 	getLimiter := repoRedis.NewOrderRateLimiter(redisClient, getRateLimit, getRateWindow, getRedisPrefix)
 
@@ -178,9 +178,9 @@ func New(test *testing.T) (context.Context, *Suite) {
 	orderRepo := repoPostgres.NewOrderStore(pool)
 	orderSvc := svcOrder.NewOrderService(orderRepo, orderRepo, marketViewer, createLimiter, getLimiter, defaultCreateTimeout)
 
-	validator, err := validate.ProtovalidateUnary()
+	validator, err := validate.UnaryServerInterceptor()
 	if err != nil {
-		test.Fatalf("validate.ProtovalidateUnary: %v", err)
+		test.Fatalf("validate.UnaryServerInterceptor: %v", err)
 	}
 
 	grpcServer := grpc.NewServer(

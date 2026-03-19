@@ -6,9 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	redisGo "github.com/redis/go-redis/v9"
-
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
+	redisGo "github.com/redis/go-redis/v9"
 )
 
 // для решения проблемы race condition между incr и count == 1
@@ -21,20 +20,20 @@ var rateLimitScript = redisGo.NewScript(`
 `)
 
 type OrderRateLimiter struct {
-	client cache.Client
+	store  *cache.Store
 	limit  int64
 	window time.Duration
 	prefix string
 }
 
 func NewOrderRateLimiter(
-	client cache.Client,
+	store *cache.Store,
 	limit int64,
 	window time.Duration,
 	prefix string,
 ) *OrderRateLimiter {
 	return &OrderRateLimiter{
-		client: client,
+		store:  store,
 		limit:  limit,
 		window: window,
 		prefix: prefix,
@@ -44,19 +43,24 @@ func NewOrderRateLimiter(
 func (r *OrderRateLimiter) Allow(ctx context.Context, userID uuid.UUID) (bool, error) {
 	const op = "OrderRateLimiter.Allow"
 
-	key := r.prefix + ":" + userID.String()
+	key := r.prefix + userID.String()
 
-	raw, err := r.client.RunScript(ctx, rateLimitScript, []string{key}, int(r.window.Seconds()))
+	raw, err := rateLimitScript.Run(
+		ctx,
+		r.store.ScriptRunner(),
+		[]string{key},
+		int(r.window.Seconds()),
+	).Result()
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	result, ok := raw.(int64)
+	count, ok := raw.(int64)
 	if !ok {
-		return false, fmt.Errorf("%s: unexpected script result type", op)
+		return false, fmt.Errorf("%s: unexpected script result type %T", op, raw)
 	}
 
-	return result <= r.limit, nil
+	return count <= r.limit, nil
 }
 
 func (r *OrderRateLimiter) Limit() int64 {

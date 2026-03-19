@@ -3,7 +3,7 @@ package tracing
 import (
 	"context"
 
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -11,17 +11,13 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-const (
-	TraceIDHeader = "x-trace-id"
-)
-
-func UnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor {
+func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context,
-		request interface{},
-		info *grpc.UnaryServerInfo,
+		request any,
+		serverInfo *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
-	) (interface{}, error) {
-		tracer := otel.GetTracerProvider().Tracer(serviceName)
+	) (any, error) {
+		tracer := otel.Tracer(instrumentationName)
 		propagator := otel.GetTextMapPropagator()
 
 		md, ok := metadata.FromIncomingContext(ctx)
@@ -33,14 +29,12 @@ func UnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor {
 
 		ctx, span := tracer.Start(
 			ctx,
-			info.FullMethod,
+			serverInfo.FullMethod,
 			trace.WithSpanKind(trace.SpanKindServer),
 		)
 		defer span.End()
 
-		ctx = zapLogger.ContextWithTraceID(ctx, span.SpanContext().TraceID().String())
-
-		AddTraceIDToResponse(ctx)
+		addTraceIDToResponse(ctx)
 
 		response, err := handler(ctx, request)
 		if err != nil {
@@ -51,15 +45,15 @@ func UnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor {
 	}
 }
 
-func UnaryClientInterceptor(serviceName string) grpc.UnaryClientInterceptor {
+func UnaryClientInterceptor() grpc.UnaryClientInterceptor {
 	return func(ctx context.Context,
 		method string,
-		request, reply interface{},
+		request, reply any,
 		connection *grpc.ClientConn,
 		invoker grpc.UnaryInvoker,
 		options ...grpc.CallOption,
 	) error {
-		tracer := otel.GetTracerProvider().Tracer(serviceName)
+		tracer := otel.Tracer(instrumentationName)
 		propagator := otel.GetTextMapPropagator()
 
 		ctx, span := tracer.Start(
@@ -70,9 +64,7 @@ func UnaryClientInterceptor(serviceName string) grpc.UnaryClientInterceptor {
 		defer span.End()
 
 		carrier := metadataCarrier(extractOutgoingMetadata(ctx))
-
 		propagator.Inject(ctx, carrier)
-
 		ctx = metadata.NewOutgoingContext(ctx, metadata.MD(carrier))
 
 		err := invoker(ctx, method, request, reply, connection, options...)
@@ -93,20 +85,11 @@ func extractOutgoingMetadata(ctx context.Context) metadata.MD {
 	return md.Copy()
 }
 
-func GetTraceIDFromContext(ctx context.Context) string {
-	span := trace.SpanFromContext(ctx)
-	if !span.SpanContext().IsValid() {
-		return ""
-	}
-
-	return span.SpanContext().TraceID().String()
-}
-
-func AddTraceIDToResponse(ctx context.Context) {
-	traceID := GetTraceIDFromContext(ctx)
-	if traceID == "" {
+func addTraceIDToResponse(ctx context.Context) {
+	traceID, ok := requestctx.TraceIDFromContext(ctx)
+	if !ok {
 		return
 	}
 
-	_ = grpc.SetHeader(ctx, metadata.Pairs(TraceIDHeader, traceID))
+	_ = grpc.SetHeader(ctx, metadata.Pairs(requestctx.TraceIDHeader, traceID))
 }

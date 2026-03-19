@@ -40,13 +40,13 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 				return cfg
 			}),
 		fx.Provide(
+			provideLogger,
 			provideTracingResource,
 			provideContainer,
 			provideListener,
 			provideGRPCServer,
 		),
 		fx.Invoke(
-			registerLogger,
 			registerTracing,
 			registerMetrics,
 			startGRPCServer,
@@ -56,20 +56,20 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 	app.Run()
 }
 
-func registerLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) error {
-	zapLogger.Init(cfg.LogLevel, cfg.LogFormat == "json")
+func provideLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (*zapLogger.Logger, error) {
+	logger := zapLogger.New(cfg.LogLevel, cfg.LogFormat == "json")
 
 	lifeCycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
-			return zapLogger.Sync()
+			return logger.Sync()
 		},
 	})
 
-	return nil
+	return logger, nil
 }
 
 func provideTracingResource(ctx context.Context, cfg config.SpotConfig) (*resource.Resource, error) {
-	return tracing.NewResource(ctx, cfg.Tracing)
+	return tracing.NewResource(ctx, cfg.ServiceName, cfg.Tracing)
 }
 
 func registerTracing(
@@ -77,6 +77,7 @@ func registerTracing(
 	lifeCycle fx.Lifecycle,
 	cfg config.SpotConfig,
 	resource *resource.Resource,
+	logger *zapLogger.Logger,
 ) error {
 	if err := tracing.InitTracer(ctx, cfg.Tracing, resource); err != nil {
 		return err
@@ -85,7 +86,7 @@ func registerTracing(
 	lifeCycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			if err := tracing.ShutdownTracer(ctx); err != nil {
-				zapLogger.Error(ctx, "Failed to shutdown tracer", zap.Error(err))
+				logger.Error(ctx, "Failed to shutdown tracer", zap.Error(err))
 			}
 			return nil
 		},
@@ -99,8 +100,9 @@ func registerMetrics(
 	lifeCycle fx.Lifecycle,
 	cfg config.SpotConfig,
 	resource *resource.Resource,
+	logger *zapLogger.Logger,
 ) error {
-	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, cfg.Tracing, resource)
+	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, cfg.Tracing, resource, logger)
 	if err != nil {
 		return err
 	}
@@ -117,15 +119,15 @@ func registerMetrics(
 		OnStart: func(ctx context.Context) error {
 			go func() {
 				if startErr := httpServer.ListenAndServe(); startErr != nil && !errors.Is(startErr, http.ErrServerClosed) {
-					zapLogger.Error(ctx, "Failed to start metrics server", zap.Error(startErr))
+					logger.Error(ctx, "Failed to start metrics server", zap.Error(startErr))
 				}
 			}()
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			metrics.PushShutdownMetric(ctx, cfg.Metrics.PushGatewayURL, cfg.Tracing.ServiceName)
+			metrics.PushShutdownMetric(ctx, cfg.Metrics.PushGatewayURL, cfg.ServiceName)
 			if stopErr := meterProvider.Shutdown(ctx); stopErr != nil {
-				zapLogger.Error(ctx, "Failed to shutdown metrics provider", zap.Error(stopErr))
+				logger.Error(ctx, "Failed to shutdown metrics provider", zap.Error(stopErr))
 			}
 			return httpServer.Shutdown(ctx)
 		},
@@ -138,8 +140,9 @@ func provideContainer(
 	ctx context.Context,
 	lifeCycle fx.Lifecycle,
 	cfg config.SpotConfig,
+	logger *zapLogger.Logger,
 ) (*wireGen.Container, error) {
-	container, err := wireGen.NewContainer(ctx, cfg)
+	container, err := wireGen.NewContainer(ctx, cfg, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -179,18 +182,15 @@ func provideListener(
 func provideGRPCServer(
 	container *wireGen.Container,
 	cfg config.SpotConfig,
+	appLogger *zapLogger.Logger,
 ) (*grpc.Server, error) {
-	validator, err := validate.ProtovalidateUnary()
-	if err != nil {
-		return nil, fmt.Errorf("spot: validate.ProtovalidateUnary: %w", err)
-	}
-
-	tracer := tracing.UnaryServerInterceptor(cfg.Tracing.ServiceName)
-	logger := logInterceptor.UnaryServerInterceptor()
-	recoverer := recovery.UnaryServerInterceptor
-	errorsMapper := grpcErrors.UnaryServerInterceptor()
-	rateLimiter := ratelimit.UnaryServerInterceptor(cfg.GRPCRateLimit, cfg.Tracing.ServiceName)
-	meter := metricInterceptor.UnaryServerInterceptor(cfg.Tracing.ServiceName)
+	validator := validate.UnaryServerInterceptor()
+	recoverer := recovery.UnaryServerInterceptor(appLogger)
+	tracer := tracing.UnaryServerInterceptor()
+	logger := logInterceptor.UnaryServerInterceptor(appLogger)
+	errorsMapper := grpcErrors.UnaryServerInterceptor(appLogger)
+	rateLimiter := ratelimit.SpotUnaryServerInterceptor(cfg, appLogger)
+	meter := metricInterceptor.UnaryServerInterceptor(cfg.ServiceName)
 
 	grpcServer := grpc.NewServer(
 		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize),
@@ -203,7 +203,7 @@ func provideGRPCServer(
 			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
 		}),
 		grpc.ChainUnaryInterceptor(
-			rateLimiter, tracer, meter, logger, errorsMapper, recoverer, validator,
+			recoverer, rateLimiter, tracer, meter, logger, errorsMapper, validator,
 		),
 	)
 
@@ -218,14 +218,15 @@ func startGRPCServer(
 	lifeCycle fx.Lifecycle,
 	server *grpc.Server,
 	listener net.Listener,
+	logger *zapLogger.Logger,
 ) {
 	lifeCycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			zapLogger.Info(ctx, fmt.Sprintf("Starting gRPC spot server on %s", listener.Addr()))
-
+			logger.Info(ctx, "Starting gRPC spot server",
+				zap.String("address", listener.Addr().String()))
 			go func() {
 				if err := server.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-					zapLogger.Error(ctx, "gRPC spot server error", zap.Error(err))
+					logger.Error(ctx, "gRPC spot server error", zap.Error(err))
 				}
 			}()
 

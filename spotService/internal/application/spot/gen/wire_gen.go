@@ -10,13 +10,14 @@ import (
 	"context"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 	"github.com/redis/go-redis/v9"
 )
 
 // Injectors from wire.go:
 
-func NewContainer(ctx context.Context, cfg config.SpotConfig) (*Container, error) {
+func NewContainer(ctx context.Context, cfg config.SpotConfig, logger *zap.Logger) (*Container, error) {
 	pool, err := providePostgresPool(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -26,9 +27,9 @@ func NewContainer(ctx context.Context, cfg config.SpotConfig) (*Container, error
 	if err != nil {
 		return nil, err
 	}
-	cacheClient := provideCacheClient(client)
-	marketCacheRepository := provideMarketCacheRepository(cacheClient)
-	service := provideSpotService(marketStore, marketCacheRepository, cfg)
+	store := provideCacheStore(client)
+	marketCacheRepository := provideMarketCacheRepository(store)
+	service := provideSpotService(marketStore, marketCacheRepository, cfg, logger)
 	container := &Container{
 		SpotService:  service,
 		RedisClient:  client,

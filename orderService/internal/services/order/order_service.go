@@ -13,6 +13,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
@@ -24,6 +25,7 @@ type OrderService struct {
 	marketViewer MarketViewer
 	rateLimiters RateLimiters
 	config       OrderServiceConfig
+	logger       *zapLogger.Logger
 }
 
 type OrderServiceConfig struct {
@@ -54,13 +56,21 @@ type RateLimiter interface {
 	Window() time.Duration
 }
 
-func NewOrderService(s Saver, g Getter, mv MarketViewer, rl RateLimiters, cfg OrderServiceConfig) *OrderService {
+func NewOrderService(
+	saver Saver,
+	getter Getter,
+	viewer MarketViewer,
+	limiters RateLimiters,
+	config OrderServiceConfig,
+	logger *zapLogger.Logger,
+) *OrderService {
 	return &OrderService{
-		saver:        s,
-		getter:       g,
-		marketViewer: mv,
-		rateLimiters: rl,
-		config:       cfg,
+		saver:        saver,
+		getter:       getter,
+		marketViewer: viewer,
+		rateLimiters: limiters,
+		config:       config,
+		logger:       logger,
 	}
 }
 

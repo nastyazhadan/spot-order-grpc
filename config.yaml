@@ -1,12 +1,16 @@
 order:
   address: ":50051"
   spot_address: "spot-service:50052"
+  service_name: "order-service"
   service_timeout: "5s"
   check_timeout: "15s"
   log_level: "info"
   log_format: "console"
   max_recv_msg_size: 10485760 # 10MB
-  grpc_rate_limit: 1000
+  auth:
+    skip_methods:
+      - "/grpc.health.v1.Health/Check"
+      - "/grpc.health.v1.Health/Watch"
   circuit_breaker:
     max_requests: 3
     interval: "10s"
@@ -27,13 +31,15 @@ order:
     max_active_conns: 15
     idle_timeout: "1m"
     max_conn_lifetime: "30m"
-  rate_limiter:
+  grpc_rate_limit:
+    create_order: 1000
+    get_order_status: 2000
+  rate_limit_by_user:
     create_order: 5
     get_order_status: 50
     window: "1h"
   tracing:
     exporter_otlp_endpoint: "otel-collector:4317"
-    service_name: "order-service"
     environment: "development"
     service_version: "1.0.0"
   metrics:
@@ -51,11 +57,13 @@ order:
 
 spot:
   address: ":50052"
+  service_name: "spot-service"
   log_level: "info"
   log_format: "console"
   service_timeout: "5s"
   max_recv_msg_size: 10485760 # 10MB
-  grpc_rate_limit: 1000
+  grpc_rate_limit:
+    view_markets: 1000
   postgres_pool:
     max_conns: 10
     min_conns: 2
@@ -74,7 +82,6 @@ spot:
     spot_cache_ttl: "24h"
   tracing:
     exporter_otlp_endpoint: "otel-collector:4317"
-    service_name: "spot-service"
     environment: "development"
     service_version: "1.0.0"
   metrics:

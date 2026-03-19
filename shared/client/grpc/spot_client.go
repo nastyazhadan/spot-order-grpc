@@ -19,12 +19,14 @@ import (
 type SpotClient struct {
 	api                proto.SpotInstrumentServiceClient
 	viewMarketsBreaker *gobreaker.CircuitBreaker[*proto.ViewMarketsResponse]
+	logger             *zapLogger.Logger
 }
 
-func NewSpotClient(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig) *SpotClient {
+func NewSpotClient(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig, logger *zapLogger.Logger) *SpotClient {
 	return &SpotClient{
 		api:                proto.NewSpotInstrumentServiceClient(connection),
-		viewMarketsBreaker: breaker.New[*proto.ViewMarketsResponse]("spotService.ViewMarkets", cfg),
+		viewMarketsBreaker: breaker.New[*proto.ViewMarketsResponse]("spotService.ViewMarkets", cfg, logger),
+		logger:             logger,
 	}
 }
 
@@ -39,7 +41,7 @@ func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) (
 			UserRoles: userRoles,
 		})
 		if err != nil {
-			zapLogger.Error(ctx, "spotService.ViewMarkets failed", zap.Error(err))
+			c.logger.Error(ctx, "spotService.ViewMarkets failed", zap.Error(err))
 			return nil, err
 		}
 		return resp, nil

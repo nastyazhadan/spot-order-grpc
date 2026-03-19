@@ -6,8 +6,8 @@ import (
 	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
-	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/auth"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -51,7 +51,7 @@ func (s *serverAPI) CreateOrder(
 		return nil, err
 	}
 
-	userID, ok := auth.UserIDFromContext(ctx)
+	userID, ok := requestctx.UserIDFromContext(ctx)
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "user_id not found in token")
 	}
@@ -98,7 +98,7 @@ func (s *serverAPI) GetOrderStatus(
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "order_id must be a valid UUID")
 	}
-	userID, found := auth.UserIDFromContext(ctx)
+	userID, found := requestctx.UserIDFromContext(ctx)
 	if !found {
 		return nil, status.Error(codes.Unauthenticated, "user_id not found in token")
 	}
