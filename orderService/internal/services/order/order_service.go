@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -156,7 +157,7 @@ func (s *OrderService) checkRateLimit(
 		return err
 	}
 	if !allowed {
-		err = serviceErrors.ErrLimitExceeded{
+		err = sharedErrors.ErrLimitExceeded{
 			Limit:  limit,
 			Window: window,
 		}
@@ -232,7 +233,7 @@ func (s *OrderService) saveOrder(
 	if err := s.saver.SaveOrder(ctx, newOrder); err != nil {
 		span.RecordError(err)
 		if errors.Is(err, repositoryErrors.ErrOrderAlreadyExists) {
-			return uuid.Nil, models.OrderStatusCancelled, serviceErrors.ErrAlreadyExists{ID: orderID}
+			return uuid.Nil, models.OrderStatusCancelled, sharedErrors.ErrAlreadyExists{ID: orderID}
 		}
 
 		return uuid.Nil, models.OrderStatusCancelled, err
@@ -257,14 +258,14 @@ func (s *OrderService) fetchOrder(
 	if err != nil {
 		span.RecordError(err)
 		if errors.Is(err, repositoryErrors.ErrOrderNotFound) {
-			return models.Order{}, serviceErrors.ErrNotFound{ID: orderID}
+			return models.Order{}, sharedErrors.ErrNotFound{ID: orderID}
 		}
 
 		return models.Order{}, err
 	}
 
 	if order.UserID != userID {
-		err = serviceErrors.ErrNotFound{ID: orderID}
+		err = sharedErrors.ErrNotFound{ID: orderID}
 		span.RecordError(err)
 		return models.Order{}, err
 	}
