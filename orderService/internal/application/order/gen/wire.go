@@ -11,6 +11,7 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/auth"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
+	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
@@ -18,6 +19,7 @@ import (
 type Container struct {
 	OrderService *order.OrderService
 	AuthService  *auth.AuthService
+	JWTManager   authjwt.Manager
 	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }

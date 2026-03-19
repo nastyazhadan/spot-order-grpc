@@ -19,7 +19,6 @@ import (
 	wireGen "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
 	grpcAuth "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/auth"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
-	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
@@ -237,14 +236,13 @@ func provideListener(
 func provideGRPCServer(
 	container *wireGen.Container,
 	cfg config.OrderConfig,
-	jwtManager authjwt.Manager,
 	appLogger *zapLogger.Logger,
 ) (*grpc.Server, error) {
 	validator := validate.UnaryServerInterceptor()
 	recoverer := recovery.UnaryServerInterceptor(appLogger)
 	tracer := tracing.UnaryServerInterceptor()
 	logger := logInterceptor.UnaryServerInterceptor(appLogger)
-	authenticator := auth.UnaryServerInterceptor(jwtManager, cfg.Auth)
+	authenticator := auth.UnaryServerInterceptor(container.JWTManager, cfg.Auth)
 	errorsMapper := grpcErrors.UnaryServerInterceptor(appLogger)
 	rateLimiter := ratelimit.OrderUnaryServerInterceptor(cfg, appLogger)
 	meter := metricInterceptor.UnaryServerInterceptor(cfg.ServiceName)

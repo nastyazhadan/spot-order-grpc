@@ -4,15 +4,18 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
 type AuthService struct {
 	jwtManager jwt.Manager
 	store      RefreshTokenStore
+	logger     *zapLogger.Logger
 }
 
 type RefreshTokenStore interface {
@@ -21,10 +24,11 @@ type RefreshTokenStore interface {
 	Revoke(ctx context.Context, userID uuid.UUID, jti string) error
 }
 
-func NewService(jwtManager jwt.Manager, store RefreshTokenStore) *AuthService {
+func NewService(jwtManager jwt.Manager, store RefreshTokenStore, logger *zapLogger.Logger) *AuthService {
 	return &AuthService{
 		jwtManager: jwtManager,
 		store:      store,
+		logger:     logger,
 	}
 }
 
@@ -32,21 +36,37 @@ func (s *AuthService) Refresh(
 	ctx context.Context,
 	refreshToken string,
 ) (newAccessToken, newRefreshToken string, err error) {
-	claims, err := s.jwtManager.ParseToken(refreshToken, jwt.TokenTypeRefresh)
+	userID, oldJTI, err := s.validateRefreshToken(refreshToken)
 	if err != nil {
 		return "", "", err
 	}
 
+	return s.rotateTokens(ctx, userID, oldJTI)
+}
+
+func (s *AuthService) validateRefreshToken(refreshToken string) (uuid.UUID, string, error) {
+	claims, err := s.jwtManager.ParseToken(refreshToken, jwt.TokenTypeRefresh)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+
 	userID, err := uuid.Parse(claims.UserID)
 	if err != nil {
-		return "", "", status.Error(codes.Unauthenticated, "invalid user_id in token")
+		return uuid.Nil, "", status.Error(codes.Unauthenticated, "invalid user_id in token")
 	}
 
-	oldJTI := claims.ID
-	if oldJTI == "" {
-		return "", "", status.Error(codes.Unauthenticated, "invalid refresh token jti")
+	if claims.ID == "" {
+		return uuid.Nil, "", status.Error(codes.Unauthenticated, "invalid refresh token jti")
 	}
 
+	return userID, claims.ID, nil
+}
+
+func (s *AuthService) rotateTokens(
+	ctx context.Context,
+	userID uuid.UUID,
+	oldJTI string,
+) (newAccessToken, newRefreshToken string, err error) {
 	exists, err := s.store.Exists(ctx, userID, oldJTI)
 	if err != nil {
 		return "", "", status.Error(codes.Internal, "failed to check refresh token")
@@ -55,11 +75,16 @@ func (s *AuthService) Refresh(
 		return "", "", status.Error(codes.Unauthenticated, "refresh token revoked or not found")
 	}
 
-	if err = s.store.Revoke(ctx, userID, oldJTI); err != nil {
-		return "", "", status.Error(codes.Internal, "failed to revoke refresh token")
+	newAccess, newRefresh, err := s.issueTokenPair(ctx, userID)
+	if err != nil {
+		return "", "", err
 	}
 
-	return s.issueTokenPair(ctx, userID)
+	if err = s.store.Revoke(ctx, userID, oldJTI); err != nil {
+		s.logger.Warn(ctx, "failed to revoke old refresh token", zap.Error(err))
+	}
+
+	return newAccess, newRefresh, nil
 }
 
 func (s *AuthService) issueTokenPair(

@@ -99,8 +99,8 @@ func provideRefreshTokenStore(store *cache.Store, cfg config.OrderConfig) *repoR
 	return repoRedis.NewRefreshTokenStore(store, cfg.Auth.RefreshTokenTTL)
 }
 
-func provideAuthService(jwtManager authjwt.Manager, store *repoRedis.RefreshTokenStore) *svcAuth.AuthService {
-	return svcAuth.NewService(jwtManager, store)
+func provideAuthService(jwtManager authjwt.Manager, store *repoRedis.RefreshTokenStore, logger *zapLogger.Logger) *svcAuth.AuthService {
+	return svcAuth.NewService(jwtManager, store, logger)
 }
 
 func provideOrderServiceConfig(cfg config.OrderConfig) svcOrder.OrderServiceConfig {
