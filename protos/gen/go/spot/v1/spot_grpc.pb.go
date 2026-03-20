@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SpotInstrumentService_ViewMarkets_FullMethodName = "/spot.v1.SpotInstrumentService/ViewMarkets"
+	SpotInstrumentService_ViewMarkets_FullMethodName   = "/spot.v1.SpotInstrumentService/ViewMarkets"
+	SpotInstrumentService_GetMarketById_FullMethodName = "/spot.v1.SpotInstrumentService/GetMarketById"
 )
 
 // SpotInstrumentServiceClient is the client API for SpotInstrumentService service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SpotInstrumentServiceClient interface {
 	ViewMarkets(ctx context.Context, in *ViewMarketsRequest, opts ...grpc.CallOption) (*ViewMarketsResponse, error)
+	GetMarketById(ctx context.Context, in *GetMarketByIDRequest, opts ...grpc.CallOption) (*GetMarketByIDResponse, error)
 }
 
 type spotInstrumentServiceClient struct {
@@ -47,11 +49,22 @@ func (c *spotInstrumentServiceClient) ViewMarkets(ctx context.Context, in *ViewM
 	return out, nil
 }
 
+func (c *spotInstrumentServiceClient) GetMarketById(ctx context.Context, in *GetMarketByIDRequest, opts ...grpc.CallOption) (*GetMarketByIDResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMarketByIDResponse)
+	err := c.cc.Invoke(ctx, SpotInstrumentService_GetMarketById_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SpotInstrumentServiceServer is the server API for SpotInstrumentService service.
 // All implementations must embed UnimplementedSpotInstrumentServiceServer
 // for forward compatibility.
 type SpotInstrumentServiceServer interface {
 	ViewMarkets(context.Context, *ViewMarketsRequest) (*ViewMarketsResponse, error)
+	GetMarketById(context.Context, *GetMarketByIDRequest) (*GetMarketByIDResponse, error)
 	mustEmbedUnimplementedSpotInstrumentServiceServer()
 }
 
@@ -64,6 +77,9 @@ type UnimplementedSpotInstrumentServiceServer struct{}
 
 func (UnimplementedSpotInstrumentServiceServer) ViewMarkets(context.Context, *ViewMarketsRequest) (*ViewMarketsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ViewMarkets not implemented")
+}
+func (UnimplementedSpotInstrumentServiceServer) GetMarketById(context.Context, *GetMarketByIDRequest) (*GetMarketByIDResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetMarketById not implemented")
 }
 func (UnimplementedSpotInstrumentServiceServer) mustEmbedUnimplementedSpotInstrumentServiceServer() {}
 func (UnimplementedSpotInstrumentServiceServer) testEmbeddedByValue()                               {}
@@ -104,6 +120,24 @@ func _SpotInstrumentService_ViewMarkets_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SpotInstrumentService_GetMarketById_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMarketByIDRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SpotInstrumentServiceServer).GetMarketById(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SpotInstrumentService_GetMarketById_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SpotInstrumentServiceServer).GetMarketById(ctx, req.(*GetMarketByIDRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SpotInstrumentService_ServiceDesc is the grpc.ServiceDesc for SpotInstrumentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -114,6 +148,10 @@ var SpotInstrumentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ViewMarkets",
 			Handler:    _SpotInstrumentService_ViewMarkets_Handler,
+		},
+		{
+			MethodName: "GetMarketById",
+			Handler:    _SpotInstrumentService_GetMarketById_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

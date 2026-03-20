@@ -15,7 +15,7 @@ import (
 )
 
 type Container struct {
-	SpotService  *svcSpot.Service
+	SpotService  *svcSpot.MarketViewer
 	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }

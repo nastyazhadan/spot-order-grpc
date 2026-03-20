@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -24,7 +26,7 @@ func NewMarketStore(pool *pgxpool.Pool) *MarketStore {
 }
 
 func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
-	const op = "infrastructure.MarketStore.ListAll"
+	const op = "postgres.MarketStore.ListAll"
 
 	ctx, span := tracing.StartSpan(ctx, "postgres.list_all_markets")
 	defer span.End()
@@ -51,4 +53,30 @@ func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 	}
 
 	return out, nil
+}
+
+func (m *MarketStore) GetByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
+	const op = "postgres.MarketStore.GetById"
+
+	ctx, span := tracing.StartSpan(ctx, "postgres.market_by_id")
+	defer span.End()
+
+	rows, err := m.pool.Query(ctx,
+		`SELECT id, name, enabled, deleted_at FROM market_store WHERE id = $1`, id)
+	if err != nil {
+		span.RecordError(err)
+		return models.Market{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	marketDTO, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[dto.Market])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Market{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketNotFound)
+		}
+
+		span.RecordError(err)
+		return models.Market{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return marketDTO.ToDomain(), nil
 }

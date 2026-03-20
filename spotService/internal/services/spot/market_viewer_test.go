@@ -73,7 +73,7 @@ func TestViewMarkets(t *testing.T) {
 			userRoles: []models.UserRole{models.UserRoleAdmin},
 			setupMocks: func(repo *mocks.MarketRepository, cache *mocks.MarketCacheRepository) {
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(allMarkets, nil)
@@ -105,7 +105,7 @@ func TestViewMarkets(t *testing.T) {
 			userRoles: []models.UserRole{models.UserRoleViewer},
 			setupMocks: func(repo *mocks.MarketRepository, cache *mocks.MarketCacheRepository) {
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(allMarkets, nil)
@@ -127,7 +127,7 @@ func TestViewMarkets(t *testing.T) {
 			userRoles: []models.UserRole{models.UserRoleUser},
 			setupMocks: func(repo *mocks.MarketRepository, cache *mocks.MarketCacheRepository) {
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(allMarkets, nil)
@@ -150,7 +150,7 @@ func TestViewMarkets(t *testing.T) {
 			userRoles: []models.UserRole{models.UserRoleAdmin, models.UserRoleUser},
 			setupMocks: func(repo *mocks.MarketRepository, cache *mocks.MarketCacheRepository) {
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(allMarkets, nil)
@@ -169,7 +169,7 @@ func TestViewMarkets(t *testing.T) {
 			userRoles: []models.UserRole{models.UserRoleViewer, models.UserRoleUser},
 			setupMocks: func(repo *mocks.MarketRepository, cache *mocks.MarketCacheRepository) {
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(allMarkets, nil)
@@ -188,7 +188,7 @@ func TestViewMarkets(t *testing.T) {
 			userRoles: []models.UserRole{models.UserRoleUser},
 			setupMocks: func(repo *mocks.MarketRepository, cache *mocks.MarketCacheRepository) {
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(nil, repositoryErrors.ErrMarketStoreIsEmpty)
@@ -202,7 +202,7 @@ func TestViewMarkets(t *testing.T) {
 			userRoles: []models.UserRole{models.UserRoleUser},
 			setupMocks: func(repo *mocks.MarketRepository, cache *mocks.MarketCacheRepository) {
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(nil, errors.New("internal error"))
@@ -212,7 +212,7 @@ func TestViewMarkets(t *testing.T) {
 			expectedErr:        nil,
 			checkError: func(t *testing.T, err error) {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), "Service.getMarketsFromRepo: internal error")
+				assert.Contains(t, err.Error(), "MarketViewer.getMarketsFromRepo: internal error")
 			},
 		},
 		{
@@ -220,7 +220,7 @@ func TestViewMarkets(t *testing.T) {
 			userRoles: []models.UserRole{},
 			setupMocks: func(repo *mocks.MarketRepository, cache *mocks.MarketCacheRepository) {
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(allMarkets, nil)
@@ -239,7 +239,7 @@ func TestViewMarkets(t *testing.T) {
 			userRoles: []models.UserRole{models.UserRoleUnspecified},
 			setupMocks: func(repo *mocks.MarketRepository, cache *mocks.MarketCacheRepository) {
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(allMarkets, nil)
@@ -260,7 +260,7 @@ func TestViewMarkets(t *testing.T) {
 				onlyEnabled := []models.Market{enabledMarket}
 
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(onlyEnabled, nil)
@@ -282,7 +282,7 @@ func TestViewMarkets(t *testing.T) {
 				onlyDisabled := []models.Market{disabledMarket}
 
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(onlyDisabled, nil)
@@ -303,7 +303,7 @@ func TestViewMarkets(t *testing.T) {
 				onlyDeleted := []models.Market{deletedMarket}
 
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(onlyDeleted, nil)
@@ -337,7 +337,7 @@ func TestViewMarkets(t *testing.T) {
 					}
 				}
 				cache.On("GetAll", mock.Anything).
-					Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+					Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 				repo.On("ListAll", mock.Anything).
 					Return(manyMarkets, nil)
@@ -359,7 +359,7 @@ func TestViewMarkets(t *testing.T) {
 			mockCache := mocks.NewMarketCacheRepository(t)
 			test.setupMocks(mockRepo, mockCache)
 
-			service := NewService(mockRepo, mockCache, cacheTTL)
+			service := NewMarketViewer(mockRepo, mockCache, cacheTTL)
 			ctx := context.Background()
 
 			markets, err := service.ViewMarkets(ctx, test.userRoles)
@@ -554,7 +554,7 @@ func TestViewMarketsWithFilters(t *testing.T) {
 			mockCache := mocks.NewMarketCacheRepository(t)
 
 			mockCache.On("GetAll", mock.Anything).
-				Return(nil, repositoryErrors.ErrMarketCacheNotFound)
+				Return(nil, repositoryErrors.ErrMarketsNotFound)
 
 			mockRepo.On("ListAll", mock.Anything).
 				Return([]models.Market{test.market}, nil)
@@ -562,7 +562,7 @@ func TestViewMarketsWithFilters(t *testing.T) {
 			mockCache.On("SetAll", mock.Anything, mock.Anything, cacheTTL).
 				Return(nil)
 
-			service := NewService(mockRepo, mockCache, cacheTTL)
+			service := NewMarketViewer(mockRepo, mockCache, cacheTTL)
 			ctx := context.Background()
 
 			markets, err := service.ViewMarkets(ctx, []models.UserRole{test.userRole})

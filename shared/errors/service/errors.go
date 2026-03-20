@@ -3,17 +3,18 @@ package service
 import (
 	"errors"
 	"fmt"
+	"time"
 
-	"github.com/google/uuid"
 	shared "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 )
 
 var (
 	ErrOrderNotFound      = shared.ErrNotFound{}
 	ErrOrderAlreadyExists = shared.ErrAlreadyExists{}
-	ErrRateLimitExceeded  = shared.ErrLimitExceeded{}
+	ErrMarketNotFound     = shared.ErrMarketNotFound{}
 
-	ErrMrktNotFound         = ErrMarketNotFound{}
+	ErrRateLimitExceeded = ErrLimitExceeded{}
+
 	ErrMarketsNotFound      = errors.New("markets not found")
 	ErrUserRoleNotSpecified = errors.New("user role not specified")
 
@@ -24,15 +25,16 @@ var (
 	ErrSaveTokenFailed   = errors.New("failed to save refresh token")
 )
 
-type ErrMarketNotFound struct {
-	ID uuid.UUID
+type ErrLimitExceeded struct {
+	Limit  int64
+	Window time.Duration
 }
 
-func (e ErrMarketNotFound) Error() string {
-	return fmt.Sprintf("market with id=%s not found", e.ID)
+func (e ErrLimitExceeded) Error() string {
+	return fmt.Sprintf("rate limit exceeded: %d requests per %s", e.Limit, e.Window)
 }
 
-func (e ErrMarketNotFound) Is(target error) bool {
-	var errorType ErrMarketNotFound
+func (e ErrLimitExceeded) Is(target error) bool {
+	var errorType ErrLimitExceeded
 	return errors.As(target, &errorType)
 }

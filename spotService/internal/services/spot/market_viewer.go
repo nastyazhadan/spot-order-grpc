@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -29,14 +30,17 @@ const (
 
 type MarketRepository interface {
 	ListAll(ctx context.Context) ([]models.Market, error)
+	GetByID(ctx context.Context, id uuid.UUID) (models.Market, error)
 }
 
 type MarketCacheRepository interface {
 	GetAll(ctx context.Context, roleKey string) ([]models.Market, error)
 	SetAll(ctx context.Context, market []models.Market, roleKey string, ttl time.Duration) error
+	GetByID(ctx context.Context, id uuid.UUID) (models.Market, error)
+	SetByID(ctx context.Context, market models.Market, ttl time.Duration) error
 }
 
-type Service struct {
+type MarketViewer struct {
 	marketRepository      MarketRepository
 	marketCacheRepository MarketCacheRepository
 	cacheTTL              time.Duration
@@ -45,13 +49,13 @@ type Service struct {
 	logger                *zapLogger.Logger
 }
 
-func NewService(
+func NewMarketViewer(
 	repo MarketRepository,
 	cacheRepo MarketCacheRepository,
 	ttl, timeout time.Duration,
 	logger *zapLogger.Logger,
-) *Service {
-	return &Service{
+) *MarketViewer {
+	return &MarketViewer{
 		marketRepository:      repo,
 		marketCacheRepository: cacheRepo,
 		cacheTTL:              ttl,
@@ -60,8 +64,8 @@ func NewService(
 	}
 }
 
-func (s *Service) ViewMarkets(ctx context.Context, userRoles []models.UserRole) ([]models.Market, error) {
-	const op = "Service.ViewMarkets"
+func (s *MarketViewer) ViewMarkets(ctx context.Context, userRoles []models.UserRole) ([]models.Market, error) {
+	const op = "MarketViewer.ViewMarkets"
 
 	ctx, span := tracing.StartSpan(ctx, "spot.view_markets")
 	defer span.End()
@@ -80,6 +84,41 @@ func (s *Service) ViewMarkets(ctx context.Context, userRoles []models.UserRole) 
 	}
 
 	return markets, nil
+}
+
+func (s *MarketViewer) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
+	const op = "MarketViewer.GetMarketByID"
+
+	ctx, span := tracing.StartSpan(ctx, "spot.get_market_by_id",
+		trace.WithAttributes(attribute.String("market_id", id.String())),
+	)
+	defer span.End()
+
+	market, err := s.marketCacheRepository.GetByID(ctx, id)
+	if err == nil {
+		return market, nil
+	}
+
+	if !errors.Is(err, repositoryErrors.ErrMarketNotFound) {
+		s.logger.Error(ctx, "internal cache error", zap.Error(err))
+	}
+
+	market, err = s.marketRepository.GetByID(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		if errors.Is(err, repositoryErrors.ErrMarketNotFound) {
+			return models.Market{}, serviceErrors.ErrMarketNotFound
+		}
+
+		return models.Market{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if err = s.marketCacheRepository.SetByID(ctx, market, s.cacheTTL); err != nil {
+		span.RecordError(err)
+		s.logger.Warn(ctx, "failed to cache market by id", zap.Error(err))
+	}
+
+	return market, nil
 }
 
 func effectiveUserRole(roles []models.UserRole) (string, bool) {
@@ -101,21 +140,21 @@ func effectiveUserRole(roles []models.UserRole) (string, bool) {
 	return resultRole, resultRole != ""
 }
 
-func (s *Service) getMarkets(ctx context.Context, roleKey string) ([]models.Market, error) {
+func (s *MarketViewer) getMarkets(ctx context.Context, roleKey string) ([]models.Market, error) {
 	markets, err := s.marketCacheRepository.GetAll(ctx, roleKey)
 	if err == nil {
 		return markets, nil
 	}
 
-	if !errors.Is(err, repositoryErrors.ErrMarketCacheNotFound) {
+	if !errors.Is(err, repositoryErrors.ErrMarketsNotFound) {
 		s.logger.Error(ctx, "internal cache error", zap.Error(err))
 	}
 
 	return s.getMarketsWithSingleFlight(ctx, roleKey)
 }
 
-func (s *Service) getMarketsWithSingleFlight(ctx context.Context, roleKey string) ([]models.Market, error) {
-	const op = "Service.getMarketsWithSingleFlight"
+func (s *MarketViewer) getMarketsWithSingleFlight(ctx context.Context, roleKey string) ([]models.Market, error) {
+	const op = "MarketViewer.getMarketsWithSingleFlight"
 
 	resultKey := singleFlightKey + ":" + roleKey
 
@@ -137,13 +176,11 @@ func (s *Service) getMarketsWithSingleFlight(ctx context.Context, roleKey string
 	return markets, nil
 }
 
-func (s *Service) loadAndWarmCache(ctx context.Context, roleKey string) ([]models.Market, error) {
-	const op = "Service.loadAndWarmCache"
+func (s *MarketViewer) loadAndWarmCache(ctx context.Context, roleKey string) ([]models.Market, error) {
+	const op = "MarketViewer.loadAndWarmCache"
 
 	ctx, span := tracing.StartSpan(ctx, "spot.load_and_warm_cache",
-		trace.WithAttributes(
-			attribute.String("roleKey", roleKey),
-		),
+		trace.WithAttributes(attribute.String("roleKey", roleKey)),
 	)
 	defer span.End()
 
@@ -163,11 +200,19 @@ func (s *Service) loadAndWarmCache(ctx context.Context, roleKey string) ([]model
 		s.logger.Warn(ctx, "failed to update cache", zap.Error(err))
 	}
 
+	for _, market := range allMarkets {
+		if err = s.marketCacheRepository.SetByID(ctx, market, s.cacheTTL); err != nil {
+			span.RecordError(err)
+			s.logger.Warn(ctx, "failed cache market by id", zap.Error(err),
+				zap.String("market_id", market.ID.String()))
+		}
+	}
+
 	return filtered, nil
 }
 
-func (s *Service) getMarketsFromRepo(ctx context.Context) ([]models.Market, error) {
-	const op = "Service.getMarketsFromRepo"
+func (s *MarketViewer) getMarketsFromRepo(ctx context.Context) ([]models.Market, error) {
+	const op = "MarketViewer.getMarketsFromRepo"
 
 	ctx, span := tracing.StartSpan(ctx, "spot.get_markets_from_repo")
 	defer span.End()

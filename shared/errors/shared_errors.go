@@ -3,9 +3,12 @@ package errors
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
+)
+
+var (
+	ErrCacheNotFound = errors.New("cache not found")
 )
 
 type ErrNotFound struct {
@@ -34,16 +37,15 @@ func (e ErrAlreadyExists) Is(target error) bool {
 	return errors.As(target, &errorType)
 }
 
-type ErrLimitExceeded struct {
-	Limit  int64
-	Window time.Duration
+type ErrMarketNotFound struct {
+	ID uuid.UUID
 }
 
-func (e ErrLimitExceeded) Error() string {
-	return fmt.Sprintf("rate limit exceeded: %d requests per %s", e.Limit, e.Window)
+func (e ErrMarketNotFound) Error() string {
+	return fmt.Sprintf("market with id=%s not found", e.ID)
 }
 
-func (e ErrLimitExceeded) Is(target error) bool {
-	var errorType ErrLimitExceeded
+func (e ErrMarketNotFound) Is(target error) bool {
+	var errorType ErrMarketNotFound
 	return errors.As(target, &errorType)
 }

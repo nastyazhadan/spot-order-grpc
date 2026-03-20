@@ -148,7 +148,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 
 	marketRepo := repoPostgres.NewMarketStore(pool)
 	cacheRepo := repoRedis.NewMarketCacheRepository(redisClient)
-	marketSvc := svcSpot.NewService(marketRepo, cacheRepo, cacheTTL)
+	marketSvc := svcSpot.NewMarketViewer(marketRepo, cacheRepo, cacheTTL)
 
 	validator, err := validate.UnaryServerInterceptor()
 	if err != nil {

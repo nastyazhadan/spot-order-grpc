@@ -60,8 +60,8 @@ type CircuitBreakerConfig struct {
 }
 
 type PostgresPoolConfig struct {
-	MaxConnections  int           `mapstructure:"max_conns"`
-	MinConnections  int           `mapstructure:"min_conns"`
+	MaxConnections  int32         `mapstructure:"max_conns"`
+	MinConnections  int32         `mapstructure:"min_conns"`
 	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
 	MaxConnIdleTime time.Duration `mapstructure:"max_conn_idle_time"`
 }
@@ -80,8 +80,8 @@ type RedisConfig struct {
 }
 
 type RateLimiterByUserConfig struct {
-	CreateOrder    int           `mapstructure:"create_order"`
-	GetOrderStatus int           `mapstructure:"get_order_status"`
+	CreateOrder    int64         `mapstructure:"create_order"`
+	GetOrderStatus int64         `mapstructure:"get_order_status"`
 	Window         time.Duration `mapstructure:"window"`
 }
 
@@ -124,9 +124,10 @@ type AuthConfig struct {
 }
 
 type RetryConfig struct {
-	MaxAttempts    uint          `mapstructure:"max_attempts"`
-	InitialBackoff time.Duration `mapstructure:"initial_backoff"`
-	Jitter         float64       `mapstructure:"jitter"`
+	MaxAttempts     uint          `mapstructure:"max_attempts"`
+	InitialBackoff  time.Duration `mapstructure:"initial_backoff"`
+	Jitter          float64       `mapstructure:"jitter"`
+	PerRetryTimeout time.Duration `mapstructure:"per_retry_timeout"`
 }
 
 func (r RedisConfig) Address() string {

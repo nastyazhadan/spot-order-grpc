@@ -37,7 +37,7 @@ func mapError(ctx context.Context, err error, logger *zapLogger.Logger) error {
 	switch {
 	// Штатные ошибки - warn, ошибки системы - error
 	case errors.Is(err, serviceErrors.ErrMarketsNotFound),
-		errors.Is(err, serviceErrors.ErrMrktNotFound),
+		errors.Is(err, serviceErrors.ErrMarketNotFound),
 		errors.Is(err, serviceErrors.ErrOrderNotFound):
 		logger.Warn(ctx, "resource not found", zap.Error(err))
 		return status.Error(codes.NotFound, err.Error())

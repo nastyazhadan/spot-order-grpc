@@ -48,7 +48,7 @@ type Getter interface {
 }
 
 type MarketViewer interface {
-	ViewMarkets(ctx context.Context, roles []sharedModels.UserRole) ([]sharedModels.Market, error)
+	GetMarketByID(ctx context.Context, id uuid.UUID) (sharedModels.Market, error)
 }
 
 type RateLimiter interface {
@@ -157,7 +157,7 @@ func (s *OrderService) checkRateLimit(
 		return err
 	}
 	if !allowed {
-		err = sharedErrors.ErrLimitExceeded{
+		err = serviceErrors.ErrLimitExceeded{
 			Limit:  limit,
 			Window: window,
 		}
@@ -174,26 +174,21 @@ func (s *OrderService) validateMarket(
 	marketID uuid.UUID,
 ) error {
 	ctx, span := tracing.StartSpan(ctx, "order.validate_market",
-		trace.WithAttributes(
-			attributeUUID("market_id", marketID),
-		),
+		trace.WithAttributes(attributeUUID("market_id", marketID)),
 	)
 	defer span.End()
 
-	markets, err := s.marketViewer.ViewMarkets(ctx, []sharedModels.UserRole{sharedModels.UserRoleUser})
+	market, err := s.marketViewer.GetMarketByID(ctx, marketID)
 	if err != nil {
 		span.RecordError(err)
 		return err
 	}
-
-	for _, market := range markets {
-		if market.ID == marketID {
-			return nil
-		}
+	if !market.Enabled || market.DeletedAt != nil {
+		err = sharedErrors.ErrMarketNotFound{ID: marketID}
+		span.RecordError(err)
+		return err
 	}
 
-	err = serviceErrors.ErrMarketNotFound{ID: marketID}
-	span.RecordError(err)
 	return err
 }
 

@@ -76,8 +76,8 @@ func provideSpotService(
 	cacheRepository *repoRedis.MarketCacheRepository,
 	cfg config.SpotConfig,
 	logger *zapLogger.Logger,
-) *svcSpot.Service {
-	return svcSpot.NewService(
+) *svcSpot.MarketViewer {
+	return svcSpot.NewMarketViewer(
 		repository,
 		cacheRepository,
 		cfg.Redis.CacheTTL,

@@ -11,21 +11,24 @@ import (
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 
+	"github.com/google/uuid"
 	"github.com/sony/gobreaker/v2"
 	"google.golang.org/grpc"
 )
 
 type SpotClient struct {
-	api                proto.SpotInstrumentServiceClient
-	viewMarketsBreaker *gobreaker.CircuitBreaker[*proto.ViewMarketsResponse]
-	logger             *zapLogger.Logger
+	api                  proto.SpotInstrumentServiceClient
+	viewMarketsBreaker   *gobreaker.CircuitBreaker[*proto.ViewMarketsResponse]
+	getMarketByIDBreaker *gobreaker.CircuitBreaker[*proto.GetMarketByIDResponse]
+	logger               *zapLogger.Logger
 }
 
 func NewSpotClient(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig, logger *zapLogger.Logger) *SpotClient {
 	return &SpotClient{
-		api:                proto.NewSpotInstrumentServiceClient(connection),
-		viewMarketsBreaker: breaker.New[*proto.ViewMarketsResponse]("spotService.ViewMarkets", cfg, logger),
-		logger:             logger,
+		api:                  proto.NewSpotInstrumentServiceClient(connection),
+		viewMarketsBreaker:   breaker.New[*proto.ViewMarketsResponse]("spotService.ViewMarkets", cfg, logger),
+		getMarketByIDBreaker: breaker.New[*proto.GetMarketByIDResponse]("spotService.GetMarketByID", cfg, logger),
+		logger:               logger,
 	}
 }
 
@@ -58,4 +61,22 @@ func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) (
 	}
 
 	return out, nil
+}
+
+func (c *SpotClient) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
+	response, err := c.getMarketByIDBreaker.Execute(func() (*proto.GetMarketByIDResponse, error) {
+		return c.api.GetMarketById(ctx, &proto.GetMarketByIDRequest{
+			MarketId: id.String(),
+		})
+	})
+	if err != nil {
+		return models.Market{}, fmt.Errorf("get market by id via circuit breaker: %w", err)
+	}
+
+	market, err := mapper.MarketFromProto(response.GetMarket())
+	if err != nil {
+		return models.Market{}, fmt.Errorf("map market from proto: %w", err)
+	}
+
+	return market, nil
 }

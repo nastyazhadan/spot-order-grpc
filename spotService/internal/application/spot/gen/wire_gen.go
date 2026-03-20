@@ -41,7 +41,7 @@ func NewContainer(ctx context.Context, cfg config.SpotConfig, logger *zap.Logger
 // wire.go:
 
 type Container struct {
-	SpotService  *spot.Service
+	SpotService  *spot.MarketViewer
 	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }

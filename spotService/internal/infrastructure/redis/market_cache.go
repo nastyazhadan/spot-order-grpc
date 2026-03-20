@@ -7,17 +7,22 @@ import (
 	"fmt"
 	"time"
 
+	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound/redis"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
-const cacheKeyPrefix = "market:cache"
+const (
+	cacheKeyPrefix   = "market:cache"
+	cacheKeyIDPrefix = "market:id"
+)
 
 type MarketCacheRepository struct {
 	cacheStore *cache.Store
@@ -33,11 +38,15 @@ func cacheKey(roleKey string) string {
 	return fmt.Sprintf("%s:%s", cacheKeyPrefix, roleKey)
 }
 
+func cacheKeyByID(id uuid.UUID) string {
+	return fmt.Sprintf("%s:%s", cacheKeyIDPrefix, id)
+}
+
 func (m *MarketCacheRepository) GetAll(
 	ctx context.Context,
 	roleKey string,
 ) ([]models.Market, error) {
-	const op = "MarketCacheRepository.GetAll"
+	const op = "redis.MarketCacheRepository.GetAll"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.get_markets",
 		trace.WithAttributes(
@@ -48,8 +57,8 @@ func (m *MarketCacheRepository) GetAll(
 
 	data, err := m.cacheStore.Get(ctx, cacheKey(roleKey))
 	if err != nil {
-		if errors.Is(err, repositoryErrors.ErrCacheNotFound) {
-			return nil, repositoryErrors.ErrMarketCacheNotFound
+		if errors.Is(err, sharedErrors.ErrCacheNotFound) {
+			return nil, repositoryErrors.ErrMarketsNotFound
 		}
 
 		span.RecordError(err)
@@ -81,7 +90,7 @@ func (m *MarketCacheRepository) SetAll(
 	roleKey string,
 	ttl time.Duration,
 ) error {
-	const op = "MarketCacheRepository.SetAll"
+	const op = "redis.MarketCacheRepository.SetAll"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.set_markets",
 		trace.WithAttributes(
@@ -104,6 +113,68 @@ func (m *MarketCacheRepository) SetAll(
 	}
 
 	if err = m.cacheStore.SetWithTTL(ctx, cacheKey(roleKey), data, ttl); err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
+func (m *MarketCacheRepository) GetByID(
+	ctx context.Context,
+	id uuid.UUID,
+) (models.Market, error) {
+	const op = "redis.MarketCacheRepository.GetByID"
+
+	ctx, span := tracing.StartSpan(ctx, "redis.get_market_by_id",
+		trace.WithAttributes(attribute.String("market_id", id.String())),
+	)
+	defer span.End()
+
+	data, err := m.cacheStore.Get(ctx, cacheKeyByID(id))
+	if err != nil {
+		if errors.Is(err, sharedErrors.ErrCacheNotFound) {
+			return models.Market{}, repositoryErrors.ErrMarketNotFound
+		}
+
+		span.RecordError(err)
+		return models.Market{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	var redisView dto.MarketRedisView
+	if err = json.Unmarshal(data, &redisView); err != nil {
+		span.RecordError(err)
+		return models.Market{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	market, err := redisView.ToDomain()
+	if err != nil {
+		span.RecordError(err)
+		return models.Market{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return market, nil
+}
+
+func (m *MarketCacheRepository) SetByID(
+	ctx context.Context,
+	market models.Market,
+	ttl time.Duration,
+) error {
+	const op = "redis.MarketCacheRepository.SetById"
+
+	ctx, span := tracing.StartSpan(ctx, "redis.set_market_by_id",
+		trace.WithAttributes(attribute.String("market_id", market.ID.String())),
+	)
+	defer span.End()
+
+	data, err := json.Marshal(dto.FromDomain(market))
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	if err = m.cacheStore.SetWithTTL(ctx, cacheKeyByID(market.ID), data, ttl); err != nil {
 		span.RecordError(err)
 		return fmt.Errorf("%s: %w", op, err)
 	}

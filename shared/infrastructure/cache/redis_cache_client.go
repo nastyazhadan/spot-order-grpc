@@ -8,7 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 )
 
 type Store struct {
