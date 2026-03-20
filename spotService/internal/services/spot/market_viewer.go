@@ -67,6 +67,12 @@ func NewMarketViewer(
 func (s *MarketViewer) ViewMarkets(ctx context.Context, userRoles []models.UserRole) ([]models.Market, error) {
 	const op = "MarketViewer.ViewMarkets"
 
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.serviceTimeout)
+		defer cancel()
+	}
+
 	ctx, span := tracing.StartSpan(ctx, "spot.view_markets")
 	defer span.End()
 
@@ -87,12 +93,28 @@ func (s *MarketViewer) ViewMarkets(ctx context.Context, userRoles []models.UserR
 }
 
 func (s *MarketViewer) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
-	const op = "MarketViewer.GetMarketByID"
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.serviceTimeout)
+		defer cancel()
+	}
 
 	ctx, span := tracing.StartSpan(ctx, "spot.get_market_by_id",
 		trace.WithAttributes(attribute.String("market_id", id.String())),
 	)
 	defer span.End()
+
+	market, err := s.getMarketByID(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		return models.Market{}, err
+	}
+
+	return market, nil
+}
+
+func (s *MarketViewer) getMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
+	const op = "MarketViewer.getMarketByID"
 
 	market, err := s.marketCacheRepository.GetByID(ctx, id)
 	if err == nil {
@@ -105,7 +127,6 @@ func (s *MarketViewer) GetMarketByID(ctx context.Context, id uuid.UUID) (models.
 
 	market, err = s.marketRepository.GetByID(ctx, id)
 	if err != nil {
-		span.RecordError(err)
 		if errors.Is(err, repositoryErrors.ErrMarketNotFound) {
 			return models.Market{}, serviceErrors.ErrMarketNotFound
 		}
@@ -114,7 +135,6 @@ func (s *MarketViewer) GetMarketByID(ctx context.Context, id uuid.UUID) (models.
 	}
 
 	if err = s.marketCacheRepository.SetByID(ctx, market, s.cacheTTL); err != nil {
-		span.RecordError(err)
 		s.logger.Warn(ctx, "failed to cache market by id", zap.Error(err))
 	}
 
