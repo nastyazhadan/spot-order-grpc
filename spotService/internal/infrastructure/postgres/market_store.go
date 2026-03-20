@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -11,9 +12,12 @@ import (
 
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound/postgres"
 )
+
+const serviceName = "spotService"
 
 type MarketStore struct {
 	pool *pgxpool.Pool
@@ -31,13 +35,17 @@ func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 	ctx, span := tracing.StartSpan(ctx, "postgres.list_all_markets")
 	defer span.End()
 
+	start := time.Now()
 	rows, err := m.pool.Query(ctx, `SELECT id, name, enabled, deleted_at FROM market_store`)
 	if err != nil {
+		metrics.DBQueryDuration.WithLabelValues(serviceName, "list_all_markets").Observe(time.Since(start).Seconds())
 		span.RecordError(err)
+
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	marketsDTO, err := pgx.CollectRows(rows, pgx.RowToStructByName[dto.Market])
+	metrics.DBQueryDuration.WithLabelValues(serviceName, "list_all_markets").Observe(time.Since(start).Seconds())
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("%s: %w", op, err)
@@ -61,14 +69,18 @@ func (m *MarketStore) GetByID(ctx context.Context, id uuid.UUID) (models.Market,
 	ctx, span := tracing.StartSpan(ctx, "postgres.market_by_id")
 	defer span.End()
 
+	start := time.Now()
 	rows, err := m.pool.Query(ctx,
 		`SELECT id, name, enabled, deleted_at FROM market_store WHERE id = $1`, id)
 	if err != nil {
+		metrics.DBQueryDuration.WithLabelValues(serviceName, "get_market_by_id").Observe(time.Since(start).Seconds())
 		span.RecordError(err)
+
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	marketDTO, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[dto.Market])
+	metrics.DBQueryDuration.WithLabelValues(serviceName, "get_market_by_id").Observe(time.Since(start).Seconds())
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.Market{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketNotFound)

@@ -104,7 +104,7 @@ func (s *OrderService) CreateOrder(
 		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
-	metrics.OrdersCreatedTotal.WithLabelValues(s.config.ServiceName).Inc()
+	metrics.OrdersCreatedTotal.WithLabelValues(s.config.ServiceName, marketID.String()).Inc()
 
 	return orderID, orderStatus, nil
 }

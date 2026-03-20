@@ -6,6 +6,7 @@ import (
 	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 
@@ -118,7 +119,7 @@ func (s *serverAPI) GetOrderStatus(
 
 func validateCreateRequest(request *proto.CreateOrderRequest) error {
 	if request == nil {
-		return status.Error(codes.InvalidArgument, "request is required")
+		return status.Error(codes.InvalidArgument, errors.MsgRequestRequired)
 	}
 
 	if request.GetMarketId() == "" {

@@ -104,7 +104,7 @@ func (s *MarketViewer) GetMarketByID(ctx context.Context, id uuid.UUID) (models.
 	)
 	defer span.End()
 
-	market, err := s.getMarketByID(ctx, id)
+	market, err := s.getMarket(ctx, id)
 	if err != nil {
 		span.RecordError(err)
 		return models.Market{}, err
@@ -113,7 +113,7 @@ func (s *MarketViewer) GetMarketByID(ctx context.Context, id uuid.UUID) (models.
 	return market, nil
 }
 
-func (s *MarketViewer) getMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
+func (s *MarketViewer) getMarket(ctx context.Context, id uuid.UUID) (models.Market, error) {
 	const op = "MarketViewer.getMarketByID"
 
 	market, err := s.marketCacheRepository.GetByID(ctx, id)

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	mapper "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/inbound"
 
@@ -59,7 +60,7 @@ func (s *serverAPI) GetMarketByID(
 	request *proto.GetMarketByIDRequest,
 ) (*proto.GetMarketByIDResponse, error) {
 	if request == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
+		return nil, status.Error(codes.InvalidArgument, errors.MsgRequestRequired)
 	}
 
 	marketID, err := uuid.Parse(request.GetMarketId())
@@ -81,7 +82,7 @@ func (s *serverAPI) validateUserRoles(
 	request *proto.ViewMarketsRequest,
 ) ([]models.UserRole, error) {
 	if request == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
+		return nil, status.Error(codes.InvalidArgument, errors.MsgRequestRequired)
 	}
 
 	roles := request.GetUserRoles()

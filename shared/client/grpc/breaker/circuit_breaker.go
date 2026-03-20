@@ -5,6 +5,7 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 
 	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"
@@ -24,6 +25,8 @@ func New[T any](
 			shouldTrip := counts.ConsecutiveFailures >= cfg.MaxFailures
 
 			if shouldTrip {
+				metrics.CircuitBreakerOpenTotal.WithLabelValues(name).Inc()
+
 				logger.Warn(context.Background(), "circuit breaker is about to open",
 					zap.String("name", name),
 					zap.Uint32("consecutive_failures", counts.ConsecutiveFailures),
@@ -35,6 +38,12 @@ func New[T any](
 			return shouldTrip
 		},
 		OnStateChange: func(breakerName string, from gobreaker.State, to gobreaker.State) {
+			metrics.CircuitBreakerStateChangesTotal.WithLabelValues(
+				breakerName,
+				from.String(),
+				to.String(),
+			).Inc()
+
 			fields := []zap.Field{
 				zap.String("name", breakerName),
 				zap.String("from", from.String()),

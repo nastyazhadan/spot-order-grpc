@@ -11,6 +11,7 @@ import (
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound/redis"
 
@@ -25,12 +26,14 @@ const (
 )
 
 type MarketCacheRepository struct {
-	cacheStore *cache.Store
+	cacheStore  *cache.Store
+	serviceName string
 }
 
-func NewMarketCacheRepository(store *cache.Store) *MarketCacheRepository {
+func NewMarketCacheRepository(store *cache.Store, serviceName string) *MarketCacheRepository {
 	return &MarketCacheRepository{
-		cacheStore: store,
+		cacheStore:  store,
+		serviceName: serviceName,
 	}
 }
 
@@ -49,21 +52,25 @@ func (m *MarketCacheRepository) GetAll(
 	const op = "redis.MarketCacheRepository.GetAll"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.get_markets",
-		trace.WithAttributes(
-			attribute.String("role_key", roleKey),
-		),
+		trace.WithAttributes(attribute.String("role_key", roleKey)),
 	)
 	defer span.End()
 
+	start := time.Now()
 	data, err := m.cacheStore.Get(ctx, cacheKey(roleKey))
+	metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "get_all").Observe(time.Since(start).Seconds())
+
 	if err != nil {
 		if errors.Is(err, sharedErrors.ErrCacheNotFound) {
+			metrics.CacheMissesTotal.WithLabelValues(m.serviceName, "get_all").Inc()
 			return nil, repositoryErrors.ErrMarketsNotFound
 		}
 
 		span.RecordError(err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
+
+	metrics.CacheHitsTotal.WithLabelValues(m.serviceName, "get_all").Inc()
 
 	var redisViews []dto.MarketRedisView
 	if err = json.Unmarshal(data, &redisViews); err != nil {
@@ -73,10 +80,10 @@ func (m *MarketCacheRepository) GetAll(
 
 	markets := make([]models.Market, 0, len(redisViews))
 	for _, redisView := range redisViews {
-		market, err := redisView.ToDomain()
-		if err != nil {
-			span.RecordError(err)
-			return nil, fmt.Errorf("%s: %w", op, err)
+		market, mapError := redisView.ToDomain()
+		if mapError != nil {
+			span.RecordError(mapError)
+			return nil, fmt.Errorf("%s: %w", op, mapError)
 		}
 		markets = append(markets, market)
 	}
@@ -131,15 +138,21 @@ func (m *MarketCacheRepository) GetByID(
 	)
 	defer span.End()
 
+	start := time.Now()
 	data, err := m.cacheStore.Get(ctx, cacheKeyByID(id))
+	metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "get_by_id").Observe(time.Since(start).Seconds())
+
 	if err != nil {
 		if errors.Is(err, sharedErrors.ErrCacheNotFound) {
+			metrics.CacheMissesTotal.WithLabelValues(m.serviceName, "get_by_id").Inc()
 			return models.Market{}, repositoryErrors.ErrMarketNotFound
 		}
 
 		span.RecordError(err)
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
+
+	metrics.CacheHitsTotal.WithLabelValues(m.serviceName, "get_by_id").Inc()
 
 	var redisView dto.MarketRedisView
 	if err = json.Unmarshal(data, &redisView); err != nil {

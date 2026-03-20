@@ -53,10 +53,10 @@ type TimeoutsConfig struct {
 }
 
 type CircuitBreakerConfig struct {
-	MaxRequests uint          `mapstructure:"max_requests"`
+	MaxRequests uint32        `mapstructure:"max_requests"`
 	Interval    time.Duration `mapstructure:"interval"`
 	Timeout     time.Duration `mapstructure:"timeout"`
-	MaxFailures uint          `mapstructure:"max_failures"`
+	MaxFailures uint32        `mapstructure:"max_failures"`
 }
 
 type PostgresPoolConfig struct {

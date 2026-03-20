@@ -4,6 +4,7 @@ import (
 	"context"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/auth/v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/errors"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -30,7 +31,7 @@ func (s *serverAPI) RefreshToken(
 	request *proto.RefreshTokenRequest,
 ) (*proto.RefreshTokenResponse, error) {
 	if request == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
+		return nil, status.Error(codes.InvalidArgument, errors.MsgRequestRequired)
 	}
 
 	if request.GetRefreshToken() == "" {

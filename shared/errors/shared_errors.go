@@ -9,6 +9,8 @@ import (
 
 var (
 	ErrCacheNotFound = errors.New("cache not found")
+
+	MsgRequestRequired = "request is required"
 )
 
 type ErrNotFound struct {

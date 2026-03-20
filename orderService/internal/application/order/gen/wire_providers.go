@@ -20,6 +20,11 @@ import (
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
+const (
+	prefixCreateLimiter = "rate:order:create:"
+	prefixGetLimiter    = "rate:order:get:"
+)
+
 func providePostgresPool(ctx context.Context, cfg config.OrderConfig) (*pgxpool.Pool, error) {
 	pool, err := db.SetupDBWithPoolConfig(ctx, cfg.Service.DBURI, migrations.Migrations, db.PoolConfig{
 		MaxConnections:  cfg.PostgresPool.MaxConnections,
@@ -76,13 +81,13 @@ func provideRateLimiters(store *cache.Store, cfg config.OrderConfig) svcOrder.Ra
 			store,
 			cfg.RateLimitByUser.CreateOrder,
 			cfg.RateLimitByUser.Window,
-			"rate:order:create:",
+			prefixCreateLimiter,
 		),
 		Get: order.NewOrderRateLimiter(
 			store,
 			cfg.RateLimitByUser.GetOrderStatus,
 			cfg.RateLimitByUser.Window,
-			"rate:order:get:",
+			prefixGetLimiter,
 		),
 	}
 }

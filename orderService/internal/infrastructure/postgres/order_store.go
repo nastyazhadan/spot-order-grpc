@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,11 +15,15 @@ import (
 
 	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
 
-const uniqueViolationCode = "23505"
+const (
+	serviceName         = "orderService"
+	uniqueViolationCode = "23505"
+)
 
 type OrderStore struct {
 	pool *pgxpool.Pool
@@ -44,6 +49,7 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 
 	orderDTO := mapper.FromDomain(order)
 
+	start := time.Now()
 	_, err := o.pool.Exec(ctx,
 		`INSERT INTO orders (id, user_id, market_id, type, price, quantity, status, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -56,11 +62,12 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 		orderDTO.Status,
 		orderDTO.CreatedAt,
 	)
+	metrics.DBQueryDuration.WithLabelValues(serviceName, "save_order").Observe(time.Since(start).Seconds())
 
 	if err != nil {
 		span.RecordError(err)
 		if isDuplicateKey(err) {
-			return fmt.Errorf("%s: %w", op, repositoryErrors.ErrAlreadyExists{ID: orderDTO.ID})
+			return fmt.Errorf("%s: %w", op, sharedErrors.ErrAlreadyExists{ID: orderDTO.ID})
 		}
 
 		return fmt.Errorf("%s: %w", op, err)
@@ -73,12 +80,11 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 	const op = "infrastructure.OrderStore.GetOrder"
 
 	ctx, span := tracing.StartSpan(ctx, "postgres.get_order",
-		trace.WithAttributes(
-			attributeUUID("order_id", id),
-		),
+		trace.WithAttributes(attributeUUID("order_id", id)),
 	)
 	defer span.End()
 
+	start := time.Now()
 	rows, err := o.pool.Query(ctx,
 		`SELECT id, user_id, market_id, type, price, quantity, status, created_at
 		 FROM orders
@@ -86,15 +92,18 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 		id,
 	)
 	if err != nil {
+		metrics.DBQueryDuration.WithLabelValues(serviceName, "get_order").Observe(time.Since(start).Seconds())
 		span.RecordError(err)
+
 		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	orderDTO, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[mapper.Order])
+	metrics.DBQueryDuration.WithLabelValues(serviceName, "get_order").Observe(time.Since(start).Seconds())
 	if err != nil {
 		span.RecordError(err)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return models.Order{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrNotFound{ID: id})
+			return models.Order{}, fmt.Errorf("%s: %w", op, sharedErrors.ErrNotFound{ID: id})
 		}
 
 		return models.Order{}, fmt.Errorf("%s: %w", op, err)
