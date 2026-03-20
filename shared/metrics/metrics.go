@@ -1,8 +1,11 @@
 package metrics
 
 import (
+	"context"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
@@ -105,3 +108,14 @@ var (
 		[]string{"service", "reason"},
 	)
 )
+
+func ObserveWithTrace(ctx context.Context, wrap prometheus.Observer, time float64) {
+	if exemplar, ok := wrap.(prometheus.ExemplarObserver); ok {
+		traceID := trace.SpanFromContext(ctx).SpanContext().TraceID().String()
+		if traceID != "00000000000000000000000000000000" {
+			exemplar.ObserveWithExemplar(time, prometheus.Labels{"traceID": traceID})
+			return
+		}
+	}
+	wrap.Observe(time)
+}

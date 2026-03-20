@@ -79,15 +79,16 @@ func (s *MarketViewer) ViewMarkets(ctx context.Context, userRoles []models.UserR
 	roleKey, ok := effectiveUserRole(userRoles)
 	if !ok {
 		err := serviceErrors.ErrUserRoleNotSpecified
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return nil, err
 	}
 
 	markets, err := s.getMarkets(ctx, roleKey)
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
+	span.SetAttributes(attribute.Int("markets_count", len(markets)))
 
 	return markets, nil
 }
@@ -106,7 +107,7 @@ func (s *MarketViewer) GetMarketByID(ctx context.Context, id uuid.UUID) (models.
 
 	market, err := s.getMarket(ctx, id)
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return models.Market{}, err
 	}
 
@@ -216,13 +217,11 @@ func (s *MarketViewer) loadAndWarmCache(ctx context.Context, roleKey string) ([]
 	filtered := filterByRole(allMarkets, roleKey)
 
 	if err = s.marketCacheRepository.SetAll(ctx, filtered, roleKey, s.cacheTTL); err != nil {
-		span.RecordError(err)
 		s.logger.Warn(ctx, "failed to update cache", zap.Error(err))
 	}
 
 	for _, market := range allMarkets {
 		if err = s.marketCacheRepository.SetByID(ctx, market, s.cacheTTL); err != nil {
-			span.RecordError(err)
 			s.logger.Warn(ctx, "failed cache market by id", zap.Error(err),
 				zap.String("market_id", market.ID.String()))
 		}
@@ -239,7 +238,7 @@ func (s *MarketViewer) getMarketsFromRepo(ctx context.Context) ([]models.Market,
 
 	allMarkets, err := s.marketRepository.ListAll(ctx)
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
 			return nil, serviceErrors.ErrMarketsNotFound
 		}

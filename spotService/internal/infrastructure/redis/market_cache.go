@@ -52,13 +52,20 @@ func (m *MarketCacheRepository) GetAll(
 	const op = "redis.MarketCacheRepository.GetAll"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.get_markets",
-		trace.WithAttributes(attribute.String("role_key", roleKey)),
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("db.system", "redis"),
+			attribute.String("role_key", roleKey),
+		),
 	)
 	defer span.End()
 
 	start := time.Now()
 	data, err := m.cacheStore.Get(ctx, cacheKey(roleKey))
-	metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "get_all").Observe(time.Since(start).Seconds())
+	metrics.ObserveWithTrace(ctx,
+		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "get_all"),
+		time.Since(start).Seconds(),
+	)
 
 	if err != nil {
 		if errors.Is(err, sharedErrors.ErrCacheNotFound) {
@@ -66,7 +73,7 @@ func (m *MarketCacheRepository) GetAll(
 			return nil, repositoryErrors.ErrMarketsNotFound
 		}
 
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -74,7 +81,7 @@ func (m *MarketCacheRepository) GetAll(
 
 	var redisViews []dto.MarketRedisView
 	if err = json.Unmarshal(data, &redisViews); err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -82,7 +89,7 @@ func (m *MarketCacheRepository) GetAll(
 	for _, redisView := range redisViews {
 		market, mapError := redisView.ToDomain()
 		if mapError != nil {
-			span.RecordError(mapError)
+			tracing.RecordError(span, mapError)
 			return nil, fmt.Errorf("%s: %w", op, mapError)
 		}
 		markets = append(markets, market)
@@ -100,7 +107,9 @@ func (m *MarketCacheRepository) SetAll(
 	const op = "redis.MarketCacheRepository.SetAll"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.set_markets",
+		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
+			attribute.String("db.system", "redis"),
 			attribute.String("role_key", roleKey),
 			attribute.Int("markets_count", len(markets)),
 			attribute.String("ttl", ttl.String()),
@@ -115,12 +124,18 @@ func (m *MarketCacheRepository) SetAll(
 
 	data, err := json.Marshal(redisViews)
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err = m.cacheStore.SetWithTTL(ctx, cacheKey(roleKey), data, ttl); err != nil {
-		span.RecordError(err)
+	start := time.Now()
+	err = m.cacheStore.SetWithTTL(ctx, cacheKey(roleKey), data, ttl)
+	metrics.ObserveWithTrace(ctx,
+		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "set_all"),
+		time.Since(start).Seconds(),
+	)
+	if err != nil {
+		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -134,13 +149,20 @@ func (m *MarketCacheRepository) GetByID(
 	const op = "redis.MarketCacheRepository.GetByID"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.get_market_by_id",
-		trace.WithAttributes(attribute.String("market_id", id.String())),
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("db.system", "redis"),
+			attribute.String("market_id", id.String()),
+		),
 	)
 	defer span.End()
 
 	start := time.Now()
 	data, err := m.cacheStore.Get(ctx, cacheKeyByID(id))
-	metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "get_by_id").Observe(time.Since(start).Seconds())
+	metrics.ObserveWithTrace(ctx,
+		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "get_by_id"),
+		time.Since(start).Seconds(),
+	)
 
 	if err != nil {
 		if errors.Is(err, sharedErrors.ErrCacheNotFound) {
@@ -148,7 +170,7 @@ func (m *MarketCacheRepository) GetByID(
 			return models.Market{}, repositoryErrors.ErrMarketNotFound
 		}
 
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -156,13 +178,13 @@ func (m *MarketCacheRepository) GetByID(
 
 	var redisView dto.MarketRedisView
 	if err = json.Unmarshal(data, &redisView); err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	market, err := redisView.ToDomain()
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -177,18 +199,28 @@ func (m *MarketCacheRepository) SetByID(
 	const op = "redis.MarketCacheRepository.SetById"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.set_market_by_id",
-		trace.WithAttributes(attribute.String("market_id", market.ID.String())),
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("db.system", "redis"),
+			attribute.String("market_id", market.ID.String()),
+		),
 	)
 	defer span.End()
 
 	data, err := json.Marshal(dto.FromDomain(market))
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err = m.cacheStore.SetWithTTL(ctx, cacheKeyByID(market.ID), data, ttl); err != nil {
-		span.RecordError(err)
+	start := time.Now()
+	err = m.cacheStore.SetWithTTL(ctx, cacheKeyByID(market.ID), data, ttl)
+	metrics.ObserveWithTrace(ctx,
+		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "set_by_id"),
+		time.Since(start).Seconds(),
+	)
+	if err != nil {
+		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
 	}
 

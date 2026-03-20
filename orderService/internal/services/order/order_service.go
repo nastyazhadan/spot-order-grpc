@@ -153,7 +153,7 @@ func (s *OrderService) checkRateLimit(
 
 	allowed, err := limiter.Allow(ctx, userID)
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return err
 	}
 	if !allowed {
@@ -161,7 +161,7 @@ func (s *OrderService) checkRateLimit(
 			Limit:  limit,
 			Window: window,
 		}
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		metrics.RateLimitRejectedTotal.WithLabelValues(s.config.ServiceName, method).Inc()
 		return err
 	}
@@ -174,18 +174,24 @@ func (s *OrderService) validateMarket(
 	marketID uuid.UUID,
 ) error {
 	ctx, span := tracing.StartSpan(ctx, "order.validate_market",
-		trace.WithAttributes(attributeUUID("market_id", marketID)),
+		trace.WithAttributes(
+			attributeUUID("market_id", marketID)),
 	)
 	defer span.End()
 
 	market, err := s.marketViewer.GetMarketByID(ctx, marketID)
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return err
 	}
+
+	span.SetAttributes(
+		attribute.Bool("market_enabled", market.Enabled),
+		attribute.Bool("market_deleted", market.DeletedAt != nil),
+	)
 	if !market.Enabled || market.DeletedAt != nil {
 		err = sharedErrors.ErrMarketNotFound{ID: marketID}
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return err
 	}
 
@@ -203,17 +209,6 @@ func (s *OrderService) saveOrder(
 	orderID := uuid.New()
 	orderStatus := models.OrderStatusCreated
 
-	ctx, span := tracing.StartSpan(ctx, "order.save_order",
-		trace.WithAttributes(
-			attributeUUID("order_id", orderID),
-			attributeUUID("user_id", userID),
-			attributeUUID("market_id", marketID),
-			attribute.String("price", price.String()),
-			attribute.Int64("quantity", quantity),
-		),
-	)
-	defer span.End()
-
 	newOrder := models.Order{
 		ID:        orderID,
 		UserID:    userID,
@@ -226,7 +221,6 @@ func (s *OrderService) saveOrder(
 	}
 
 	if err := s.saver.SaveOrder(ctx, newOrder); err != nil {
-		span.RecordError(err)
 		if errors.Is(err, repositoryErrors.ErrOrderAlreadyExists) {
 			return uuid.Nil, models.OrderStatusCancelled, sharedErrors.ErrAlreadyExists{ID: orderID}
 		}
@@ -251,17 +245,21 @@ func (s *OrderService) fetchOrder(
 
 	order, err := s.getter.GetOrder(ctx, orderID)
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		if errors.Is(err, repositoryErrors.ErrOrderNotFound) {
 			return models.Order{}, sharedErrors.ErrNotFound{ID: orderID}
 		}
 
 		return models.Order{}, err
 	}
+	span.SetAttributes(
+		attribute.String("order_status", string(order.Status)),
+		attribute.String("order_type", string(order.Type)),
+	)
 
 	if order.UserID != userID {
 		err = sharedErrors.ErrNotFound{ID: orderID}
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return models.Order{}, err
 	}
 

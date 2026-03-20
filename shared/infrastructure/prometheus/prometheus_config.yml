@@ -2,6 +2,10 @@ global:
   scrape_interval: 15s # для pull модели
   evaluation_interval: 15s # для pull модели
 
+storage:
+  exemplars:
+    max-examplars: 100000
+
 scrape_configs:
   - job_name: "prometheus"
     static_configs:
@@ -12,10 +16,18 @@ scrape_configs:
       - targets: [ "otel-collector:8888" ]
 
   - job_name: "order-service"
+    scrape_protocols:
+      - OpenMetricsText1.0.0
+      - OpenMetricsText0.0.1
+      - PrometheusText0.0.4
     static_configs:
       - targets: [ "order-service:9091" ]
 
   - job_name: "spot-service"
+    scrape_protocols:
+      - OpenMetricsText1.0.0
+      - OpenMetricsText0.0.1
+      - PrometheusText0.0.4
     static_configs:
       - targets: [ "spot-service:9092" ]
 

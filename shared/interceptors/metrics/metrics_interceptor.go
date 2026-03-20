@@ -20,8 +20,10 @@ func UnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor {
 		response, err := handler(ctx, request)
 		duration := time.Since(start)
 
-		metrics.RequestDuration.WithLabelValues(serviceName,
-			serverInfo.FullMethod).Observe(duration.Seconds())
+		metrics.ObserveWithTrace(ctx,
+			metrics.RequestDuration.WithLabelValues(serviceName, serverInfo.FullMethod),
+			duration.Seconds(),
+		)
 
 		statusCode := codes.OK
 		if err != nil {

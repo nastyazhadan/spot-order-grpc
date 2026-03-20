@@ -7,6 +7,9 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -16,7 +19,6 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 	wireGen "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
 	grpcAuth "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/auth"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
@@ -33,7 +35,6 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func Run(ctx context.Context, cfg config.OrderConfig) {
@@ -116,8 +117,11 @@ func registerMetrics(
 	}
 
 	httpServer := &http.Server{
-		Addr:         cfg.Metrics.HTTPAddress,
-		Handler:      promhttp.Handler(),
+		Addr: cfg.Metrics.HTTPAddress,
+		Handler: promhttp.HandlerFor(
+			prometheus.DefaultGatherer,
+			promhttp.HandlerOpts{EnableOpenMetrics: true},
+		),
 		ReadTimeout:  cfg.Metrics.ReadTimeout,
 		WriteTimeout: cfg.Metrics.WriteTimeout,
 		IdleTimeout:  cfg.Metrics.IdleTimeout,

@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.uber.org/fx"
@@ -108,8 +109,11 @@ func registerMetrics(
 	}
 
 	httpServer := &http.Server{
-		Addr:         cfg.Metrics.HTTPAddress,
-		Handler:      promhttp.Handler(),
+		Addr: cfg.Metrics.HTTPAddress,
+		Handler: promhttp.HandlerFor(
+			prometheus.DefaultGatherer,
+			promhttp.HandlerOpts{EnableOpenMetrics: true},
+		),
 		ReadTimeout:  cfg.Metrics.ReadTimeout,
 		WriteTimeout: cfg.Metrics.WriteTimeout,
 		IdleTimeout:  cfg.Metrics.IdleTimeout,

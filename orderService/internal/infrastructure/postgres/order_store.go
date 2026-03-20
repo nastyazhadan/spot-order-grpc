@@ -39,10 +39,16 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 	const op = "infrastructure.OrderStore.SaveOrder"
 
 	ctx, span := tracing.StartSpan(ctx, "postgres.save_order",
+		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
+			attribute.String("db.system", "postgresql"),
 			attributeUUID("order_id", order.ID),
 			attributeUUID("user_id", order.UserID),
 			attributeUUID("market_id", order.MarketID),
+			attribute.String("price", order.Price.String()),
+			attribute.Int64("quantity", order.Quantity),
+			attribute.String("order_type", string(order.Type)),
+			attribute.String("order_status", string(order.Status)),
 		),
 	)
 	defer span.End()
@@ -62,10 +68,13 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 		orderDTO.Status,
 		orderDTO.CreatedAt,
 	)
-	metrics.DBQueryDuration.WithLabelValues(serviceName, "save_order").Observe(time.Since(start).Seconds())
+	metrics.ObserveWithTrace(ctx,
+		metrics.DBQueryDuration.WithLabelValues(serviceName, "save_order"),
+		time.Since(start).Seconds(),
+	)
 
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		if isDuplicateKey(err) {
 			return fmt.Errorf("%s: %w", op, sharedErrors.ErrAlreadyExists{ID: orderDTO.ID})
 		}
@@ -80,7 +89,10 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 	const op = "infrastructure.OrderStore.GetOrder"
 
 	ctx, span := tracing.StartSpan(ctx, "postgres.get_order",
-		trace.WithAttributes(attributeUUID("order_id", id)),
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("db.system", "postgresql"),
+			attributeUUID("order_id", id)),
 	)
 	defer span.End()
 
@@ -92,28 +104,38 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 		id,
 	)
 	if err != nil {
-		metrics.DBQueryDuration.WithLabelValues(serviceName, "get_order").Observe(time.Since(start).Seconds())
-		span.RecordError(err)
+		metrics.ObserveWithTrace(ctx,
+			metrics.DBQueryDuration.WithLabelValues(serviceName, "get_order"),
+			time.Since(start).Seconds(),
+		)
+		tracing.RecordError(span, err)
 
 		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	orderDTO, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[mapper.Order])
-	metrics.DBQueryDuration.WithLabelValues(serviceName, "get_order").Observe(time.Since(start).Seconds())
+	metrics.ObserveWithTrace(ctx,
+		metrics.DBQueryDuration.WithLabelValues(serviceName, "get_order"),
+		time.Since(start).Seconds(),
+	)
 	if err != nil {
-		span.RecordError(err)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.Order{}, fmt.Errorf("%s: %w", op, sharedErrors.ErrNotFound{ID: id})
 		}
+		tracing.RecordError(span, err)
 
 		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	order, err := orderDTO.ToDomain()
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
+	span.SetAttributes(
+		attribute.String("order_status", string(order.Status)),
+		attribute.String("order_type", string(order.Type)),
+	)
 
 	return order, nil
 }

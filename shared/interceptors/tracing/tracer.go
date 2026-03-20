@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"go.opentelemetry.io/otel/codes"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -94,4 +95,9 @@ func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) 
 
 func SpanFromContext(ctx context.Context) trace.Span {
 	return trace.SpanFromContext(ctx)
+}
+
+func RecordError(span trace.Span, err error) {
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
 }

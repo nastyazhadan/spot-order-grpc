@@ -5,6 +5,7 @@ datasources:
     type: tempo
     url: http://tempo:3200
     access: proxy
+    uid: tempo
     isDefault: false
     jsonData:
       tracesToLogsV2:

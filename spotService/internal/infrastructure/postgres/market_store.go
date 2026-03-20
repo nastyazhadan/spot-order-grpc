@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
@@ -32,22 +33,30 @@ func NewMarketStore(pool *pgxpool.Pool) *MarketStore {
 func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 	const op = "postgres.MarketStore.ListAll"
 
-	ctx, span := tracing.StartSpan(ctx, "postgres.list_all_markets")
+	ctx, span := tracing.StartSpan(ctx, "postgres.list_all_markets",
+		trace.WithSpanKind(trace.SpanKindClient),
+	)
 	defer span.End()
 
 	start := time.Now()
 	rows, err := m.pool.Query(ctx, `SELECT id, name, enabled, deleted_at FROM market_store`)
 	if err != nil {
-		metrics.DBQueryDuration.WithLabelValues(serviceName, "list_all_markets").Observe(time.Since(start).Seconds())
-		span.RecordError(err)
+		metrics.ObserveWithTrace(ctx,
+			metrics.DBQueryDuration.WithLabelValues(serviceName, "list_all_markets"),
+			time.Since(start).Seconds(),
+		)
+		tracing.RecordError(span, err)
 
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	marketsDTO, err := pgx.CollectRows(rows, pgx.RowToStructByName[dto.Market])
-	metrics.DBQueryDuration.WithLabelValues(serviceName, "list_all_markets").Observe(time.Since(start).Seconds())
+	metrics.ObserveWithTrace(ctx,
+		metrics.DBQueryDuration.WithLabelValues(serviceName, "list_all_markets"),
+		time.Since(start).Seconds(),
+	)
 	if err != nil {
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -66,27 +75,35 @@ func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 func (m *MarketStore) GetByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
 	const op = "postgres.MarketStore.GetById"
 
-	ctx, span := tracing.StartSpan(ctx, "postgres.market_by_id")
+	ctx, span := tracing.StartSpan(ctx, "postgres.market_by_id",
+		trace.WithSpanKind(trace.SpanKindClient),
+	)
 	defer span.End()
 
 	start := time.Now()
 	rows, err := m.pool.Query(ctx,
 		`SELECT id, name, enabled, deleted_at FROM market_store WHERE id = $1`, id)
 	if err != nil {
-		metrics.DBQueryDuration.WithLabelValues(serviceName, "get_market_by_id").Observe(time.Since(start).Seconds())
-		span.RecordError(err)
+		metrics.ObserveWithTrace(ctx,
+			metrics.DBQueryDuration.WithLabelValues(serviceName, "get_market_by_id"),
+			time.Since(start).Seconds(),
+		)
+		tracing.RecordError(span, err)
 
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	marketDTO, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[dto.Market])
-	metrics.DBQueryDuration.WithLabelValues(serviceName, "get_market_by_id").Observe(time.Since(start).Seconds())
+	metrics.ObserveWithTrace(ctx,
+		metrics.DBQueryDuration.WithLabelValues(serviceName, "get_market_by_id"),
+		time.Since(start).Seconds(),
+	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.Market{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketNotFound)
 		}
 
-		span.RecordError(err)
+		tracing.RecordError(span, err)
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
 
