@@ -20,6 +20,7 @@ type OrderConfig struct {
 	Tracing         TracingConfig            `mapstructure:"tracing"`
 	Metrics         MetricsConfig            `mapstructure:"metrics"`
 	KeepAlive       KeepAliveConfig          `mapstructure:"keep_alive"`
+	Retry           RetryConfig              `mapstructure:"retry"`
 }
 
 type SpotConfig struct {
@@ -52,15 +53,15 @@ type TimeoutsConfig struct {
 }
 
 type CircuitBreakerConfig struct {
-	MaxRequests uint32        `mapstructure:"max_requests"`
+	MaxRequests uint          `mapstructure:"max_requests"`
 	Interval    time.Duration `mapstructure:"interval"`
 	Timeout     time.Duration `mapstructure:"timeout"`
-	MaxFailures uint32        `mapstructure:"max_failures"`
+	MaxFailures uint          `mapstructure:"max_failures"`
 }
 
 type PostgresPoolConfig struct {
-	MaxConnections  int32         `mapstructure:"max_conns"`
-	MinConnections  int32         `mapstructure:"min_conns"`
+	MaxConnections  int           `mapstructure:"max_conns"`
+	MinConnections  int           `mapstructure:"min_conns"`
 	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
 	MaxConnIdleTime time.Duration `mapstructure:"max_conn_idle_time"`
 }
@@ -79,8 +80,8 @@ type RedisConfig struct {
 }
 
 type RateLimiterByUserConfig struct {
-	CreateOrder    int64         `mapstructure:"create_order"`
-	GetOrderStatus int64         `mapstructure:"get_order_status"`
+	CreateOrder    int           `mapstructure:"create_order"`
+	GetOrderStatus int           `mapstructure:"get_order_status"`
 	Window         time.Duration `mapstructure:"window"`
 }
 
@@ -120,6 +121,12 @@ type AuthConfig struct {
 	SkipMethods     []string      `mapstructure:"skip_methods"`
 	AccessTokenTTL  time.Duration `mapstructure:"access_token_ttl"`
 	RefreshTokenTTL time.Duration `mapstructure:"refresh_token_ttl"`
+}
+
+type RetryConfig struct {
+	MaxAttempts    uint          `mapstructure:"max_attempts"`
+	InitialBackoff time.Duration `mapstructure:"initial_backoff"`
+	Jitter         float64       `mapstructure:"jitter"`
 }
 
 func (r RedisConfig) Address() string {

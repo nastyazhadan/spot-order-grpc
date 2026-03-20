@@ -39,7 +39,6 @@ func (m *manager) GenerateAccessToken(userID uuid.UUID) (string, error) {
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTTL)),
 		},
-		UserID:    userID.String(),
 		TokenType: TokenTypeAccess,
 	}
 
@@ -63,7 +62,6 @@ func (m *manager) GenerateRefreshToken(userID uuid.UUID, jti string) (string, er
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshTTL)),
 		},
-		UserID:    userID.String(),
 		TokenType: TokenTypeRefresh,
 	}
 
@@ -98,8 +96,8 @@ func (m *manager) ParseToken(tokenString string, expectedType TokenType) (*Claim
 		return nil, status.Error(codes.Unauthenticated, "invalid token type")
 	}
 
-	if claims.UserID == "" {
-		return nil, status.Error(codes.Unauthenticated, "user_id not found in token")
+	if claims.Subject == "" {
+		return nil, status.Error(codes.Unauthenticated, "subject not found in token")
 	}
 
 	return claims, nil

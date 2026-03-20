@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-
 	shared "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 )
 
@@ -17,6 +16,12 @@ var (
 	ErrMrktNotFound         = ErrMarketNotFound{}
 	ErrMarketsNotFound      = errors.New("markets not found")
 	ErrUserRoleNotSpecified = errors.New("user role not specified")
+
+	ErrInvalidSubject    = errors.New("invalid subject in token")
+	ErrInvalidJTI        = errors.New("invalid refresh token jti")
+	ErrTokenRevoked      = errors.New("refresh token revoked or not found")
+	ErrRevokeTokenFailed = errors.New("failed to revoke refresh token")
+	ErrSaveTokenFailed   = errors.New("failed to save refresh token")
 )
 
 type ErrMarketNotFound struct {

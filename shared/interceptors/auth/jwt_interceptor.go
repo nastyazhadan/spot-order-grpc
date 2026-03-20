@@ -43,7 +43,7 @@ func UnaryServerInterceptor(jwtManager authjwt.Manager, cfg config.AuthConfig) g
 			return nil, err
 		}
 
-		userID, err := uuid.Parse(claims.UserID)
+		userID, err := uuid.Parse(claims.Subject)
 		if err != nil {
 			return nil, status.Error(codes.Unauthenticated, "invalid user_id in token")
 		}

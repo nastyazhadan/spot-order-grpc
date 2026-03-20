@@ -5,11 +5,23 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
+
+	"github.com/google/uuid"
+	redisGo "github.com/redis/go-redis/v9"
 )
 
 const refreshTokenPrefix = "refresh"
+
+// Атомарно проверяет наличие ключа и удаляет его
+var revokeIfExistsScript = redisGo.NewScript(`
+local key = KEYS[1]
+if redis.call("EXISTS", key) == 1 then
+    redis.call("DEL", key)
+    return 1
+end
+return 0
+`)
 
 type RefreshTokenStore struct {
 	store *cache.Store
@@ -27,12 +39,17 @@ func (s *RefreshTokenStore) Save(ctx context.Context, userID uuid.UUID, jti stri
 	return s.store.SetWithTTL(ctx, s.key(userID, jti), "1", s.ttl)
 }
 
-func (s *RefreshTokenStore) Exists(ctx context.Context, userID uuid.UUID, jti string) (bool, error) {
-	return s.store.Exists(ctx, s.key(userID, jti))
-}
+func (s *RefreshTokenStore) RevokeIfExists(ctx context.Context, userID uuid.UUID, jti string) (bool, error) {
+	result, err := revokeIfExistsScript.Run(
+		ctx,
+		s.store.ScriptRunner(),
+		[]string{s.key(userID, jti)},
+	).Int()
+	if err != nil {
+		return false, fmt.Errorf("revoke if exists: lua script error: %w", err)
+	}
 
-func (s *RefreshTokenStore) Revoke(ctx context.Context, userID uuid.UUID, jti string) error {
-	return s.store.Delete(ctx, s.key(userID, jti))
+	return result == 1, nil
 }
 
 func (s *RefreshTokenStore) key(userID uuid.UUID, jti string) string {

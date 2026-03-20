@@ -61,6 +61,10 @@ order:
     ping_timeout: "5s"
     min_ping_interval: "10s"
     permit_without_stream: true
+  retry:
+    max_attempts: 3
+    initial_backoff: "100ms"
+    jitter: 0.1
 
 spot:
   service:

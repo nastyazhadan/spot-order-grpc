@@ -7,15 +7,16 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 	wireGen "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
 	grpcAuth "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/auth"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
@@ -32,6 +33,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func Run(ctx context.Context, cfg config.OrderConfig) {
@@ -149,7 +151,14 @@ func provideClientConnection(
 	connection, err := grpc.NewClient(
 		cfg.SpotAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(tracing.UnaryClientInterceptor()),
+		grpc.WithChainUnaryInterceptor(
+			tracing.UnaryClientInterceptor(),
+			retry.UnaryClientInterceptor(
+				retry.WithMax(cfg.Retry.MaxAttempts),
+				retry.WithBackoff(retry.BackoffExponentialWithJitter(cfg.Retry.InitialBackoff, cfg.Retry.Jitter)),
+				retry.WithCodes(codes.DeadlineExceeded, codes.ResourceExhausted),
+			),
+		),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:                cfg.KeepAlive.PingTime,
 			Timeout:             cfg.KeepAlive.PingTimeout,
@@ -257,8 +266,9 @@ func provideGRPCServer(
 			MinTime:             cfg.KeepAlive.MinPingInterval,
 			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
 		}),
+		// logger до auth для логов auth
 		grpc.ChainUnaryInterceptor(
-			recoverer, tracer, meter, authenticator, logger, rateLimiter, errorsMapper, validator,
+			recoverer, tracer, meter, logger, authenticator, rateLimiter, errorsMapper, validator,
 		),
 	)
 
