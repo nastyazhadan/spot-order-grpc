@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/client/grpc/breaker"
@@ -40,7 +39,7 @@ func (c *OrderClient) CreateOrder(
 		return c.api.CreateOrder(ctx, request)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create order via circuit breaker: %w", err)
+		return nil, err
 	}
 
 	return result, nil
@@ -55,7 +54,7 @@ func (c *OrderClient) GetOrderStatus(
 		return c.api.GetOrderStatus(ctx, request)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("get order status via circuit breaker: %w", err)
+		return nil, err
 	}
 
 	return result, nil

@@ -93,7 +93,7 @@ spot:
     max_active_conns: 15
     idle_timeout: 1m
     max_conn_lifetime: 30m
-    spot_cache_ttl: 24h
+    spot_cache_ttl: 5m
   tracing:
     exporter_otlp_endpoint: "otel-collector:4317"
     environment: "development"

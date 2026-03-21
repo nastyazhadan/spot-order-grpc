@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
-	errors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
@@ -50,11 +50,11 @@ func (s *AuthService) validateRefreshToken(refreshToken string) (uuid.UUID, stri
 
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		return uuid.Nil, "", errors.ErrInvalidSubject
+		return uuid.Nil, "", serviceErrors.ErrInvalidSubject
 	}
 
 	if claims.ID == "" {
-		return uuid.Nil, "", errors.ErrInvalidJTI
+		return uuid.Nil, "", serviceErrors.ErrInvalidJTI
 	}
 
 	return userID, claims.ID, nil
@@ -67,10 +67,10 @@ func (s *AuthService) rotateTokens(
 ) (newAccessToken, newRefreshToken string, err error) {
 	revoked, err := s.store.RevokeIfExists(ctx, userID, oldJTI)
 	if err != nil {
-		return "", "", errors.ErrRevokeTokenFailed
+		return "", "", serviceErrors.ErrRevokeTokenFailed
 	}
 	if !revoked {
-		return "", "", errors.ErrTokenRevoked
+		return "", "", serviceErrors.ErrTokenRevoked
 	}
 
 	return s.issueTokenPair(ctx, userID)
@@ -94,7 +94,7 @@ func (s *AuthService) issueTokenPair(
 
 	if err = s.store.Save(ctx, userID, jti); err != nil {
 		s.logger.Error(ctx, "failed to save refresh token", zap.Error(err))
-		return "", "", errors.ErrSaveTokenFailed
+		return "", "", serviceErrors.ErrSaveTokenFailed
 	}
 
 	return accessToken, refreshToken, nil

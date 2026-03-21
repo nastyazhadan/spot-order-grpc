@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 
+	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -129,7 +130,7 @@ func (s *MarketViewer) getMarket(ctx context.Context, id uuid.UUID) (models.Mark
 	market, err = s.marketRepository.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repositoryErrors.ErrMarketNotFound) {
-			return models.Market{}, serviceErrors.ErrMarketNotFound
+			return models.Market{}, sharedErrors.ErrMarketNotFound{ID: market.ID}
 		}
 
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)

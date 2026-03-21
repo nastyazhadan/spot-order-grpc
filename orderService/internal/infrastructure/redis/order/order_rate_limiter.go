@@ -3,6 +3,7 @@ package order
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
@@ -50,7 +51,7 @@ func (r *OrderRateLimiter) Allow(ctx context.Context, userID uuid.UUID) (bool, e
 		ctx,
 		r.store.ScriptRunner(),
 		[]string{key},
-		int64(r.window/time.Second),
+		int64(math.Ceil(r.window.Seconds())),
 	).Result()
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)

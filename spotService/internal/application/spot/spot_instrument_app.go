@@ -232,11 +232,12 @@ func startGRPCServer(
 		OnStop: func(ctx context.Context) error {
 			server.GracefulStop()
 			container.PostgresPool.Close()
-			if err := container.RedisClient.Close(); err != nil {
+			err := container.RedisClient.Close()
+			if err != nil {
 				logger.Error(ctx, "failed to close redis", zap.Error(err))
 			}
 
-			return nil
+			return err
 		},
 	})
 }

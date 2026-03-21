@@ -15,7 +15,7 @@ import (
 
 	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
-	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
+	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
@@ -76,7 +76,7 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 	if err != nil {
 		tracing.RecordError(span, err)
 		if isPrimaryKeyViolation(err) {
-			return fmt.Errorf("%s: %w", op, sharedErrors.ErrAlreadyExists{ID: orderDTO.ID})
+			return fmt.Errorf("%s: %w", op, repositoryErrors.ErrOrderAlreadyExists)
 		}
 
 		return fmt.Errorf("%s: %w", op, err)
@@ -117,10 +117,10 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 
 	orderDTO, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[mapper.Order])
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return models.Order{}, fmt.Errorf("%s: %w", op, sharedErrors.ErrNotFound{ID: id})
-		}
 		tracing.RecordError(span, err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Order{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrOrderNotFound)
+		}
 
 		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}

@@ -20,7 +20,6 @@ type SpotClient struct {
 	api                  proto.SpotInstrumentServiceClient
 	viewMarketsBreaker   *gobreaker.CircuitBreaker[*proto.ViewMarketsResponse]
 	getMarketByIDBreaker *gobreaker.CircuitBreaker[*proto.GetMarketByIDResponse]
-	logger               *zapLogger.Logger
 }
 
 func NewSpotClient(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig, logger *zapLogger.Logger) *SpotClient {
@@ -28,7 +27,6 @@ func NewSpotClient(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig,
 		api:                  proto.NewSpotInstrumentServiceClient(connection),
 		viewMarketsBreaker:   breaker.New[*proto.ViewMarketsResponse]("spotService.ViewMarkets", cfg, logger),
 		getMarketByIDBreaker: breaker.New[*proto.GetMarketByIDResponse]("spotService.GetMarketByID", cfg, logger),
-		logger:               logger,
 	}
 }
 
@@ -48,14 +46,14 @@ func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) (
 		return resp, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("view markets via circuit breaker: %w", err)
+		return nil, err
 	}
 
 	out := make([]models.Market, 0, len(response.GetMarkets()))
 	for _, market := range response.GetMarkets() {
-		mappedMarket, err := mapper.MarketFromProto(market)
-		if err != nil {
-			return nil, fmt.Errorf("map market from proto: %w", err)
+		mappedMarket, mapError := mapper.MarketFromProto(market)
+		if mapError != nil {
+			return nil, fmt.Errorf("map market from proto: %w", mapError)
 		}
 		out = append(out, mappedMarket)
 	}
@@ -70,7 +68,7 @@ func (c *SpotClient) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Ma
 		})
 	})
 	if err != nil {
-		return models.Market{}, fmt.Errorf("get market by id via circuit breaker: %w", err)
+		return models.Market{}, err
 	}
 
 	market, err := mapper.MarketFromProto(response.GetMarket())
