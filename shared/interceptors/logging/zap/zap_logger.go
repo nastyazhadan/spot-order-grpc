@@ -46,7 +46,7 @@ func New(levelStr string, asJSON bool) *Logger {
 		level,
 	)
 
-	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(2))
+	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(3))
 
 	return &Logger{
 		zapLogger:    logger,

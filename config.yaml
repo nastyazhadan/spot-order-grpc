@@ -55,7 +55,6 @@ order:
     write_timeout: 10s
     idle_timeout: 60s
     export_interval: 10s
-    push_gateway_url: "http://pushgateway:9093"
   keep_alive:
     ping_time: 20s
     ping_timeout: 5s
@@ -106,7 +105,6 @@ spot:
     write_timeout: 10s
     idle_timeout: 60s
     export_interval: 10s
-    push_gateway_url: "http://pushgateway:9093"
   keep_alive:
     ping_time: 20s
     ping_timeout: 5s

@@ -42,13 +42,13 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
 			attribute.String("db.system", "postgresql"),
-			attributeUUID("order_id", order.ID),
-			attributeUUID("user_id", order.UserID),
-			attributeUUID("market_id", order.MarketID),
+			attribute.String("order_id", order.ID.String()),
+			attribute.String("user_id", order.UserID.String()),
+			attribute.String("market_id", order.MarketID.String()),
 			attribute.String("price", order.Price.String()),
 			attribute.Int64("quantity", order.Quantity),
-			attribute.String("order_type", string(order.Type)),
-			attribute.String("order_status", string(order.Status)),
+			attribute.String("order_type", order.Type.String()),
+			attribute.String("order_status", order.Status.String()),
 		),
 	)
 	defer span.End()
@@ -75,7 +75,7 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 
 	if err != nil {
 		tracing.RecordError(span, err)
-		if isDuplicateKey(err) {
+		if isPrimaryKeyViolation(err) {
 			return fmt.Errorf("%s: %w", op, sharedErrors.ErrAlreadyExists{ID: orderDTO.ID})
 		}
 
@@ -92,11 +92,18 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
 			attribute.String("db.system", "postgresql"),
-			attributeUUID("order_id", id)),
+			attribute.String("order_id", id.String())),
 	)
 	defer span.End()
 
 	start := time.Now()
+	defer func() {
+		metrics.ObserveWithTrace(ctx,
+			metrics.DBQueryDuration.WithLabelValues(serviceName, "get_order"),
+			time.Since(start).Seconds(),
+		)
+	}()
+
 	rows, err := o.pool.Query(ctx,
 		`SELECT id, user_id, market_id, type, price, quantity, status, created_at
 		 FROM orders
@@ -104,20 +111,11 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 		id,
 	)
 	if err != nil {
-		metrics.ObserveWithTrace(ctx,
-			metrics.DBQueryDuration.WithLabelValues(serviceName, "get_order"),
-			time.Since(start).Seconds(),
-		)
 		tracing.RecordError(span, err)
-
 		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	orderDTO, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[mapper.Order])
-	metrics.ObserveWithTrace(ctx,
-		metrics.DBQueryDuration.WithLabelValues(serviceName, "get_order"),
-		time.Since(start).Seconds(),
-	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.Order{}, fmt.Errorf("%s: %w", op, sharedErrors.ErrNotFound{ID: id})
@@ -133,23 +131,18 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
 	span.SetAttributes(
-		attribute.String("order_status", string(order.Status)),
-		attribute.String("order_type", string(order.Type)),
+		attribute.String("order_status", order.Status.String()),
+		attribute.String("order_type", order.Type.String()),
 	)
 
 	return order, nil
 }
 
-func isDuplicateKey(err error) bool {
-	var postgresErr *pgconn.PgError
-
-	if errors.As(err, &postgresErr) {
-		return postgresErr.Code == uniqueViolationCode
+func isPrimaryKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == uniqueViolationCode && pgErr.ConstraintName == "orders_pkey"
 	}
 
 	return false
-}
-
-func attributeUUID(key string, id uuid.UUID) attribute.KeyValue {
-	return attribute.String(key, id.String())
 }

@@ -107,7 +107,6 @@ type MetricsConfig struct {
 	WriteTimeout      time.Duration `mapstructure:"write_timeout"`
 	IdleTimeout       time.Duration `mapstructure:"idle_timeout"`
 	ExportInterval    time.Duration `mapstructure:"export_interval"`
-	PushGatewayURL    string        `mapstructure:"push_gateway_url"`
 }
 
 type KeepAliveConfig struct {

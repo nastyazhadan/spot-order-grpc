@@ -34,12 +34,12 @@ func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 		)
 		defer span.End()
 
-		addTraceIDToResponse(ctx)
-
 		response, err := handler(ctx, request)
 		if err != nil {
 			span.RecordError(err)
 		}
+
+		addTraceIDToResponse(ctx)
 
 		return response, err
 	}

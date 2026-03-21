@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	errors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
@@ -92,6 +93,7 @@ func (s *AuthService) issueTokenPair(
 	}
 
 	if err = s.store.Save(ctx, userID, jti); err != nil {
+		s.logger.Error(ctx, "failed to save refresh token", zap.Error(err))
 		return "", "", errors.ErrSaveTokenFailed
 	}
 

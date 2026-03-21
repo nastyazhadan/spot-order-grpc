@@ -39,6 +39,36 @@ const (
 	OrderStatusCancelled
 )
 
+func (s OrderStatus) String() string {
+	switch s {
+	case OrderStatusCreated:
+		return "created"
+	case OrderStatusPending:
+		return "pending"
+	case OrderStatusFilled:
+		return "filled"
+	case OrderStatusCancelled:
+		return "cancelled"
+	default:
+		return "unspecified"
+	}
+}
+
+func (t OrderType) String() string {
+	switch t {
+	case OrderTypeLimit:
+		return "limit"
+	case OrderTypeMarket:
+		return "market"
+	case OrderTypeStopLoss:
+		return "stop_loss"
+	case OrderTypeTakeProfit:
+		return "take_profit"
+	default:
+		return "unspecified"
+	}
+}
+
 type Decimal struct {
 	value decimal.Decimal
 }

@@ -30,8 +30,3 @@ scrape_configs:
       - PrometheusText0.0.4
     static_configs:
       - targets: [ "spot-service:9092" ]
-
-  - job_name: "pushgateway"
-    honor_labels: true
-    static_configs:
-      - targets: [ "pushgateway:9093" ]

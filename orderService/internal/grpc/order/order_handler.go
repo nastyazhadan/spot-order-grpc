@@ -90,6 +90,9 @@ func (s *serverAPI) GetOrderStatus(
 	ctx context.Context,
 	request *proto.GetOrderStatusRequest,
 ) (*proto.GetOrderStatusResponse, error) {
+	if request == nil {
+		return nil, status.Error(codes.InvalidArgument, errors.MsgRequestRequired)
+	}
 	if request.GetOrderId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "order_id is required")
 	}

@@ -84,7 +84,8 @@ func bearerTokenFromContext(ctx context.Context) (string, error) {
 	}
 
 	authHeader := strings.TrimSpace(values[0])
-	if !strings.HasPrefix(strings.ToLower(authHeader), bearerPrefix) {
+	lower := strings.ToLower(authHeader)
+	if !strings.HasPrefix(lower, bearerPrefix) {
 		return "", status.Error(codes.Unauthenticated, "missing authorization token")
 	}
 

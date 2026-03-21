@@ -39,22 +39,20 @@ func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 	defer span.End()
 
 	start := time.Now()
-	rows, err := m.pool.Query(ctx, `SELECT id, name, enabled, deleted_at FROM market_store`)
-	if err != nil {
+	defer func() {
 		metrics.ObserveWithTrace(ctx,
 			metrics.DBQueryDuration.WithLabelValues(serviceName, "list_all_markets"),
 			time.Since(start).Seconds(),
 		)
-		tracing.RecordError(span, err)
+	}()
 
+	rows, err := m.pool.Query(ctx, `SELECT id, name, enabled, deleted_at FROM market_store`)
+	if err != nil {
+		tracing.RecordError(span, err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	marketsDTO, err := pgx.CollectRows(rows, pgx.RowToStructByName[dto.Market])
-	metrics.ObserveWithTrace(ctx,
-		metrics.DBQueryDuration.WithLabelValues(serviceName, "list_all_markets"),
-		time.Since(start).Seconds(),
-	)
 	if err != nil {
 		tracing.RecordError(span, err)
 		return nil, fmt.Errorf("%s: %w", op, err)
@@ -81,23 +79,22 @@ func (m *MarketStore) GetByID(ctx context.Context, id uuid.UUID) (models.Market,
 	defer span.End()
 
 	start := time.Now()
-	rows, err := m.pool.Query(ctx,
-		`SELECT id, name, enabled, deleted_at FROM market_store WHERE id = $1`, id)
-	if err != nil {
+	defer func() {
 		metrics.ObserveWithTrace(ctx,
 			metrics.DBQueryDuration.WithLabelValues(serviceName, "get_market_by_id"),
 			time.Since(start).Seconds(),
 		)
+	}()
+
+	rows, err := m.pool.Query(ctx,
+		`SELECT id, name, enabled, deleted_at FROM market_store WHERE id = $1`, id)
+	if err != nil {
 		tracing.RecordError(span, err)
 
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	marketDTO, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[dto.Market])
-	metrics.ObserveWithTrace(ctx,
-		metrics.DBQueryDuration.WithLabelValues(serviceName, "get_market_by_id"),
-		time.Since(start).Seconds(),
-	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.Market{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketNotFound)

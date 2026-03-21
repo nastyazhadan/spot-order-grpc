@@ -50,7 +50,7 @@ func (r *OrderRateLimiter) Allow(ctx context.Context, userID uuid.UUID) (bool, e
 		ctx,
 		r.store.ScriptRunner(),
 		[]string{key},
-		int(r.window.Seconds()),
+		int64(r.window/time.Second),
 	).Result()
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)

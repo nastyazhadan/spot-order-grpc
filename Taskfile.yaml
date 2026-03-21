@@ -84,7 +84,7 @@ tasks:
   lint:
     # TODO: добавить линтер
 
-  mocks:generate:
+  mocks:gen:
     desc: Сгенерировать моки с помощью mockery
     cmds:
       - echo "{{.BLUE}}Генерация моков...{{.NC}}"
@@ -102,7 +102,7 @@ tasks:
 
       - echo "{{.GREEN}}Моки успешно сгенерированы{{.NC}}"
 
-  wire:generate:
+  wire:gen:
     desc: Сгенерировать wire_gen.go файлы
     cmds:
       - echo "{{.BLUE}}Генерация wire...{{.NC}}"
@@ -117,7 +117,7 @@ tasks:
       - go clean -testcache
       - echo "{{.GREEN}}Кэш очищен{{.NC}}"
 
-  token:generate:
+  token:gen:
     desc: Сгенерировать JWT токен
     cmds:
       - echo "{{.BLUE}}Генерация JWT токена...{{.NC}}"

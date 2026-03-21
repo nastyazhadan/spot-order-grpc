@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package auth.v1;
 
+import "buf/validate/validate.proto";
+
 option go_package = "zhadan.auth.v1;authv1";
 
 service AuthService {
@@ -9,7 +11,7 @@ service AuthService {
 }
 
 message RefreshTokenRequest {
-  string refresh_token = 1;
+  string refresh_token = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 message RefreshTokenResponse {

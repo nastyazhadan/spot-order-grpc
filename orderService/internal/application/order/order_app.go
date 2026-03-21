@@ -137,7 +137,7 @@ func registerMetrics(
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			metrics.PushShutdownMetric(ctx, cfg.Metrics.PushGatewayURL, cfg.Service.Name)
+			metrics.RecordShutdown(cfg.Service.Name)
 			if stopErr := meterProvider.Shutdown(ctx); stopErr != nil {
 				logger.Error(ctx, "Failed to shutdown metrics provider", zap.Error(stopErr))
 			}
@@ -149,7 +149,6 @@ func registerMetrics(
 }
 
 func provideClientConnection(
-	lifeCycle fx.Lifecycle,
 	cfg config.OrderConfig,
 ) (*grpc.ClientConn, error) {
 	connection, err := grpc.NewClient(
@@ -173,12 +172,6 @@ func provideClientConnection(
 	if err != nil {
 		return nil, fmt.Errorf("grpc.NewClient: %w", err)
 	}
-
-	lifeCycle.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			return connection.Close()
-		},
-	})
 
 	return connection, nil
 }
@@ -204,7 +197,6 @@ func provideGRPCClient(
 
 func provideContainer(
 	ctx context.Context,
-	lifeCycle fx.Lifecycle,
 	marketClient *grpcClient.SpotClient,
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
@@ -213,13 +205,6 @@ func provideContainer(
 	if err != nil {
 		return nil, err
 	}
-
-	lifeCycle.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			container.PostgresPool.Close()
-			return container.RedisClient.Close()
-		},
-	})
 
 	return container, nil
 }
@@ -289,6 +274,8 @@ func startGRPCServer(
 	lifeCycle fx.Lifecycle,
 	server *grpc.Server,
 	listener net.Listener,
+	container *wireGen.Container,
+	connection *grpc.ClientConn,
 	logger *zapLogger.Logger,
 ) {
 	lifeCycle.Append(fx.Hook{
@@ -305,7 +292,12 @@ func startGRPCServer(
 		},
 		OnStop: func(ctx context.Context) error {
 			server.GracefulStop()
-			return nil
+			container.PostgresPool.Close()
+			if err := container.RedisClient.Close(); err != nil {
+				logger.Error(ctx, "failed to close redis", zap.Error(err))
+			}
+
+			return connection.Close()
 		},
 	})
 }

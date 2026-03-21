@@ -117,8 +117,6 @@ services:
         condition: service_healthy
       tempo:
         condition: service_healthy
-      pushgateway:
-        condition: service_healthy
     restart: unless-stopped
     networks:
       - microservices-net
@@ -187,22 +185,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
-    restart: unless-stopped
-    networks:
-      - microservices-net
-
-  pushgateway:
-    image: prom/pushgateway:v1.10.0
-    container_name: pushgateway
-    command: [ "--web.listen-address=:9093" ]
-    ports:
-      - "${PUSHGATEWAY_PORT}:9093"
-    healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--spider", "http://localhost:9093/-/healthy" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
     restart: unless-stopped
     networks:
       - microservices-net

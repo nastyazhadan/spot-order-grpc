@@ -28,10 +28,10 @@ func NewContainer(ctx context.Context, cfg config.SpotConfig, logger *zap.Logger
 		return nil, err
 	}
 	store := provideCacheStore(client)
-	marketCacheRepository := provideMarketCacheRepository(store)
-	service := provideSpotService(marketStore, marketCacheRepository, cfg, logger)
+	marketCacheRepository := provideMarketCacheRepository(store, cfg)
+	marketViewer := provideSpotService(marketStore, marketCacheRepository, cfg, logger)
 	container := &Container{
-		SpotService:  service,
+		SpotService:  marketViewer,
 		RedisClient:  client,
 		PostgresPool: pool,
 	}

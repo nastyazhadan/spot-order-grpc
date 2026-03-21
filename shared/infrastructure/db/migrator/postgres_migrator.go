@@ -3,6 +3,7 @@ package migrator
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io/fs"
 
 	"github.com/pressly/goose/v3"
@@ -21,8 +22,12 @@ func NewMigrator(db *sql.DB, migrationsFS fs.FS) *Migrator {
 }
 
 func (m *Migrator) Up(ctx context.Context) error {
-	goose.SetBaseFS(m.migrationsFS)
-	defer goose.SetBaseFS(nil)
+	provider, err := goose.NewProvider(goose.DialectPostgres, m.db, m.migrationsFS)
+	if err != nil {
+		return fmt.Errorf("goose.NewProvider: %w", err)
+	}
+	defer provider.Close()
 
-	return goose.UpContext(ctx, m.db, ".")
+	_, err = provider.Up(ctx)
+	return err
 }

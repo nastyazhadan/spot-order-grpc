@@ -92,7 +92,7 @@ func (s *OrderService) CreateOrder(
 	}
 
 	if err := s.checkRateLimit(ctx, userID, s.rateLimiters.Create, "create_order"); err != nil {
-		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
+		return uuid.Nil, models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if err := s.validateMarket(ctx, marketID); err != nil {
@@ -195,7 +195,7 @@ func (s *OrderService) validateMarket(
 		return err
 	}
 
-	return err
+	return nil
 }
 
 func (s *OrderService) saveOrder(
@@ -253,8 +253,8 @@ func (s *OrderService) fetchOrder(
 		return models.Order{}, err
 	}
 	span.SetAttributes(
-		attribute.String("order_status", string(order.Status)),
-		attribute.String("order_type", string(order.Type)),
+		attribute.String("order_status", order.Status.String()),
+		attribute.String("order_type", order.Type.String()),
 	)
 
 	if order.UserID != userID {
