@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package events.v1;
+
+option go_package = "zhadan.events.v1;eventsv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/type/decimal.proto";
+
+enum OrderStatus {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_CREATED = 1;
+  STATUS_PENDING = 2;
+  STATUS_FILLED = 3;
+  STATUS_CANCELLED = 4;
+}
+
+enum OrderType {
+  TYPE_UNSPECIFIED = 0;
+  TYPE_LIMIT = 1;
+  TYPE_MARKET = 2;
+  TYPE_STOP_LOSS = 3;
+  TYPE_TAKE_PROFIT = 4;
+}
+
+message OrderCreatedEvent {
+  string event_id = 1;
+  string order_id = 2;
+  string user_id = 3;
+  string market_id = 4;
+  OrderType  order_type = 5;
+  google.type.Decimal price = 6;
+  int64  quantity = 7;
+  OrderStatus  status = 8;
+  string correlation_id = 9;
+  string causation_id = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+
+message OrderStatusUpdatedEvent {
+  string event_id = 1;
+  string order_id = 2;
+  string saga_id = 3;
+  OrderStatus  new_status = 4;
+  string reason = 5;
+  string correlation_id = 6;
+  string causation_id = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}

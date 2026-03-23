@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/mocks"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
@@ -56,7 +56,7 @@ func TestCreateOrder(t *testing.T) {
 					mock.AnythingOfType("models.OrderType"),
 					mock.Anything,
 					int64(10),
-				).Return(validOrderID, models.OrderStatusCreated, nil)
+				).Return(validOrderID, shared.OrderStatusCreated, nil)
 			},
 			checkResponse: func(t *testing.T, resp *proto.CreateOrderResponse) {
 				assert.NotNil(t, resp)
@@ -246,7 +246,7 @@ func TestCreateOrder(t *testing.T) {
 					mock.AnythingOfType("models.OrderType"),
 					mock.Anything,
 					int64(10),
-				).Return(uuid.Nil, models.OrderStatusCancelled, serviceErrors.ErrCreatingOrderNotRequired)
+				).Return(uuid.Nil, shared.OrderStatusCancelled, serviceErrors.ErrCreatingOrderNotRequired)
 			},
 			expectedCode: codes.InvalidArgument,
 			checkResponse: func(t *testing.T, resp *proto.CreateOrderResponse) {
@@ -270,7 +270,7 @@ func TestCreateOrder(t *testing.T) {
 					mock.AnythingOfType("models.OrderType"),
 					mock.Anything,
 					int64(10),
-				).Return(uuid.Nil, models.OrderStatusCancelled, serviceErrors.ErrOrderAlreadyExists)
+				).Return(uuid.Nil, shared.OrderStatusCancelled, serviceErrors.ErrOrderAlreadyExists)
 			},
 			expectedCode: codes.AlreadyExists,
 			checkResponse: func(t *testing.T, resp *proto.CreateOrderResponse) {
@@ -294,7 +294,7 @@ func TestCreateOrder(t *testing.T) {
 					mock.AnythingOfType("models.OrderType"),
 					mock.Anything,
 					int64(10),
-				).Return(uuid.Nil, models.OrderStatusCancelled, serviceErrors.ErrMarketsNotFound)
+				).Return(uuid.Nil, shared.OrderStatusCancelled, serviceErrors.ErrMarketsNotFound)
 			},
 			expectedCode: codes.NotFound,
 			checkResponse: func(t *testing.T, resp *proto.CreateOrderResponse) {
@@ -318,7 +318,7 @@ func TestCreateOrder(t *testing.T) {
 					mock.AnythingOfType("models.OrderType"),
 					mock.Anything,
 					int64(10),
-				).Return(uuid.Nil, models.OrderStatusCancelled, serviceErrors.ErrRateLimitExceeded)
+				).Return(uuid.Nil, shared.OrderStatusCancelled, serviceErrors.ErrRateLimitExceeded)
 			},
 			expectedCode: codes.ResourceExhausted,
 			checkResponse: func(t *testing.T, resp *proto.CreateOrderResponse) {
@@ -342,7 +342,7 @@ func TestCreateOrder(t *testing.T) {
 					mock.AnythingOfType("models.OrderType"),
 					mock.Anything,
 					int64(10),
-				).Return(uuid.Nil, models.OrderStatusCancelled, errors.New("internal error"))
+				).Return(uuid.Nil, shared.OrderStatusCancelled, errors.New("internal error"))
 			},
 			expectedCode: codes.Internal,
 			checkResponse: func(t *testing.T, resp *proto.CreateOrderResponse) {
@@ -366,7 +366,7 @@ func TestCreateOrder(t *testing.T) {
 					mock.AnythingOfType("models.OrderType"),
 					mock.Anything,
 					int64(1),
-				).Return(validOrderID, models.OrderStatusCreated, nil)
+				).Return(validOrderID, shared.OrderStatusCreated, nil)
 			},
 			checkResponse: func(t *testing.T, resp *proto.CreateOrderResponse) {
 				assert.NotNil(t, resp)
@@ -429,7 +429,7 @@ func TestGetOrderStatus(t *testing.T) {
 					mock.Anything,
 					mock.AnythingOfType("uuid.UUID"),
 					mock.AnythingOfType("uuid.UUID"),
-				).Return(models.OrderStatusCreated, nil)
+				).Return(shared.OrderStatusCreated, nil)
 			},
 			expectedCode: codes.OK,
 			checkResponse: func(t *testing.T, resp *proto.GetOrderStatusResponse) {
@@ -496,7 +496,7 @@ func TestGetOrderStatus(t *testing.T) {
 					mock.Anything,
 					mock.AnythingOfType("uuid.UUID"),
 					mock.AnythingOfType("uuid.UUID"),
-				).Return(models.OrderStatusCreated, serviceErrors.ErrOrderNotFound)
+				).Return(shared.OrderStatusCreated, serviceErrors.ErrOrderNotFound)
 			},
 			expectedCode: codes.NotFound,
 			checkResponse: func(t *testing.T, resp *proto.GetOrderStatusResponse) {
@@ -514,7 +514,7 @@ func TestGetOrderStatus(t *testing.T) {
 					mock.Anything,
 					mock.AnythingOfType("uuid.UUID"),
 					mock.AnythingOfType("uuid.UUID"),
-				).Return(models.OrderStatusUnspecified, errors.New("internal error"))
+				).Return(shared.OrderStatusUnspecified, errors.New("internal error"))
 			},
 			expectedCode: codes.Internal,
 			checkResponse: func(t *testing.T, resp *proto.GetOrderStatusResponse) {
@@ -532,7 +532,7 @@ func TestGetOrderStatus(t *testing.T) {
 					mock.Anything,
 					mock.AnythingOfType("uuid.UUID"),
 					mock.AnythingOfType("uuid.UUID"),
-				).Return(models.OrderStatusCancelled, nil)
+				).Return(shared.OrderStatusCancelled, nil)
 			},
 			expectedCode: codes.OK,
 			checkResponse: func(t *testing.T, resp *proto.GetOrderStatusResponse) {
@@ -551,7 +551,7 @@ func TestGetOrderStatus(t *testing.T) {
 					mock.Anything,
 					mock.AnythingOfType("uuid.UUID"),
 					mock.AnythingOfType("uuid.UUID"),
-				).Return(models.OrderStatusUnspecified, serviceErrors.ErrOrderNotFound)
+				).Return(shared.OrderStatusUnspecified, serviceErrors.ErrOrderNotFound)
 			},
 			expectedCode: codes.NotFound,
 			checkResponse: func(t *testing.T, resp *proto.GetOrderStatusResponse) {

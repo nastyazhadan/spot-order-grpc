@@ -7,10 +7,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 
+	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound/kafka"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/producer"
 	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
@@ -21,15 +27,17 @@ import (
 )
 
 type OrderService struct {
-	saver        Saver
-	getter       Getter
-	marketViewer MarketViewer
-	rateLimiters RateLimiters
-	config       OrderServiceConfig
-	logger       *zapLogger.Logger
+	pool                 *pgxpool.Pool
+	saver                Saver
+	getter               Getter
+	marketViewer         MarketViewer
+	rateLimiters         RateLimiters
+	config               Config
+	orderProducerService producer.OutboxWriter
+	logger               *zapLogger.Logger
 }
 
-type OrderServiceConfig struct {
+type Config struct {
 	Timeout     time.Duration
 	ServiceName string
 }
@@ -40,7 +48,7 @@ type RateLimiters struct {
 }
 
 type Saver interface {
-	SaveOrder(ctx context.Context, order models.Order) error
+	SaveOrder(ctx context.Context, transaction pgx.Tx, order models.Order) error
 }
 
 type Getter interface {
@@ -57,21 +65,25 @@ type RateLimiter interface {
 	Window() time.Duration
 }
 
-func NewOrderService(
+func New(
+	pool *pgxpool.Pool,
 	saver Saver,
 	getter Getter,
 	viewer MarketViewer,
 	limiters RateLimiters,
-	config OrderServiceConfig,
+	config Config,
+	producer producer.OutboxWriter,
 	logger *zapLogger.Logger,
 ) *OrderService {
 	return &OrderService{
-		saver:        saver,
-		getter:       getter,
-		marketViewer: viewer,
-		rateLimiters: limiters,
-		config:       config,
-		logger:       logger,
+		pool:                 pool,
+		saver:                saver,
+		getter:               getter,
+		marketViewer:         viewer,
+		rateLimiters:         limiters,
+		config:               config,
+		orderProducerService: producer,
+		logger:               logger,
 	}
 }
 
@@ -79,10 +91,10 @@ func (s *OrderService) CreateOrder(
 	ctx context.Context,
 	userID uuid.UUID,
 	marketID uuid.UUID,
-	orderType models.OrderType,
-	price models.Decimal,
+	orderType shared.OrderType,
+	price shared.Decimal,
 	quantity int64,
-) (uuid.UUID, models.OrderStatus, error) {
+) (uuid.UUID, shared.OrderStatus, error) {
 	const op = "OrderService.CreateOrder"
 
 	if _, ok := ctx.Deadline(); !ok {
@@ -92,16 +104,16 @@ func (s *OrderService) CreateOrder(
 	}
 
 	if err := s.checkRateLimit(ctx, userID, s.rateLimiters.Create, "create_order"); err != nil {
-		return uuid.Nil, models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
+		return uuid.Nil, shared.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if err := s.validateMarket(ctx, marketID); err != nil {
-		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
+		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
 	orderID, orderStatus, err := s.saveOrder(ctx, userID, marketID, orderType, price, quantity)
 	if err != nil {
-		return uuid.Nil, models.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
+		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
 	metrics.OrdersCreatedTotal.WithLabelValues(s.config.ServiceName, marketID.String()).Inc()
@@ -112,7 +124,7 @@ func (s *OrderService) CreateOrder(
 func (s *OrderService) GetOrderStatus(
 	ctx context.Context,
 	orderID, userID uuid.UUID,
-) (models.OrderStatus, error) {
+) (shared.OrderStatus, error) {
 	const op = "OrderService.GetOrderStatus"
 
 	if _, ok := ctx.Deadline(); !ok {
@@ -122,12 +134,12 @@ func (s *OrderService) GetOrderStatus(
 	}
 
 	if err := s.checkRateLimit(ctx, userID, s.rateLimiters.Get, "get_order_status"); err != nil {
-		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
+		return shared.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
 	order, err := s.fetchOrder(ctx, orderID, userID)
 	if err != nil {
-		return models.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
+		return shared.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return order.Status, nil
@@ -198,18 +210,26 @@ func (s *OrderService) validateMarket(
 	return nil
 }
 
+// saveOrder реализует паттерн Transactional outbox
 func (s *OrderService) saveOrder(
 	ctx context.Context,
 	userID uuid.UUID,
 	marketID uuid.UUID,
-	orderType models.OrderType,
-	price models.Decimal,
+	orderType shared.OrderType,
+	price shared.Decimal,
 	quantity int64,
-) (uuid.UUID, models.OrderStatus, error) {
-	orderID := uuid.New()
-	orderStatus := models.OrderStatusCreated
+) (uuid.UUID, shared.OrderStatus, error) {
+	const op = "OrderService.saveOrder"
 
-	newOrder := models.Order{
+	ctx, span := tracing.StartSpan(ctx, "order.save_order_transaction")
+	defer span.End()
+
+	now := time.Now().UTC()
+	orderID := uuid.New()
+	orderStatus := shared.OrderStatusCreated
+	correlationID := uuid.New()
+
+	order := models.Order{
 		ID:        orderID,
 		UserID:    userID,
 		MarketID:  marketID,
@@ -217,15 +237,68 @@ func (s *OrderService) saveOrder(
 		Price:     price,
 		Quantity:  quantity,
 		Status:    orderStatus,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: now,
 	}
 
-	if err := s.saver.SaveOrder(ctx, newOrder); err != nil {
+	event := models.OrderCreatedEvent{
+		EventID:       uuid.New(),
+		OrderID:       order.ID,
+		UserID:        order.UserID,
+		MarketID:      order.MarketID,
+		Type:          order.Type,
+		Price:         order.Price,
+		Quantity:      order.Quantity,
+		Status:        order.Status,
+		CorrelationID: correlationID,
+		CausationID:   nil,
+		CreatedAt:     now,
+	}
+
+	payload, err := mapper.Marshal(event)
+	if err != nil {
+		tracing.RecordError(span, err)
+		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
+	}
+
+	outboxEvent := models.OutboxEvent{
+		ID:          uuid.New(),
+		EventID:     event.EventID,
+		EventType:   models.OrderCreatedEventType,
+		AggregateID: order.ID,
+		Payload:     payload,
+		Status:      models.OutboxEventStatusPending,
+		RetryCount:  0,
+	}
+
+	transaction, err := s.pool.Begin(ctx)
+	if err != nil {
+		tracing.RecordError(span, err)
+		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: begin transaction: %w", op, err)
+	}
+
+	defer func() {
+		if rollbackErr := transaction.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			s.logger.Error(ctx, "saveOrder: transaction rollback failed", zap.Error(rollbackErr))
+		}
+	}()
+
+	if err = s.saver.SaveOrder(ctx, transaction, order); err != nil {
+		tracing.RecordError(span, err)
 		if errors.Is(err, repositoryErrors.ErrOrderAlreadyExists) {
-			return uuid.Nil, models.OrderStatusCancelled, sharedErrors.ErrAlreadyExists{ID: orderID}
+			return uuid.Nil, shared.OrderStatusCancelled, sharedErrors.ErrAlreadyExists{ID: orderID}
 		}
 
-		return uuid.Nil, models.OrderStatusCancelled, err
+		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if err = s.orderProducerService.SaveOutboxEvent(ctx, transaction, outboxEvent); err != nil {
+		tracing.RecordError(span, err)
+		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if err = transaction.Commit(ctx); err != nil {
+		tracing.RecordError(span, err)
+		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: commit transaction: %w", op, err)
 	}
 
 	return orderID, orderStatus, nil

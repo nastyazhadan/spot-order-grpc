@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	models "github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
 	mock "github.com/stretchr/testify/mock"
 
 	sharedmodels "github.com/nastyazhadan/spot-order-grpc/shared/models"
@@ -19,7 +19,7 @@ type OrderService struct {
 }
 
 // CreateOrder provides a mock function with given fields: ctx, userID, marketID, orderType, price, quantity
-func (_m *OrderService) CreateOrder(ctx context.Context, userID uuid.UUID, marketID uuid.UUID, orderType models.OrderType, price sharedmodels.Decimal, quantity int64) (uuid.UUID, models.OrderStatus, error) {
+func (_m *OrderService) CreateOrder(ctx context.Context, userID uuid.UUID, marketID uuid.UUID, orderType shared.OrderType, price sharedmodels.Decimal, quantity int64) (uuid.UUID, shared.OrderStatus, error) {
 	ret := _m.Called(ctx, userID, marketID, orderType, price, quantity)
 
 	if len(ret) == 0 {
@@ -27,12 +27,12 @@ func (_m *OrderService) CreateOrder(ctx context.Context, userID uuid.UUID, marke
 	}
 
 	var r0 uuid.UUID
-	var r1 models.OrderStatus
+	var r1 shared.OrderStatus
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID, models.OrderType, sharedmodels.Decimal, int64) (uuid.UUID, models.OrderStatus, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID, shared.OrderType, sharedmodels.Decimal, int64) (uuid.UUID, shared.OrderStatus, error)); ok {
 		return rf(ctx, userID, marketID, orderType, price, quantity)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID, models.OrderType, sharedmodels.Decimal, int64) uuid.UUID); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID, shared.OrderType, sharedmodels.Decimal, int64) uuid.UUID); ok {
 		r0 = rf(ctx, userID, marketID, orderType, price, quantity)
 	} else {
 		if ret.Get(0) != nil {
@@ -40,13 +40,13 @@ func (_m *OrderService) CreateOrder(ctx context.Context, userID uuid.UUID, marke
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, uuid.UUID, uuid.UUID, models.OrderType, sharedmodels.Decimal, int64) models.OrderStatus); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, uuid.UUID, uuid.UUID, shared.OrderType, sharedmodels.Decimal, int64) shared.OrderStatus); ok {
 		r1 = rf(ctx, userID, marketID, orderType, price, quantity)
 	} else {
-		r1 = ret.Get(1).(models.OrderStatus)
+		r1 = ret.Get(1).(shared.OrderStatus)
 	}
 
-	if rf, ok := ret.Get(2).(func(context.Context, uuid.UUID, uuid.UUID, models.OrderType, sharedmodels.Decimal, int64) error); ok {
+	if rf, ok := ret.Get(2).(func(context.Context, uuid.UUID, uuid.UUID, shared.OrderType, sharedmodels.Decimal, int64) error); ok {
 		r2 = rf(ctx, userID, marketID, orderType, price, quantity)
 	} else {
 		r2 = ret.Error(2)
@@ -56,22 +56,22 @@ func (_m *OrderService) CreateOrder(ctx context.Context, userID uuid.UUID, marke
 }
 
 // GetOrderStatus provides a mock function with given fields: ctx, orderId, userID
-func (_m *OrderService) GetOrderStatus(ctx context.Context, orderId uuid.UUID, userID uuid.UUID) (models.OrderStatus, error) {
+func (_m *OrderService) GetOrderStatus(ctx context.Context, orderId uuid.UUID, userID uuid.UUID) (shared.OrderStatus, error) {
 	ret := _m.Called(ctx, orderId, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetOrderStatus")
 	}
 
-	var r0 models.OrderStatus
+	var r0 shared.OrderStatus
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) (models.OrderStatus, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) (shared.OrderStatus, error)); ok {
 		return rf(ctx, orderId, userID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) models.OrderStatus); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) shared.OrderStatus); ok {
 		r0 = rf(ctx, orderId, userID)
 	} else {
-		r0 = ret.Get(0).(models.OrderStatus)
+		r0 = ret.Get(0).(shared.OrderStatus)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, uuid.UUID, uuid.UUID) error); ok {

@@ -107,6 +107,73 @@ var (
 		},
 		[]string{"service", "reason"},
 	)
+
+	KafkaMessagesPublishedTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "spotorder_kafka_messages_published_total",
+			Help: "Total number of Kafka messages successfully published",
+		},
+		[]string{"service", "topic"},
+	)
+
+	KafkaPublishErrorsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "spotorder_kafka_publish_errors_total",
+			Help: "Total number of Kafka publish errors",
+		},
+		[]string{"service", "topic"},
+	)
+
+	KafkaPublishDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "spotorder_kafka_publish_duration_seconds",
+			Help:    "Latency of Kafka message publish operations",
+			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
+		},
+		[]string{"service", "topic"},
+	)
+
+	KafkaMessagesConsumedTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "spotorder_kafka_messages_consumed_total",
+			Help: "Total number of Kafka messages consumed",
+		},
+		[]string{"service", "topic", "result"},
+	)
+
+	KafkaConsumeDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "spotorder_kafka_consume_duration_seconds",
+			Help:    "Latency of Kafka message processing",
+			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
+		},
+		[]string{"service", "topic"},
+	)
+
+	OutboxEventsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "spotorder_outbox_events_total",
+			Help: "Total number of outbox events processed by the worker",
+		},
+		[]string{"service", "event_type", "result"},
+	)
+
+	OutboxPendingEvents = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "spotorder_outbox_pending_events",
+			Help: "Number of unprocessed events in the outbox table",
+		},
+		[]string{"service"},
+	)
+
+	OutboxWorkerDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "spotorder_outbox_worker_iteration_duration_seconds",
+			Help:    "Duration of a single outbox worker poll iteration",
+			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
+		},
+		[]string{"service"},
+	)
 )
 
 func ObserveWithTrace(ctx context.Context, wrap prometheus.Observer, time float64) {

@@ -4,12 +4,12 @@ FROM golang:1.25.0 AS builder
 WORKDIR /build/spotOrder
 
 COPY go.work go.work.sum* ./
-COPY orderService/go.mod orderService/go.sum ./orderService/
+COPY orderConsumer/go.mod orderConsumer/go.sum ./orderConsumer/
 COPY protos/go.mod protos/go.sum ./protos/
 COPY shared/go.mod shared/go.sum ./shared/
 COPY spotService/go.mod spotService/go.sum ./spotService/
 
-RUN cd orderService && go mod download && \
+RUN cd orderConsumer && go mod download && \
     cd ../protos && go mod download && \
     cd ../shared && go mod download && \
     cd ../spotService && go mod download
@@ -17,7 +17,7 @@ RUN cd orderService && go mod download && \
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o server ./orderService/cmd/order/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o server ./orderConsumer/cmd/order/main.go
 
 # ======= Этап 2: Запуск =======
 FROM alpine:3.20

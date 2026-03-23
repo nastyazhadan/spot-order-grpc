@@ -4,7 +4,7 @@ import (
 	"context"
 
 	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -23,14 +23,14 @@ type OrderService interface {
 	CreateOrder(ctx context.Context,
 		userID uuid.UUID,
 		marketID uuid.UUID,
-		orderType models.OrderType,
-		price models.Decimal,
+		orderType shared.OrderType,
+		price shared.Decimal,
 		quantity int64,
-	) (uuid.UUID, models.OrderStatus, error)
+	) (uuid.UUID, shared.OrderStatus, error)
 
 	GetOrderStatus(ctx context.Context,
 		orderID, userID uuid.UUID,
-	) (models.OrderStatus, error)
+	) (shared.OrderStatus, error)
 }
 
 type serverAPI struct {
@@ -140,19 +140,19 @@ func validateCreateRequest(request *proto.CreateOrderRequest) error {
 	return nil
 }
 
-func validatePrice(request *proto.CreateOrderRequest) (models.Decimal, error) {
+func validatePrice(request *proto.CreateOrderRequest) (shared.Decimal, error) {
 	price := request.GetPrice()
 	if price == nil {
-		return models.Decimal{}, status.Error(codes.InvalidArgument, "price is required")
+		return shared.Decimal{}, status.Error(codes.InvalidArgument, "price is required")
 	}
 
-	validPrice, err := models.NewDecimal(price.Value)
+	validPrice, err := shared.NewDecimal(price.Value)
 	if err != nil {
-		return models.Decimal{}, status.Error(codes.InvalidArgument, "price must be a valid decimal number")
+		return shared.Decimal{}, status.Error(codes.InvalidArgument, "price must be a valid decimal number")
 	}
 
 	if !validPrice.IsPositive() {
-		return models.Decimal{}, status.Error(codes.InvalidArgument, "price must be > 0")
+		return shared.Decimal{}, status.Error(codes.InvalidArgument, "price must be > 0")
 	}
 
 	return validPrice, nil

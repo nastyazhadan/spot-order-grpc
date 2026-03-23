@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	models "github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -15,7 +15,7 @@ type Saver struct {
 }
 
 // SaveOrder provides a mock function with given fields: ctx, _a1
-func (_m *Saver) SaveOrder(ctx context.Context, _a1 models.Order) error {
+func (_m *Saver) SaveOrder(ctx context.Context, _a1 shared.Order) error {
 	ret := _m.Called(ctx, _a1)
 
 	if len(ret) == 0 {
@@ -23,7 +23,7 @@ func (_m *Saver) SaveOrder(ctx context.Context, _a1 models.Order) error {
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, models.Order) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, shared.Order) error); ok {
 		r0 = rf(ctx, _a1)
 	} else {
 		r0 = ret.Error(0)

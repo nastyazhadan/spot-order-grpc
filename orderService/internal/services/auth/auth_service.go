@@ -22,7 +22,7 @@ type RefreshTokenStore interface {
 	RevokeIfExists(ctx context.Context, userID uuid.UUID, jti string) (bool, error)
 }
 
-func NewService(jwtManager jwt.Manager, store RefreshTokenStore, logger *zapLogger.Logger) *AuthService {
+func New(jwtManager jwt.Manager, store RefreshTokenStore, logger *zapLogger.Logger) *AuthService {
 	return &AuthService{
 		jwtManager: jwtManager,
 		store:      store,

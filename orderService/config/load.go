@@ -24,8 +24,8 @@ func Load() (*config.OrderConfig, error) {
 		return nil, errors.New("ORDER_DB_URI is required")
 	}
 
-	cfg.JWTSecret = os.Getenv("JWT_SECRET")
-	if cfg.JWTSecret == "" {
+	cfg.Auth.JWTSecret = os.Getenv("JWT_SECRET")
+	if cfg.Auth.JWTSecret == "" {
 		return nil, errors.New("JWT_SECRET is required")
 	}
 

@@ -1,34 +1,34 @@
 package inbound
 
 import (
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 )
 
-func TypeFromProto(orderType proto.OrderType) models.OrderType {
+func TypeFromProto(orderType proto.OrderType) shared.OrderType {
 	switch orderType {
 	case proto.OrderType_TYPE_LIMIT:
-		return models.OrderTypeLimit
+		return shared.OrderTypeLimit
 	case proto.OrderType_TYPE_MARKET:
-		return models.OrderTypeMarket
+		return shared.OrderTypeMarket
 	case proto.OrderType_TYPE_STOP_LOSS:
-		return models.OrderTypeStopLoss
+		return shared.OrderTypeStopLoss
 	case proto.OrderType_TYPE_TAKE_PROFIT:
-		return models.OrderTypeTakeProfit
+		return shared.OrderTypeTakeProfit
 	default:
-		return models.OrderTypeUnspecified
+		return shared.OrderTypeUnspecified
 	}
 }
 
-func StatusToProto(orderStatus models.OrderStatus) proto.OrderStatus {
+func StatusToProto(orderStatus shared.OrderStatus) proto.OrderStatus {
 	switch orderStatus {
-	case models.OrderStatusCreated:
+	case shared.OrderStatusCreated:
 		return proto.OrderStatus_STATUS_CREATED
-	case models.OrderStatusPending:
+	case shared.OrderStatusPending:
 		return proto.OrderStatus_STATUS_PENDING
-	case models.OrderStatusFilled:
+	case shared.OrderStatusFilled:
 		return proto.OrderStatus_STATUS_FILLED
-	case models.OrderStatusCancelled:
+	case shared.OrderStatusCancelled:
 		return proto.OrderStatus_STATUS_CANCELLED
 	default:
 		return proto.OrderStatus_STATUS_UNSPECIFIED

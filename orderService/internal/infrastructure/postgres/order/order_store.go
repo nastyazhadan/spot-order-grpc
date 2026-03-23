@@ -1,4 +1,4 @@
-package postgres
+package order
 
 import (
 	"context"
@@ -13,8 +13,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound"
+	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound/postgres"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
@@ -22,33 +23,31 @@ import (
 
 const (
 	serviceName         = "orderService"
+	databaseName        = "postgresql"
 	uniqueViolationCode = "23505"
+	constraintName      = "orders_pkey"
 )
 
 type OrderStore struct {
 	pool *pgxpool.Pool
 }
 
-func NewOrderStore(pool *pgxpool.Pool) *OrderStore {
+func New(pool *pgxpool.Pool) *OrderStore {
 	return &OrderStore{
 		pool: pool,
 	}
 }
 
-func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
+func (o *OrderStore) SaveOrder(ctx context.Context, transaction pgx.Tx, order models.Order) error {
 	const op = "infrastructure.OrderStore.SaveOrder"
 
-	ctx, span := tracing.StartSpan(ctx, "postgres.save_order",
+	ctx, span := tracing.StartSpan(ctx, "postgres.save_order_transaction",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
-			attribute.String("db.system", "postgresql"),
+			attribute.String("db.system", databaseName),
 			attribute.String("order_id", order.ID.String()),
 			attribute.String("user_id", order.UserID.String()),
 			attribute.String("market_id", order.MarketID.String()),
-			attribute.String("price", order.Price.String()),
-			attribute.Int64("quantity", order.Quantity),
-			attribute.String("order_type", order.Type.String()),
-			attribute.String("order_status", order.Status.String()),
 		),
 	)
 	defer span.End()
@@ -56,20 +55,15 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 	orderDTO := mapper.FromDomain(order)
 
 	start := time.Now()
-	_, err := o.pool.Exec(ctx,
+	_, err := transaction.Exec(ctx,
 		`INSERT INTO orders (id, user_id, market_id, type, price, quantity, status, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		orderDTO.ID,
-		orderDTO.UserID,
-		orderDTO.MarketID,
-		orderDTO.Type,
-		orderDTO.Price,
-		orderDTO.Quantity,
-		orderDTO.Status,
-		orderDTO.CreatedAt,
+		orderDTO.ID, orderDTO.UserID, orderDTO.MarketID,
+		orderDTO.Type, orderDTO.Price, orderDTO.Quantity,
+		orderDTO.Status, orderDTO.CreatedAt,
 	)
 	metrics.ObserveWithTrace(ctx,
-		metrics.DBQueryDuration.WithLabelValues(serviceName, "save_order"),
+		metrics.DBQueryDuration.WithLabelValues(serviceName, "save_order_transaction"),
 		time.Since(start).Seconds(),
 	)
 
@@ -78,7 +72,6 @@ func (o *OrderStore) SaveOrder(ctx context.Context, order models.Order) error {
 		if isPrimaryKeyViolation(err) {
 			return fmt.Errorf("%s: %w", op, repositoryErrors.ErrOrderAlreadyExists)
 		}
-
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -91,7 +84,7 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 	ctx, span := tracing.StartSpan(ctx, "postgres.get_order",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
-			attribute.String("db.system", "postgresql"),
+			attribute.String("db.system", databaseName),
 			attribute.String("order_id", id.String())),
 	)
 	defer span.End()
@@ -138,10 +131,46 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 	return order, nil
 }
 
+func (o *OrderStore) UpdateOrderStatus(
+	ctx context.Context,
+	transaction pgx.Tx,
+	orderID uuid.UUID,
+	status shared.OrderStatus,
+) error {
+	const op = "OrderStore.UpdateOrderStatus"
+
+	ctx, span := tracing.StartSpan(ctx, "order.update_status",
+		trace.WithAttributes(
+			attribute.String("order_id", orderID.String()),
+			attribute.String("order_status", status.String()),
+		),
+	)
+	defer span.End()
+
+	start := time.Now()
+	_, err := transaction.Exec(ctx, `
+		UPDATE orders
+		SET status = $2
+		WHERE id = $1
+	`, orderID, status)
+
+	metrics.ObserveWithTrace(ctx,
+		metrics.DBQueryDuration.WithLabelValues(serviceName, "order.update_status"),
+		time.Since(start).Seconds(),
+	)
+
+	if err != nil {
+		tracing.RecordError(span, err)
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
 func isPrimaryKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		return pgErr.Code == uniqueViolationCode && pgErr.ConstraintName == "orders_pkey"
+		return pgErr.Code == uniqueViolationCode && pgErr.ConstraintName == constraintName
 	}
 
 	return false

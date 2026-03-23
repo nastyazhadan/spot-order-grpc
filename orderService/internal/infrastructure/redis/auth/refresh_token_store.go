@@ -28,7 +28,7 @@ type RefreshTokenStore struct {
 	ttl   time.Duration
 }
 
-func NewRefreshTokenStore(store *cache.Store, ttl time.Duration) *RefreshTokenStore {
+func New(store *cache.Store, ttl time.Duration) *RefreshTokenStore {
 	return &RefreshTokenStore{
 		store: store,
 		ttl:   ttl,

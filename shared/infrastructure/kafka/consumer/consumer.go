@@ -1,0 +1,146 @@
+package consumer
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/IBM/sarama"
+	"go.uber.org/zap"
+
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
+)
+
+type DLQPublisher interface {
+	Send(ctx context.Context, key, value []byte) error
+}
+
+type MessageHandler func(ctx context.Context, msg kafka.Message) error
+
+type Middleware func(next MessageHandler) MessageHandler
+
+type consumer struct {
+	group       sarama.ConsumerGroup
+	topics      []string
+	serviceName string
+	logger      *zapLogger.Logger
+	middlewares []Middleware
+}
+
+func New(group sarama.ConsumerGroup,
+	topics []string,
+	name string,
+	logger *zapLogger.Logger,
+	middlewares ...Middleware,
+) *consumer {
+	return &consumer{
+		group:       group,
+		topics:      topics,
+		serviceName: name,
+		logger:      logger,
+		middlewares: middlewares,
+	}
+}
+
+func (c *consumer) Consume(ctx context.Context, handler MessageHandler) error {
+	wrappedHandler := applyMiddlewares(handler, c.middlewares...)
+	newHandler := NewGroupHandler(wrappedHandler, c.serviceName, c.logger)
+
+	for {
+		if err := c.group.Consume(ctx, c.topics, newHandler); err != nil {
+			if errors.Is(err, sarama.ErrClosedConsumerGroup) {
+				return nil
+			}
+
+			c.logger.Error(ctx, "Kafka consume error", zap.Error(err))
+			return err
+		}
+
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		c.logger.Info(ctx, "Kafka consumer group rebalancing...")
+	}
+}
+
+func applyMiddlewares(handler MessageHandler, middlewares ...Middleware) MessageHandler {
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		handler = middlewares[i](handler)
+	}
+
+	return handler
+}
+
+func RetryWithDLQMiddleware(
+	maxRetries int,
+	backoff time.Duration,
+	serviceName string,
+	dlqPublisher DLQPublisher,
+	logger *zapLogger.Logger,
+) Middleware {
+	return func(next MessageHandler) MessageHandler {
+		return func(ctx context.Context, msg kafka.Message) error {
+			var lastErr error
+
+			for attempt := range maxRetries + 1 {
+				if err := next(ctx, msg); err != nil {
+					lastErr = err
+
+					if attempt < maxRetries {
+						sleep := backoff * time.Duration(attempt+1)
+						logger.Warn(ctx, "Kafka message processing failed, retrying",
+							zap.String("topic", msg.Topic),
+							zap.Int("attempt", attempt+1),
+							zap.Int("max_retries", maxRetries),
+							zap.Duration("retry_after", sleep),
+							zap.Error(err),
+						)
+
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case <-time.After(sleep):
+							continue
+						}
+					}
+
+					metrics.KafkaMessagesConsumedTotal.
+						WithLabelValues(serviceName, msg.Topic, "dlq").Inc()
+
+					if dlqPublisher != nil {
+						if dlqErr := dlqPublisher.Send(ctx, msg.Key, msg.Value); dlqErr != nil {
+							logger.Error(ctx, "Failed to send message to DLQ",
+								zap.String("topic", msg.Topic),
+								zap.Error(dlqErr),
+							)
+							return dlqErr
+						}
+
+						logger.Error(ctx, "Message sent to DLQ after all retries",
+							zap.String("topic", msg.Topic),
+							zap.Int("retries", maxRetries),
+							zap.Error(lastErr),
+						)
+
+						return nil
+					}
+
+					logger.Error(ctx, "Message processing failed after all retries (no DLQ configured)",
+						zap.String("topic", msg.Topic),
+						zap.Int("retries", maxRetries),
+						zap.Error(lastErr),
+					)
+
+					return lastErr
+				}
+
+				return nil
+			}
+
+			return lastErr
+		}
+	}
+}

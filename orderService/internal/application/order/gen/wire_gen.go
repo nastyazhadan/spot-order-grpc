@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/auth"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/producer"
 	"github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -19,7 +20,7 @@ import (
 
 // Injectors from wire.go:
 
-func NewContainer(ctx context.Context, marketViewer order.MarketViewer, cfg config.OrderConfig, logger *zap.Logger) (*Container, error) {
+func NewContainer(ctx context.Context, marketViewer order.MarketViewer, writer producer.OutboxWriter, cfg config.OrderConfig, logger *zap.Logger) (*Container, error) {
 	pool, err := providePostgresPool(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -31,8 +32,8 @@ func NewContainer(ctx context.Context, marketViewer order.MarketViewer, cfg conf
 	}
 	store := provideCacheStore(client)
 	rateLimiters := provideRateLimiters(store, cfg)
-	orderServiceConfig := provideOrderServiceConfig(cfg)
-	orderService := provideOrderService(orderStore, marketViewer, rateLimiters, orderServiceConfig, logger)
+	orderConfig := provideOrderServiceConfig(cfg)
+	orderService := provideOrderService(pool, orderStore, marketViewer, rateLimiters, orderConfig, writer, logger)
 	manager := provideJWTManager(cfg)
 	refreshTokenStore := provideRefreshTokenStore(store, cfg)
 	authService := provideAuthService(manager, refreshTokenStore, logger)

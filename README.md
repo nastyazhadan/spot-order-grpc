@@ -374,7 +374,7 @@ task clean:cache
 
 ```
 spotOrder/
-├── orderService/
+├── orderConsumer/
 │   ├── cmd/order/main.go                   # точка входа
 │   ├── config/load.go                      # загрузка конфига (viper + env)
 │   ├── internal/

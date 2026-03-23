@@ -8,7 +8,6 @@ import (
 type OrderConfig struct {
 	Service         ServiceConfig            `mapstructure:"service"`
 	SpotAddress     string                   `mapstructure:"spot_address"`
-	JWTSecret       string                   `mapstructure:"jwt_secret"`
 	Timeouts        TimeoutsConfig           `mapstructure:"timeouts"`
 	Log             LogConfig                `mapstructure:"log"`
 	Auth            AuthConfig               `mapstructure:"auth"`
@@ -21,6 +20,7 @@ type OrderConfig struct {
 	Metrics         MetricsConfig            `mapstructure:"metrics"`
 	KeepAlive       KeepAliveConfig          `mapstructure:"keep_alive"`
 	Retry           RetryConfig              `mapstructure:"retry"`
+	Kafka           KafkaConfig              `mapstructure:"kafka"`
 }
 
 type SpotConfig struct {
@@ -79,6 +79,43 @@ type RedisConfig struct {
 	CacheTTL          time.Duration `mapstructure:"spot_cache_ttl"`
 }
 
+type KafkaConfig struct {
+	Brokers  []string       `mapstructure:"brokers"`
+	Producer ProducerConfig `mapstructure:"producer"`
+	Consumer ConsumerConfig `mapstructure:"consumer"`
+	Topics   TopicsConfig   `mapstructure:"topics"`
+	Outbox   OutboxConfig   `mapstructure:"outbox"`
+}
+
+type ProducerConfig struct {
+	MaxRetries   int           `mapstructure:"max_retries"`
+	RetryBackoff time.Duration `mapstructure:"retry_backoff"`
+	RequiredAcks int           `mapstructure:"required_acks"`
+	Timeout      time.Duration `mapstructure:"timeout"`
+	Compression  string        `mapstructure:"compression"`
+}
+
+type ConsumerConfig struct {
+	GroupID           string        `mapstructure:"group_id"`
+	SessionTimeout    time.Duration `mapstructure:"session_timeout"`
+	HeartbeatInterval time.Duration `mapstructure:"heartbeat_interval"`
+	MaxRetries        int           `mapstructure:"max_retries"`
+	RetryBackoff      time.Duration `mapstructure:"retry_backoff"`
+	DLQEnabled        bool          `mapstructure:"dlq_enabled"`
+}
+
+type TopicsConfig struct {
+	OrderCreated      string `mapstructure:"order_created"`
+	OrderSagaReply    string `mapstructure:"order_saga_reply"`
+	OrderSagaReplyDLQ string `mapstructure:"order_saga_reply_dlq"`
+}
+
+type OutboxConfig struct {
+	PollInterval time.Duration `mapstructure:"poll_interval"`
+	BatchSize    int           `mapstructure:"batch_size"`
+	MaxRetries   int           `mapstructure:"max_retries"`
+}
+
 type RateLimiterByUserConfig struct {
 	CreateOrder    int64         `mapstructure:"create_order"`
 	GetOrderStatus int64         `mapstructure:"get_order_status"`
@@ -117,6 +154,7 @@ type KeepAliveConfig struct {
 }
 
 type AuthConfig struct {
+	JWTSecret       string        `mapstructure:"jwt_secret"`
 	SkipMethods     []string      `mapstructure:"skip_methods"`
 	AccessTokenTTL  time.Duration `mapstructure:"access_token_ttl"`
 	RefreshTokenTTL time.Duration `mapstructure:"refresh_token_ttl"`

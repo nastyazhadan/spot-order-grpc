@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/order"
 	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/order"
 	"github.com/testcontainers/testcontainers-go"
 	pgContainer "github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -21,7 +22,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
-	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres"
 	svcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
@@ -174,8 +174,8 @@ func New(test *testing.T) (context.Context, *Suite) {
 		Markets: []models.Market{},
 	}
 
-	orderRepo := repoPostgres.NewOrderStore(pool)
-	orderSvc := svcOrder.NewOrderService(orderRepo, orderRepo, marketViewer, createLimiter, getLimiter, defaultCreateTimeout)
+	orderRepo := repoPostgres.New(pool)
+	orderSvc := svcOrder.New(orderRepo, orderRepo, marketViewer, createLimiter, getLimiter, defaultCreateTimeout)
 
 	validator, err := validate.UnaryServerInterceptor()
 	if err != nil {
