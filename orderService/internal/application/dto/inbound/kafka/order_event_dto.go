@@ -63,6 +63,16 @@ func FromProtoOrderCreatedEvent(msg *protoEvent.OrderCreatedEvent) (models.Order
 		return models.OrderCreatedEvent{}, fmt.Errorf("invalid price: %w", err)
 	}
 
+	orderType, err := fromProtoOrderType(msg.GetOrderType())
+	if err != nil {
+		return models.OrderCreatedEvent{}, err
+	}
+
+	status, err := fromProtoOrderStatus(msg.GetStatus())
+	if err != nil {
+		return models.OrderCreatedEvent{}, err
+	}
+
 	createdAt, err := fromProtoTimestamp("created_at", msg.GetCreatedAt())
 	if err != nil {
 		return models.OrderCreatedEvent{}, err
@@ -73,10 +83,10 @@ func FromProtoOrderCreatedEvent(msg *protoEvent.OrderCreatedEvent) (models.Order
 		OrderID:       orderID,
 		UserID:        userID,
 		MarketID:      marketID,
-		Type:          fromProtoOrderType(msg.GetOrderType()),
+		Type:          orderType,
 		Price:         price,
 		Quantity:      msg.GetQuantity(),
-		Status:        fromProtoOrderStatus(msg.GetStatus()),
+		Status:        status,
 		CorrelationID: correlationID,
 		CausationID:   causationID,
 		CreatedAt:     createdAt,
@@ -115,6 +125,11 @@ func FromProtoOrderStatusUpdated(
 		return models.OrderStatusUpdatedEvent{}, fmt.Errorf("invalid causation_id: %w", err)
 	}
 
+	newStatus, err := fromProtoOrderStatus(msg.GetNewStatus())
+	if err != nil {
+		return models.OrderStatusUpdatedEvent{}, err
+	}
+
 	updatedAt, err := fromProtoTimestamp("updated_at", msg.GetUpdatedAt())
 	if err != nil {
 		return models.OrderStatusUpdatedEvent{}, err
@@ -124,7 +139,7 @@ func FromProtoOrderStatusUpdated(
 		EventID:       eventID,
 		OrderID:       orderID,
 		SagaID:        sagaID,
-		NewStatus:     fromProtoOrderStatus(msg.GetNewStatus()),
+		NewStatus:     newStatus,
 		Reason:        msg.GetReason(),
 		CorrelationID: correlationID,
 		CausationID:   causationID,
@@ -187,32 +202,32 @@ func fromProtoTimestamp(fieldName string, timestamp *timestamppb.Timestamp) (tim
 	return timestamp.AsTime().UTC(), nil
 }
 
-func fromProtoOrderStatus(status protoEvent.OrderStatus) shared.OrderStatus {
+func fromProtoOrderStatus(status protoEvent.OrderStatus) (shared.OrderStatus, error) {
 	switch status {
 	case protoEvent.OrderStatus_STATUS_CREATED:
-		return shared.OrderStatusCreated
+		return shared.OrderStatusCreated, nil
 	case protoEvent.OrderStatus_STATUS_PENDING:
-		return shared.OrderStatusPending
+		return shared.OrderStatusPending, nil
 	case protoEvent.OrderStatus_STATUS_FILLED:
-		return shared.OrderStatusFilled
+		return shared.OrderStatusFilled, nil
 	case protoEvent.OrderStatus_STATUS_CANCELLED:
-		return shared.OrderStatusCancelled
+		return shared.OrderStatusCancelled, nil
 	default:
-		return shared.OrderStatusUnspecified
+		return shared.OrderStatusUnspecified, fmt.Errorf("unknown order status: %s", status.String())
 	}
 }
 
-func fromProtoOrderType(orderType protoEvent.OrderType) shared.OrderType {
+func fromProtoOrderType(orderType protoEvent.OrderType) (shared.OrderType, error) {
 	switch orderType {
 	case protoEvent.OrderType_TYPE_LIMIT:
-		return shared.OrderTypeLimit
+		return shared.OrderTypeLimit, nil
 	case protoEvent.OrderType_TYPE_MARKET:
-		return shared.OrderTypeMarket
+		return shared.OrderTypeMarket, nil
 	case protoEvent.OrderType_TYPE_STOP_LOSS:
-		return shared.OrderTypeStopLoss
+		return shared.OrderTypeStopLoss, nil
 	case protoEvent.OrderType_TYPE_TAKE_PROFIT:
-		return shared.OrderTypeTakeProfit
+		return shared.OrderTypeTakeProfit, nil
 	default:
-		return shared.OrderTypeUnspecified
+		return shared.OrderTypeUnspecified, fmt.Errorf("unknown order type: %s", orderType.String())
 	}
 }

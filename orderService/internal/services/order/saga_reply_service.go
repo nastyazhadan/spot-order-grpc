@@ -2,6 +2,7 @@ package order
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -24,7 +25,7 @@ type TransactionManager interface {
 type InboxWriter interface {
 	BeginProcessing(ctx context.Context, transaction pgx.Tx, event models.InboxEvent) (bool, error)
 	MarkProcessed(ctx context.Context, transaction pgx.Tx, eventID uuid.UUID, consumerGroup string) error
-	MarkFailed(ctx context.Context, transaction pgx.Tx, eventID uuid.UUID, consumerGroup string, errText string) error
+	SaveFailed(ctx context.Context, event models.InboxEvent, errText string) error
 }
 
 type OrderStatusWriter interface {
@@ -80,7 +81,11 @@ func (s *SagaReplyService) ProcessSagaReply(
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: begin transaction: %w", op, err)
 	}
-	defer transaction.Rollback(ctx)
+	defer func() {
+		if rollbackErr := transaction.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			s.logger.Error(ctx, "Saga reply transaction rollback failed", zap.Error(rollbackErr))
+		}
+	}()
 
 	inboxEvent := models.InboxEvent{
 		ID:            uuid.New(),
@@ -107,14 +112,13 @@ func (s *SagaReplyService) ProcessSagaReply(
 	}
 
 	if err = s.orderStatusStore.UpdateOrderStatus(ctx, transaction, event.OrderID, event.NewStatus); err != nil {
-		_ = s.inboxStore.MarkFailed(ctx, transaction, event.EventID, consumerGroup, err.Error())
 		tracing.RecordError(span, err)
-		return fmt.Errorf("%s: update order status: %w", op, err)
+		return s.failProcessing(ctx, op, transaction, inboxEvent, err)
 	}
 
 	if err = s.inboxStore.MarkProcessed(ctx, transaction, event.EventID, consumerGroup); err != nil {
 		tracing.RecordError(span, err)
-		return fmt.Errorf("%s: mark inbox processed: %w", op, err)
+		return s.failProcessing(ctx, op, transaction, inboxEvent, err)
 	}
 
 	if err = transaction.Commit(ctx); err != nil {
@@ -123,4 +127,27 @@ func (s *SagaReplyService) ProcessSagaReply(
 	}
 
 	return nil
+}
+
+func (s *SagaReplyService) failProcessing(
+	ctx context.Context,
+	op string,
+	transaction pgx.Tx,
+	inboxEvent models.InboxEvent,
+	processErr error,
+) error {
+	if rollbackErr := transaction.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		s.logger.Error(ctx, "Saga reply transaction rollback failed", zap.Error(rollbackErr))
+	}
+
+	if saveErr := s.inboxStore.SaveFailed(ctx, inboxEvent, processErr.Error()); saveErr != nil {
+		s.logger.Error(ctx, "Failed to persist failed inbox event",
+			zap.String("event_id", inboxEvent.EventID.String()),
+			zap.String("consumer_group", inboxEvent.ConsumerGroup),
+			zap.Error(saveErr),
+		)
+		return fmt.Errorf("%s: %w (additionally failed to persist inbox failure: %v)", op, processErr, saveErr)
+	}
+
+	return fmt.Errorf("%s: %w", op, processErr)
 }

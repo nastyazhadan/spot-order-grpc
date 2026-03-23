@@ -43,7 +43,7 @@ var KafkaProviders = fx.Options(
 		provideOutboxStore,
 		provideInboxStore,
 		provideOutboxWorker,
-		provideOrderOutboxSaver,
+		provideEventProducer,
 		provideSaramaConsumerGroup,
 		provideSagaReplyService,
 		provideOrderConsumerService,
@@ -104,8 +104,8 @@ func provideOutboxStore(pool *pgxpool.Pool, logger *zapLogger.Logger, cfg config
 	return outboxStore.New(pool, logger, cfg)
 }
 
-func provideOrderOutboxSaver(store *outboxStore.OutboxStore) producer.OutboxWriter {
-	return store
+func provideEventProducer(store *outboxStore.OutboxStore, logger *zapLogger.Logger) orderService.EventProducer {
+	return producer.New(store, logger)
 }
 
 func provideInboxStore(pool *pgxpool.Pool, logger *zapLogger.Logger, cfg config.OrderConfig) *inboxStore.InboxStore {
@@ -296,7 +296,7 @@ func provideOrderService(
 	marketViewer orderService.MarketViewer,
 	rateLimiters orderService.RateLimiters,
 	cfg orderService.Config,
-	outboxWriter producer.OutboxWriter,
+	eventProducer orderService.EventProducer,
 	logger *zapLogger.Logger,
 ) *orderService.OrderService {
 	return orderService.New(
@@ -306,7 +306,7 @@ func provideOrderService(
 		marketViewer,
 		rateLimiters,
 		cfg,
-		outboxWriter,
+		eventProducer,
 		logger,
 	)
 }
@@ -334,7 +334,7 @@ func RegisterOutboxWorker(
 
 func RegisterKafkaConsumer(
 	lifecycle fx.Lifecycle,
-	consumer consumer.OrderConsumer,
+	consumer *consumer.OrderConsumer,
 	syncProducer sarama.SyncProducer,
 	consumerGroup sarama.ConsumerGroup,
 	logger *zapLogger.Logger,

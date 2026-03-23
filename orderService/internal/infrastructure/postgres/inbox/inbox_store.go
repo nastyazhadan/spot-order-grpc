@@ -118,35 +118,38 @@ func (s *InboxStore) MarkProcessed(
 	return nil
 }
 
-func (s *InboxStore) MarkFailed(
+func (s *InboxStore) SaveFailed(
 	ctx context.Context,
-	transaction pgx.Tx,
-	eventID uuid.UUID,
-	consumerGroup string,
+	event models.InboxEvent,
 	errText string,
 ) error {
-	const op = "InboxStore.MarkFailed"
+	const op = "InboxStore.SaveFailed"
 
-	ctx, span := tracing.StartSpan(ctx, "inbox.mark_failed",
+	ctx, span := tracing.StartSpan(ctx, "inbox.save_failed",
 		trace.WithAttributes(
-			attribute.String("event_id", eventID.String()),
-			attribute.String("consumer_group", consumerGroup),
+			attribute.String("event_id", event.EventID.String()),
+			attribute.String("topic", event.Topic),
+			attribute.String("consumer_group", event.ConsumerGroup),
 		),
 	)
 	defer span.End()
 
 	start := time.Now()
-	_, err := transaction.Exec(ctx, `
-		UPDATE inbox
-		SET status = 'failed',
-		    failed_at = NOW(),
-		    error_message = $3
-		WHERE event_id = $1
-		  AND consumer_group = $2
-	`, eventID, consumerGroup, errText)
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO inbox (id, event_id, topic, consumer_group, payload, status, failed_at, error_message)
+		VALUES ($1, $2, $3, $4, $5, 'failed', NOW(), $6)
+		ON CONFLICT (event_id, consumer_group)
+		DO UPDATE SET
+			topic = EXCLUDED.topic,
+			payload = EXCLUDED.payload,
+			status = 'failed',
+			failed_at = NOW(),
+			processed_at = NULL,
+			error_message = EXCLUDED.error_message
+	`, event.ID, event.EventID, event.Topic, event.ConsumerGroup, event.Payload, errText)
 
 	metrics.ObserveWithTrace(ctx,
-		metrics.DBQueryDuration.WithLabelValues(s.config.Service.Name, "inbox.mark_failed"),
+		metrics.DBQueryDuration.WithLabelValues(s.config.Service.Name, "inbox.save_failed"),
 		time.Since(start).Seconds(),
 	)
 

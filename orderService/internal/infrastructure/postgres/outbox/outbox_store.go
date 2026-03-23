@@ -118,7 +118,14 @@ func (s *OutboxStore) ClaimPendingEvents(ctx context.Context, limit int) ([]mode
 	}
 
 	span.SetAttributes(attribute.Int("batch.claimed", len(events)))
-	metrics.OutboxPendingEvents.WithLabelValues(s.config.Service.Name).Set(float64(len(events)))
+
+	pendingCount, countErr := s.countPendingEvents(ctx)
+	if countErr != nil {
+		tracing.RecordError(span, countErr)
+		s.logger.Warn(ctx, "Failed to count pending outbox events", zap.Error(countErr))
+	} else {
+		metrics.OutboxPendingEvents.WithLabelValues(s.config.Service.Name).Set(float64(pendingCount))
+	}
 
 	return events, nil
 }
@@ -234,4 +241,19 @@ func (s *OutboxStore) MarkFailed(ctx context.Context, event models.OutboxEvent, 
 	metrics.OutboxEventsTotal.WithLabelValues(s.config.Service.Name, event.EventType, "failed").Inc()
 
 	return nil
+}
+
+func (s *OutboxStore) countPendingEvents(ctx context.Context) (int64, error) {
+	var pendingCount int64
+
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM outbox
+		WHERE status = 'pending' AND available_at <= NOW()
+	`).Scan(&pendingCount)
+	if err != nil {
+		return 0, fmt.Errorf("count pending outbox events: %w", err)
+	}
+
+	return pendingCount, nil
 }

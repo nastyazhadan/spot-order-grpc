@@ -13,10 +13,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound/kafka"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/producer"
 	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
@@ -27,14 +25,14 @@ import (
 )
 
 type OrderService struct {
-	pool                 *pgxpool.Pool
-	saver                Saver
-	getter               Getter
-	marketViewer         MarketViewer
-	rateLimiters         RateLimiters
-	config               Config
-	orderProducerService producer.OutboxWriter
-	logger               *zapLogger.Logger
+	pool          *pgxpool.Pool
+	saver         Saver
+	getter        Getter
+	marketViewer  MarketViewer
+	rateLimiters  RateLimiters
+	config        Config
+	eventProducer EventProducer
+	logger        *zapLogger.Logger
 }
 
 type Config struct {
@@ -65,6 +63,10 @@ type RateLimiter interface {
 	Window() time.Duration
 }
 
+type EventProducer interface {
+	ProduceOrderCreated(ctx context.Context, transaction pgx.Tx, event models.OrderCreatedEvent) error
+}
+
 func New(
 	pool *pgxpool.Pool,
 	saver Saver,
@@ -72,18 +74,18 @@ func New(
 	viewer MarketViewer,
 	limiters RateLimiters,
 	config Config,
-	producer producer.OutboxWriter,
+	producer EventProducer,
 	logger *zapLogger.Logger,
 ) *OrderService {
 	return &OrderService{
-		pool:                 pool,
-		saver:                saver,
-		getter:               getter,
-		marketViewer:         viewer,
-		rateLimiters:         limiters,
-		config:               config,
-		orderProducerService: producer,
-		logger:               logger,
+		pool:          pool,
+		saver:         saver,
+		getter:        getter,
+		marketViewer:  viewer,
+		rateLimiters:  limiters,
+		config:        config,
+		eventProducer: producer,
+		logger:        logger,
 	}
 }
 
@@ -254,22 +256,6 @@ func (s *OrderService) saveOrder(
 		CreatedAt:     now,
 	}
 
-	payload, err := mapper.Marshal(event)
-	if err != nil {
-		tracing.RecordError(span, err)
-		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
-	}
-
-	outboxEvent := models.OutboxEvent{
-		ID:          uuid.New(),
-		EventID:     event.EventID,
-		EventType:   models.OrderCreatedEventType,
-		AggregateID: order.ID,
-		Payload:     payload,
-		Status:      models.OutboxEventStatusPending,
-		RetryCount:  0,
-	}
-
 	transaction, err := s.pool.Begin(ctx)
 	if err != nil {
 		tracing.RecordError(span, err)
@@ -291,7 +277,7 @@ func (s *OrderService) saveOrder(
 		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err = s.orderProducerService.SaveOutboxEvent(ctx, transaction, outboxEvent); err != nil {
+	if err = s.eventProducer.ProduceOrderCreated(ctx, transaction, event); err != nil {
 		tracing.RecordError(span, err)
 		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
 	}

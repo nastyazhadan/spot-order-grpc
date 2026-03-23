@@ -6,7 +6,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-type OrderType uint8
+type OrderType uint16
 
 const (
 	OrderTypeUnspecified OrderType = iota
@@ -16,7 +16,7 @@ const (
 	OrderTypeTakeProfit
 )
 
-type OrderStatus uint8
+type OrderStatus uint16
 
 const (
 	OrderStatusUnspecified OrderStatus = iota

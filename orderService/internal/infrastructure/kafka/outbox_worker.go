@@ -121,7 +121,7 @@ func (w *Worker) processEvent(ctx context.Context, event models.OutboxEvent) {
 	)
 	defer span.End()
 
-	key := kafka.OrderCreatedKey(event.AggregateID)
+	key := w.messageKey(event)
 
 	if err := w.publisher.Send(ctx, key, event.Payload); err != nil {
 		tracing.RecordError(span, err)
@@ -185,4 +185,13 @@ func (w *Worker) processEvent(ctx context.Context, event models.OutboxEvent) {
 		zap.String("aggregate_id", event.AggregateID.String()),
 		zap.String("event_id", event.EventID.String()),
 	)
+}
+
+func (w *Worker) messageKey(event models.OutboxEvent) []byte {
+	switch event.EventType {
+	case models.OrderCreatedEventType:
+		return kafka.OrderCreatedKey(event.AggregateID)
+	default:
+		return []byte(event.AggregateID.String())
+	}
 }

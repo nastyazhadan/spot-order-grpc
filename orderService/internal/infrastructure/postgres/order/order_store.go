@@ -142,17 +142,17 @@ func (o *OrderStore) UpdateOrderStatus(
 	ctx, span := tracing.StartSpan(ctx, "order.update_status",
 		trace.WithAttributes(
 			attribute.String("order_id", orderID.String()),
-			attribute.String("order_status", status.String()),
+			attribute.Int("status", int(status)),
 		),
 	)
 	defer span.End()
 
 	start := time.Now()
-	_, err := transaction.Exec(ctx, `
+	result, err := transaction.Exec(ctx, `
 		UPDATE orders
 		SET status = $2
 		WHERE id = $1
-	`, orderID, status)
+	`, orderID, int16(status))
 
 	metrics.ObserveWithTrace(ctx,
 		metrics.DBQueryDuration.WithLabelValues(serviceName, "order.update_status"),
@@ -160,6 +160,12 @@ func (o *OrderStore) UpdateOrderStatus(
 	)
 
 	if err != nil {
+		tracing.RecordError(span, err)
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	if result.RowsAffected() == 0 {
+		err = repositoryErrors.ErrOrderNotFound
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
 	}

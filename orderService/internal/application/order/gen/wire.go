@@ -11,7 +11,6 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/auth"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/producer"
 	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -28,7 +27,7 @@ type Container struct {
 func NewContainer(
 	ctx context.Context,
 	marketViewer order.MarketViewer,
-	writer producer.OutboxWriter,
+	eventProducer order.EventProducer,
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) (*Container, error) {

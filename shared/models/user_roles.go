@@ -1,6 +1,6 @@
 package models
 
-type UserRole uint8
+type UserRole uint16
 
 const (
 	UserRoleUnspecified UserRole = iota
