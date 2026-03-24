@@ -16,25 +16,27 @@ import (
 	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound/postgres"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
 
 const (
-	serviceName         = "orderService"
 	databaseName        = "postgresql"
 	uniqueViolationCode = "23505"
 	constraintName      = "orders_pkey"
 )
 
 type OrderStore struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	config config.OrderConfig
 }
 
-func New(pool *pgxpool.Pool) *OrderStore {
+func New(pool *pgxpool.Pool, cfg config.OrderConfig) *OrderStore {
 	return &OrderStore{
-		pool: pool,
+		pool:   pool,
+		config: cfg,
 	}
 }
 
@@ -63,7 +65,7 @@ func (o *OrderStore) SaveOrder(ctx context.Context, transaction pgx.Tx, order mo
 		orderDTO.Status, orderDTO.CreatedAt,
 	)
 	metrics.ObserveWithTrace(ctx,
-		metrics.DBQueryDuration.WithLabelValues(serviceName, "save_order_transaction"),
+		metrics.DBQueryDuration.WithLabelValues(o.config.Service.Name, "save_order_transaction"),
 		time.Since(start).Seconds(),
 	)
 
@@ -92,7 +94,7 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 	start := time.Now()
 	defer func() {
 		metrics.ObserveWithTrace(ctx,
-			metrics.DBQueryDuration.WithLabelValues(serviceName, "get_order"),
+			metrics.DBQueryDuration.WithLabelValues(o.config.Service.Name, "get_order"),
 			time.Since(start).Seconds(),
 		)
 	}()
@@ -155,7 +157,7 @@ func (o *OrderStore) UpdateOrderStatus(
 	`, orderID, int16(status))
 
 	metrics.ObserveWithTrace(ctx,
-		metrics.DBQueryDuration.WithLabelValues(serviceName, "order.update_status"),
+		metrics.DBQueryDuration.WithLabelValues(o.config.Service.Name, "order.update_status"),
 		time.Since(start).Seconds(),
 	)
 

@@ -94,7 +94,13 @@ func (s *MarketViewer) ViewMarkets(ctx context.Context, userRoles []models.UserR
 	return markets, nil
 }
 
-func (s *MarketViewer) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
+func (s *MarketViewer) GetMarketByID(
+	ctx context.Context,
+	id uuid.UUID,
+	userRoles []models.UserRole,
+) (models.Market, error) {
+	const op = "MarketViewer.GetMarketByID"
+
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, s.serviceTimeout)
@@ -112,11 +118,17 @@ func (s *MarketViewer) GetMarketByID(ctx context.Context, id uuid.UUID) (models.
 		return models.Market{}, err
 	}
 
+	if !canViewMarket(market, userRoles) {
+		err = sharedErrors.ErrMarketNotFound{ID: id}
+		tracing.RecordError(span, err)
+		return models.Market{}, fmt.Errorf("%s: %w", op, err)
+	}
+
 	return market, nil
 }
 
 func (s *MarketViewer) getMarket(ctx context.Context, id uuid.UUID) (models.Market, error) {
-	const op = "MarketViewer.getMarketByID"
+	const op = "MarketViewer.getMarket"
 
 	market, err := s.marketCacheRepository.GetByID(ctx, id)
 	if err == nil {
@@ -130,7 +142,7 @@ func (s *MarketViewer) getMarket(ctx context.Context, id uuid.UUID) (models.Mark
 	market, err = s.marketRepository.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repositoryErrors.ErrMarketNotFound) {
-			return models.Market{}, sharedErrors.ErrMarketNotFound{ID: market.ID}
+			return models.Market{}, sharedErrors.ErrMarketNotFound{ID: id}
 		}
 
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
@@ -162,6 +174,29 @@ func effectiveUserRole(roles []models.UserRole) (string, bool) {
 	return resultRole, resultRole != ""
 }
 
+func canViewMarket(market models.Market, roles []models.UserRole) bool {
+	roleKey, ok := effectiveUserRole(roles)
+	if !ok {
+		return false
+	}
+
+	return canViewMarketByRoleKey(market, roleKey)
+}
+
+func canViewMarketByRoleKey(market models.Market, roleKey string) bool {
+	switch roleKey {
+	case roleAdminKey:
+		// Админ видит все рынки (включая disabled и deleted)
+		return true
+	case roleViewerKey:
+		// Viewer видит все неудаленные рынки (включая disabled)
+		return market.DeletedAt == nil
+	default:
+		// User видит только enabled и неудаленные рынки
+		return market.DeletedAt == nil && market.Enabled
+	}
+}
+
 func (s *MarketViewer) getMarkets(ctx context.Context, roleKey string) ([]models.Market, error) {
 	markets, err := s.marketCacheRepository.GetAll(ctx, roleKey)
 	if err == nil {
@@ -180,7 +215,7 @@ func (s *MarketViewer) getMarketsWithSingleFlight(ctx context.Context, roleKey s
 
 	resultKey := singleFlightKey + ":" + roleKey
 
-	result, err, _ := s.singleFlight.Do(resultKey, func() (interface{}, error) {
+	result, err, _ := s.singleFlight.Do(resultKey, func() (any, error) {
 		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.serviceTimeout)
 		defer cancel()
 
@@ -223,7 +258,7 @@ func (s *MarketViewer) loadAndWarmCache(ctx context.Context, roleKey string) ([]
 
 	for _, market := range allMarkets {
 		if err = s.marketCacheRepository.SetByID(ctx, market, s.cacheTTL); err != nil {
-			s.logger.Warn(ctx, "failed cache market by id", zap.Error(err),
+			s.logger.Warn(ctx, "failed to cache market by id", zap.Error(err),
 				zap.String("market_id", market.ID.String()))
 		}
 	}
@@ -240,6 +275,7 @@ func (s *MarketViewer) getMarketsFromRepo(ctx context.Context) ([]models.Market,
 	allMarkets, err := s.marketRepository.ListAll(ctx)
 	if err != nil {
 		tracing.RecordError(span, err)
+
 		if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
 			return nil, serviceErrors.ErrMarketsNotFound
 		}
@@ -255,27 +291,13 @@ func (s *MarketViewer) getMarketsFromRepo(ctx context.Context) ([]models.Market,
 }
 
 func filterByRole(markets []models.Market, roleKey string) []models.Market {
-	switch roleKey {
-	case roleAdminKey:
-		// Админ видит все рынки (включая disabled и deleted)
-		return markets
-	case roleViewerKey:
-		// Viewer видит все неудаленные рынки (включая disabled)
-		out := make([]models.Market, 0, len(markets))
-		for _, market := range markets {
-			if market.DeletedAt == nil {
-				out = append(out, market)
-			}
+	out := make([]models.Market, 0, len(markets))
+
+	for _, market := range markets {
+		if canViewMarketByRoleKey(market, roleKey) {
+			out = append(out, market)
 		}
-		return out
-	default:
-		// User видит только enabled и неудаленные рынки
-		out := make([]models.Market, 0, len(markets))
-		for _, market := range markets {
-			if market.DeletedAt == nil && market.Enabled {
-				out = append(out, market)
-			}
-		}
-		return out
 	}
+
+	return out
 }

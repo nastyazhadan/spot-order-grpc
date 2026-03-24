@@ -3,12 +3,12 @@ package breaker
 import (
 	"context"
 
+	"github.com/sony/gobreaker/v2"
+	"go.uber.org/zap"
+
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
-
-	"github.com/sony/gobreaker/v2"
-	"go.uber.org/zap"
 )
 
 func New[T any](

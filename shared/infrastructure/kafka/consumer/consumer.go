@@ -14,6 +14,8 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
 
+var ErrMessageHandledByDLQ = errors.New("message handled by dlq")
+
 type DLQPublisher interface {
 	SendMessage(ctx context.Context, msg kafka.Message) error
 }
@@ -37,6 +39,8 @@ func New(
 	logger *zapLogger.Logger,
 	middlewares ...Middleware,
 ) *consumer {
+	middlewares = append(middlewares, PanicRecoveryMiddleware(logger))
+
 	return &consumer{
 		group:       group,
 		topics:      topics,
@@ -153,7 +157,7 @@ func sendToDLQ(
 		zap.Error(lastErr),
 	)
 
-	return nil
+	return ErrMessageHandledByDLQ
 }
 
 func buildDLQMessage(msg kafka.Message, lastErr error, retryCount int) kafka.Message {
@@ -175,7 +179,6 @@ func buildDLQMessage(msg kafka.Message, lastErr error, retryCount int) kafka.Mes
 		BlockTimestamp: msg.BlockTimestamp,
 		Key:            msg.Key,
 		Value:          msg.Value,
-		Topic:          msg.Topic,
 		Partition:      msg.Partition,
 		Offset:         msg.Offset,
 	}

@@ -96,8 +96,8 @@ func provideCacheStore(client *redis.Client) *cache.Store {
 	return cache.New(client)
 }
 
-func provideOrderStore(pool *pgxpool.Pool) *orderStore.OrderStore {
-	return orderStore.New(pool)
+func provideOrderStore(pool *pgxpool.Pool, cfg config.OrderConfig) *orderStore.OrderStore {
+	return orderStore.New(pool, cfg)
 }
 
 func provideOutboxStore(pool *pgxpool.Pool, logger *zapLogger.Logger, cfg config.OrderConfig) *outboxStore.OutboxStore {
@@ -158,12 +158,23 @@ func provideOrderServiceConfig(cfg config.OrderConfig) orderService.Config {
 
 func provideSaramaSyncProducer(cfg config.OrderConfig) (sarama.SyncProducer, error) {
 	saramaCfg := sarama.NewConfig()
+	saramaCfg.ClientID = cfg.Service.Name
+
 	saramaCfg.Producer.Return.Successes = true
 	saramaCfg.Producer.Return.Errors = true
-	saramaCfg.Producer.RequiredAcks = sarama.RequiredAcks(cfg.Kafka.Producer.RequiredAcks)
+	saramaCfg.Producer.RequiredAcks = sarama.WaitForAll
+
+	saramaCfg.Producer.Timeout = cfg.Kafka.Producer.Timeout
 	saramaCfg.Producer.Retry.Max = cfg.Kafka.Producer.MaxRetries
 	saramaCfg.Producer.Retry.Backoff = cfg.Kafka.Producer.RetryBackoff
-	saramaCfg.Producer.Timeout = cfg.Kafka.Producer.Timeout
+
+	saramaCfg.Net.DialTimeout = cfg.Kafka.Producer.Timeout
+	saramaCfg.Net.ReadTimeout = cfg.Kafka.Producer.Timeout
+	saramaCfg.Net.WriteTimeout = cfg.Kafka.Producer.Timeout
+
+	saramaCfg.Metadata.Timeout = cfg.Kafka.Producer.Timeout
+	saramaCfg.Metadata.Retry.Max = cfg.Kafka.Producer.MaxRetries
+	saramaCfg.Metadata.Retry.Backoff = cfg.Kafka.Producer.RetryBackoff
 
 	switch cfg.Kafka.Producer.Compression {
 	case "gzip":
@@ -346,6 +357,10 @@ func RegisterKafkaConsumer(
 			logger.Info(ctx, "Kafka consumer: starting")
 			go func() {
 				if err := consumer.Run(ctx); err != nil {
+					if ctx.Err() != nil {
+						logger.Info(ctx, "Kafka consumer stopped")
+						return
+					}
 					logger.Error(ctx, "Kafka consumer exited with error", zap.Error(err))
 				}
 			}()

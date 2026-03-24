@@ -1,6 +1,7 @@
 package consumer
 
 import (
+	"errors"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -87,6 +88,12 @@ func (g *groupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim s
 			)
 
 			if err != nil {
+				if errors.Is(err, ErrMessageHandledByDLQ) {
+					session.MarkMessage(message, "")
+					span.End()
+					continue
+				}
+
 				tracing.RecordError(span, err)
 				metrics.KafkaMessagesConsumedTotal.WithLabelValues(g.serviceName, message.Topic, "error").Inc()
 

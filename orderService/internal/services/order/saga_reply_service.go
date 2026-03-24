@@ -135,7 +135,7 @@ func (s *SagaReplyService) failProcessing(
 	defer cancel()
 
 	if saveErr := s.inboxStore.SaveFailed(saveCtx, inboxEvent, processErr.Error()); saveErr != nil {
-		s.logger.Error(ctx, "Failed to persist failed inbox event",
+		s.logger.Error(saveCtx, "Failed to persist failed inbox event",
 			zap.String("event_id", inboxEvent.EventID.String()),
 			zap.String("consumer_group", inboxEvent.ConsumerGroup),
 			zap.Error(saveErr),

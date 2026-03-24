@@ -207,7 +207,9 @@ func (w *Worker) handleSendError(ctx context.Context, event models.OutboxEvent, 
 	nextRetryCount := event.RetryCount + 1
 	errText := sendErr.Error()
 
-	if nextRetryCount >= w.maxRetries {
+	// maxRetries = число повторных попыток после первой отправки
+	// event.RetryCount = сколько попыток уже было использовано (число неудачных попыток)
+	if event.RetryCount >= w.maxRetries {
 		w.logger.Error(stateCtx, "Outbox event exhausted retries, marking as failed",
 			zap.String("event_type", event.EventType),
 			zap.String("aggregate_id", event.AggregateID.String()),

@@ -3,29 +3,32 @@ package ratelimit
 import (
 	"context"
 
-	orderProto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
-	spotProto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
-	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
-
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	authProto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/auth/v1"
+	orderProto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
+	spotProto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
 
 func OrderUnaryServerInterceptor(cfg config.OrderConfig, logger *zapLogger.Logger) grpc.UnaryServerInterceptor {
 	return newUnaryServerInterceptor(map[string]int{
 		orderProto.OrderService_CreateOrder_FullMethodName:    cfg.GRPCRateLimit.CreateOrder,
 		orderProto.OrderService_GetOrderStatus_FullMethodName: cfg.GRPCRateLimit.GetOrderStatus,
+		authProto.AuthService_RefreshToken_FullMethodName:     cfg.GRPCRateLimit.RefreshToken,
 	}, cfg.Service.Name, logger)
 }
 
 func SpotUnaryServerInterceptor(cfg config.SpotConfig, logger *zapLogger.Logger) grpc.UnaryServerInterceptor {
 	return newUnaryServerInterceptor(map[string]int{
-		spotProto.SpotInstrumentService_ViewMarkets_FullMethodName: cfg.GRPCRateLimit.ViewMarkets,
+		spotProto.SpotInstrumentService_ViewMarkets_FullMethodName:   cfg.GRPCRateLimit.ViewMarkets,
+		spotProto.SpotInstrumentService_GetMarketById_FullMethodName: cfg.GRPCRateLimit.GetMarketByID,
 	}, cfg.Service.Name, logger)
 }
 
@@ -56,7 +59,7 @@ func newUnaryServerInterceptor(
 		}
 
 		if !limiter.Allow() {
-			logger.Warn(ctx, "global rate limit exceeded",
+			logger.Warn(ctx, "grpc rate limit exceeded",
 				zap.String("method", serverInfo.FullMethod),
 			)
 

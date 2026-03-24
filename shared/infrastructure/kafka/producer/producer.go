@@ -50,13 +50,18 @@ func (p *producer) SendMessage(ctx context.Context, msg kafka.Message) error {
 }
 
 func (p *producer) sendMessage(ctx context.Context, msg kafka.Message) error {
+	topic := p.topic
+	if msg.Topic != "" {
+		topic = msg.Topic
+	}
+
 	ctx, span := otel.Tracer(instrumentationName).Start(
 		ctx,
 		"kafka.produce",
 		trace.WithSpanKind(trace.SpanKindProducer),
 		trace.WithAttributes(
 			attribute.String("messaging.system", kafka.SystemName),
-			attribute.String("messaging.destination", p.topic),
+			attribute.String("messaging.destination", topic),
 			attribute.String("messaging.destination_kind", kafka.DestinationKind),
 		),
 	)
@@ -82,7 +87,7 @@ func (p *producer) sendMessage(ctx context.Context, msg kafka.Message) error {
 
 	start := time.Now()
 	partition, offset, err := p.syncProducer.SendMessage(&sarama.ProducerMessage{
-		Topic:   p.topic,
+		Topic:   topic,
 		Key:     sarama.ByteEncoder(msg.Key),
 		Value:   sarama.ByteEncoder(msg.Value),
 		Headers: headers,
@@ -90,24 +95,24 @@ func (p *producer) sendMessage(ctx context.Context, msg kafka.Message) error {
 	elapsed := time.Since(start).Seconds()
 
 	metrics.ObserveWithTrace(ctx,
-		metrics.KafkaPublishDuration.WithLabelValues(p.serviceName, p.topic),
+		metrics.KafkaPublishDuration.WithLabelValues(p.serviceName, topic),
 		elapsed,
 	)
 
 	if err != nil {
 		tracing.RecordError(span, err)
-		metrics.KafkaPublishErrorsTotal.WithLabelValues(p.serviceName, p.topic).Inc()
+		metrics.KafkaPublishErrorsTotal.WithLabelValues(p.serviceName, topic).Inc()
 		p.logger.Error(ctx, "Failed to publish Kafka message",
-			zap.String("topic", p.topic),
+			zap.String("topic", topic),
 			zap.Error(err))
 
 		return err
 	}
 
-	metrics.KafkaMessagesPublishedTotal.WithLabelValues(p.serviceName, p.topic).Inc()
+	metrics.KafkaMessagesPublishedTotal.WithLabelValues(p.serviceName, topic).Inc()
 
 	p.logger.Info(ctx, "Kafka message published",
-		zap.String("topic", p.topic),
+		zap.String("topic", topic),
 		zap.Int32("partition", partition),
 		zap.Int64("offset", offset),
 		zap.String("key", string(msg.Key)),

@@ -24,7 +24,7 @@ func NewContainer(ctx context.Context, marketViewer order.MarketViewer, eventPro
 	if err != nil {
 		return nil, err
 	}
-	orderStore := provideOrderStore(pool)
+	orderStore := provideOrderStore(pool, cfg)
 	client, err := provideRedisClient(ctx, cfg)
 	if err != nil {
 		return nil, err

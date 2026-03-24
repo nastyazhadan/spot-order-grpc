@@ -3,20 +3,20 @@ package spot
 import (
 	"context"
 
-	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
-	"github.com/nastyazhadan/spot-order-grpc/shared/errors"
-	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-	mapper "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/inbound"
-
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/errors"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
+	mapper "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/inbound"
 )
 
 type SpotInstrument interface {
 	ViewMarkets(ctx context.Context, userRoles []models.UserRole) ([]models.Market, error)
-	GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error)
+	GetMarketByID(ctx context.Context, id uuid.UUID, userRoles []models.UserRole) (models.Market, error)
 }
 
 type serverAPI struct {
@@ -35,7 +35,11 @@ func (s *serverAPI) ViewMarkets(
 	ctx context.Context,
 	request *proto.ViewMarketsRequest,
 ) (*proto.ViewMarketsResponse, error) {
-	userRoles, err := s.validateUserRoles(request)
+	if request == nil {
+		return nil, status.Error(codes.InvalidArgument, errors.MsgRequestRequired)
+	}
+
+	userRoles, err := validateUserRoles(request.GetUserRoles())
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +72,12 @@ func (s *serverAPI) GetMarketByID(
 		return nil, status.Error(codes.InvalidArgument, "invalid market_id")
 	}
 
-	market, err := s.spotInstrument.GetMarketByID(ctx, marketID)
+	userRoles, err := validateUserRoles(request.GetUserRoles())
+	if err != nil {
+		return nil, err
+	}
+
+	market, err := s.spotInstrument.GetMarketByID(ctx, marketID, userRoles)
 	if err != nil {
 		return nil, err
 	}
@@ -78,14 +87,9 @@ func (s *serverAPI) GetMarketByID(
 	}, nil
 }
 
-func (s *serverAPI) validateUserRoles(
-	request *proto.ViewMarketsRequest,
+func validateUserRoles(
+	roles []proto.UserRole,
 ) ([]models.UserRole, error) {
-	if request == nil {
-		return nil, status.Error(codes.InvalidArgument, errors.MsgRequestRequired)
-	}
-
-	roles := request.GetUserRoles()
 	if len(roles) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "user roles are required")
 	}

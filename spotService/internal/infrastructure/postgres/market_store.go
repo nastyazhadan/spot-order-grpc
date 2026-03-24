@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
@@ -18,15 +19,15 @@ import (
 	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound/postgres"
 )
 
-const serviceName = "spotService"
-
 type MarketStore struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	config config.SpotConfig
 }
 
-func NewMarketStore(pool *pgxpool.Pool) *MarketStore {
+func NewMarketStore(pool *pgxpool.Pool, cfg config.SpotConfig) *MarketStore {
 	return &MarketStore{
-		pool: pool,
+		pool:   pool,
+		config: cfg,
 	}
 }
 
@@ -41,7 +42,7 @@ func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 	start := time.Now()
 	defer func() {
 		metrics.ObserveWithTrace(ctx,
-			metrics.DBQueryDuration.WithLabelValues(serviceName, "list_all_markets"),
+			metrics.DBQueryDuration.WithLabelValues(m.config.Service.Name, "list_all_markets"),
 			time.Since(start).Seconds(),
 		)
 	}()
@@ -81,7 +82,7 @@ func (m *MarketStore) GetByID(ctx context.Context, id uuid.UUID) (models.Market,
 	start := time.Now()
 	defer func() {
 		metrics.ObserveWithTrace(ctx,
-			metrics.DBQueryDuration.WithLabelValues(serviceName, "get_market_by_id"),
+			metrics.DBQueryDuration.WithLabelValues(m.config.Service.Name, "get_market_by_id"),
 			time.Since(start).Seconds(),
 		)
 	}()

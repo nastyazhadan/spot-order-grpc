@@ -90,7 +90,6 @@ type KafkaConfig struct {
 type ProducerConfig struct {
 	MaxRetries   int           `mapstructure:"max_retries"`
 	RetryBackoff time.Duration `mapstructure:"retry_backoff"`
-	RequiredAcks int           `mapstructure:"required_acks"`
 	Timeout      time.Duration `mapstructure:"timeout"`
 	Compression  string        `mapstructure:"compression"`
 }
@@ -127,10 +126,12 @@ type RateLimiterByUserConfig struct {
 type OrderGRPCRateLimitConfig struct {
 	CreateOrder    int `mapstructure:"create_order"`
 	GetOrderStatus int `mapstructure:"get_order_status"`
+	RefreshToken   int `mapstructure:"refresh_token"`
 }
 
 type SpotGRPCRateLimitConfig struct {
-	ViewMarkets int `mapstructure:"view_markets"`
+	ViewMarkets   int `mapstructure:"view_markets"`
+	GetMarketByID int `mapstructure:"get_market_by_id"`
 }
 
 type TracingConfig struct {

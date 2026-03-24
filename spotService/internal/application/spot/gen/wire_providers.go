@@ -63,8 +63,8 @@ func provideCacheStore(client *redis.Client) *cache.Store {
 	return cache.New(client)
 }
 
-func provideMarketStore(pool *pgxpool.Pool) *repoPostgres.MarketStore {
-	return repoPostgres.NewMarketStore(pool)
+func provideMarketStore(pool *pgxpool.Pool, cfg config.SpotConfig) *repoPostgres.MarketStore {
+	return repoPostgres.NewMarketStore(pool, cfg)
 }
 
 func provideMarketCacheRepository(store *cache.Store, cfg config.SpotConfig) *repoRedis.MarketCacheRepository {

@@ -61,9 +61,9 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 			registerTracing,
 			registerMetrics,
 			startGRPCServer,
+			wireGen.RegisterKafkaProducer,
 			wireGen.RegisterOutboxWorker,
 			wireGen.RegisterKafkaConsumer,
-			wireGen.RegisterKafkaProducer,
 		),
 	)
 
@@ -297,13 +297,38 @@ func startGRPCServer(
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			server.GracefulStop()
+			stopGRPCServer(ctx, server, logger, "order")
+
 			container.PostgresPool.Close()
 			if err := container.RedisClient.Close(); err != nil {
 				logger.Error(ctx, "failed to close redis", zap.Error(err))
 			}
+			if err := connection.Close(); err != nil {
+				logger.Error(ctx, "failed to close spot grpc connection", zap.Error(err))
+				return err
+			}
 
-			return connection.Close()
+			return nil
 		},
 	})
+}
+
+func stopGRPCServer(ctx context.Context, server *grpc.Server, logger *zapLogger.Logger, serviceName string) {
+	stopped := make(chan struct{})
+
+	go func() {
+		server.GracefulStop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+		logger.Info(ctx, "gRPC server stopped gracefully",
+			zap.String("service", serviceName))
+	case <-ctx.Done():
+		logger.Warn(ctx, "gRPC graceful stop timed out, forcing stop",
+			zap.String("service", serviceName),
+			zap.Error(ctx.Err()))
+		server.Stop()
+	}
 }

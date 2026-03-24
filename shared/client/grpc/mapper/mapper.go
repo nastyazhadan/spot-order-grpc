@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-
-	"github.com/google/uuid"
 )
 
 func MarketFromProto(market *proto.Market) (models.Market, error) {
@@ -28,4 +28,18 @@ func MarketFromProto(market *proto.Market) (models.Market, error) {
 		Enabled:   market.GetEnabled(),
 		DeletedAt: deletedAt,
 	}, nil
+}
+
+func UserRoleToProto(userRole models.UserRole) proto.UserRole {
+	switch userRole {
+	case models.UserRoleUser:
+		return proto.UserRole_ROLE_USER
+	case models.UserRoleAdmin:
+		return proto.UserRole_ROLE_ADMIN
+	case models.UserRoleViewer:
+		return proto.UserRole_ROLE_VIEWER
+	default:
+		return proto.UserRole_ROLE_UNSPECIFIED
+
+	}
 }

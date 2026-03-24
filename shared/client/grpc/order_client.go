@@ -3,13 +3,13 @@ package grpc
 import (
 	"context"
 
+	"github.com/sony/gobreaker/v2"
+	"google.golang.org/grpc"
+
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/client/grpc/breaker"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-
-	"github.com/sony/gobreaker/v2"
-	"google.golang.org/grpc"
 )
 
 type OrderClient struct {

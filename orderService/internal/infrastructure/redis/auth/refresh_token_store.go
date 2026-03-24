@@ -5,22 +5,27 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
-
 	"github.com/google/uuid"
 	redisGo "github.com/redis/go-redis/v9"
+
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 )
 
 const refreshTokenPrefix = "refresh"
 
-// Атомарно проверяет наличие ключа и удаляет его
-var revokeIfExistsScript = redisGo.NewScript(`
-local key = KEYS[1]
-if redis.call("EXISTS", key) == 1 then
-    redis.call("DEL", key)
-    return 1
+// Атомарно проверяет старый refresh token, записывает новый с TTL и удаляет старый
+var rotateScript = redisGo.NewScript(`
+local oldKey = KEYS[1]
+local newKey = KEYS[2]
+local ttlMs = ARGV[1]
+
+if redis.call("EXISTS", oldKey) == 0 then
+    return 0
 end
-return 0
+
+redis.call("PSETEX", newKey, ttlMs, "1")
+redis.call("DEL", oldKey)
+return 1
 `)
 
 type RefreshTokenStore struct {
@@ -35,18 +40,18 @@ func New(store *cache.Store, ttl time.Duration) *RefreshTokenStore {
 	}
 }
 
-func (s *RefreshTokenStore) Save(ctx context.Context, userID uuid.UUID, jti string) error {
-	return s.store.SetWithTTL(ctx, s.key(userID, jti), "1", s.ttl)
-}
-
-func (s *RefreshTokenStore) RevokeIfExists(ctx context.Context, userID uuid.UUID, jti string) (bool, error) {
-	result, err := revokeIfExistsScript.Run(
+func (s *RefreshTokenStore) Rotate(ctx context.Context, userID uuid.UUID, oldJTI, newJTI string) (bool, error) {
+	result, err := rotateScript.Run(
 		ctx,
 		s.store.ScriptRunner(),
-		[]string{s.key(userID, jti)},
+		[]string{
+			s.key(userID, oldJTI),
+			s.key(userID, newJTI),
+		},
+		s.ttl.Milliseconds(),
 	).Int()
 	if err != nil {
-		return false, fmt.Errorf("revoke if exists: lua script error: %w", err)
+		return false, fmt.Errorf("rotate refresh token: lua script error: %w", err)
 	}
 
 	return result == 1, nil

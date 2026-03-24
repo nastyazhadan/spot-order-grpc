@@ -18,8 +18,7 @@ type JWTManager interface {
 }
 
 type RefreshTokenStore interface {
-	Save(ctx context.Context, userID uuid.UUID, jti string) error
-	RevokeIfExists(ctx context.Context, userID uuid.UUID, jti string) (bool, error)
+	Rotate(ctx context.Context, userID uuid.UUID, oldJTI, newJTI string) (bool, error)
 }
 
 type AuthService struct {
@@ -71,37 +70,26 @@ func (s *AuthService) rotateTokens(
 	userID uuid.UUID,
 	oldJTI string,
 ) (newAccessToken, newRefreshToken string, err error) {
-	revoked, err := s.store.RevokeIfExists(ctx, userID, oldJTI)
+	newJTI := uuid.NewString()
+
+	newAccessToken, err = s.jwtManager.GenerateAccessToken(userID)
 	if err != nil {
-		return "", "", serviceErrors.ErrRevokeTokenFailed
+		return "", "", err
 	}
-	if !revoked {
+
+	newRefreshToken, err = s.jwtManager.GenerateRefreshToken(userID, newJTI)
+	if err != nil {
+		return "", "", err
+	}
+
+	rotated, err := s.store.Rotate(ctx, userID, oldJTI, newJTI)
+	if err != nil {
+		s.logger.Error(ctx, "failed to rotate refresh token", zap.Error(err))
+		return "", "", serviceErrors.ErrSaveTokenFailed
+	}
+	if !rotated {
 		return "", "", serviceErrors.ErrTokenRevoked
 	}
 
-	return s.issueTokenPair(ctx, userID)
-}
-
-func (s *AuthService) issueTokenPair(
-	ctx context.Context,
-	userID uuid.UUID,
-) (accessToken, refreshToken string, err error) {
-	jti := uuid.NewString()
-
-	accessToken, err = s.jwtManager.GenerateAccessToken(userID)
-	if err != nil {
-		return "", "", err
-	}
-
-	refreshToken, err = s.jwtManager.GenerateRefreshToken(userID, jti)
-	if err != nil {
-		return "", "", err
-	}
-
-	if err = s.store.Save(ctx, userID, jti); err != nil {
-		s.logger.Error(ctx, "failed to save refresh token", zap.Error(err))
-		return "", "", serviceErrors.ErrSaveTokenFailed
-	}
-
-	return accessToken, refreshToken, nil
+	return newAccessToken, newRefreshToken, nil
 }

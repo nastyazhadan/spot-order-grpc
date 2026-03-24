@@ -16,7 +16,7 @@ enum UserRole {
 
 service SpotInstrumentService {
   rpc ViewMarkets (ViewMarketsRequest) returns (ViewMarketsResponse);
-  rpc GetMarketById (GetMarketByIDRequest) returns (GetMarketByIDResponse);
+  rpc GetMarketByID (GetMarketByIDRequest) returns (GetMarketByIDResponse);
 }
 
 message Market {
@@ -44,6 +44,15 @@ message ViewMarketsResponse {
 
 message GetMarketByIDRequest {
   string market_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated UserRole user_roles = 2 [
+    (buf.validate.field).repeated = {
+      min_items: 1,
+      unique: true,
+      items: {
+        enum: { defined_only: true, not_in: 0 }
+      }
+    }
+  ];
 }
 
 message GetMarketByIDResponse {

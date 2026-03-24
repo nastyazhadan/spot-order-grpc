@@ -53,7 +53,7 @@ func (p *OrderProducer) ProduceOrderCreated(
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	p.logger.Info(ctx, "OrderCreatedEvent saved to outbox",
+	p.logger.Info(ctx, "OrderCreatedEvent prepared for outbox saving",
 		zap.String("order_id", event.OrderID.String()),
 		zap.String("event_id", event.EventID.String()),
 		zap.String("outbox_event_id", outboxEvent.ID.String()),
