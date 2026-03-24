@@ -142,13 +142,14 @@ func (s *OutboxStore) MarkPublished(ctx context.Context, event models.OutboxEven
 	defer span.End()
 
 	start := time.Now()
-	_, err := s.pool.Exec(ctx, `
+	result, err := s.pool.Exec(ctx, `
 		UPDATE outbox
 		SET status = 'published',
-		    published_at = NOW(),
-		    locked_at = NULL,
-		    last_error = NULL
-		WHERE id = $1
+	    	published_at = NOW(),
+	    	failed_at = NULL,
+	    	locked_at = NULL,
+	    	last_error = NULL
+		WHERE id = $1 AND status = 'processing'
 	`, event.ID)
 
 	metrics.ObserveWithTrace(ctx,
@@ -159,6 +160,9 @@ func (s *OutboxStore) MarkPublished(ctx context.Context, event models.OutboxEven
 	if err != nil {
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
+	}
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("%s: expected to update 1 row, updated %d", op, result.RowsAffected())
 	}
 
 	return nil
@@ -182,14 +186,15 @@ func (s *OutboxStore) ScheduleRetry(
 	defer span.End()
 
 	start := time.Now()
-	_, err := s.pool.Exec(ctx, `
+	result, err := s.pool.Exec(ctx, `
 		UPDATE outbox
 		SET status = 'pending',
-		    retry_count = retry_count + 1,
-		    available_at = $2,
-		    locked_at = NULL,
-		    last_error = $3
-		WHERE id = $1
+	    	retry_count = retry_count + 1,
+	    	available_at = $2,
+	    	failed_at = NULL,
+	    	locked_at = NULL,
+	    	last_error = $3
+		WHERE id = $1 AND status = 'processing'
 	`, event.ID, nextRetryAt.UTC(), errText)
 
 	metrics.ObserveWithTrace(ctx,
@@ -200,6 +205,9 @@ func (s *OutboxStore) ScheduleRetry(
 	if err != nil {
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
+	}
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("%s: expected to update 1 row, updated %d", op, result.RowsAffected())
 	}
 
 	return nil
@@ -218,14 +226,14 @@ func (s *OutboxStore) MarkFailed(ctx context.Context, event models.OutboxEvent, 
 	defer span.End()
 
 	start := time.Now()
-	_, err := s.pool.Exec(ctx, `
+	result, err := s.pool.Exec(ctx, `
 		UPDATE outbox
 		SET status = 'failed',
-		    retry_count = retry_count + 1,
-		    failed_at = NOW(),
-		    locked_at = NULL,
-		    last_error = $2
-		WHERE id = $1
+	    	retry_count = retry_count + 1,
+	    	failed_at = NOW(),
+	    	locked_at = NULL,
+	    	last_error = $2
+		WHERE id = $1 AND status = 'processing'
 	`, event.ID, errText)
 
 	metrics.ObserveWithTrace(ctx,
@@ -236,6 +244,9 @@ func (s *OutboxStore) MarkFailed(ctx context.Context, event models.OutboxEvent, 
 	if err != nil {
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
+	}
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("%s: expected to update 1 row, updated %d", op, result.RowsAffected())
 	}
 
 	metrics.OutboxEventsTotal.WithLabelValues(s.config.Service.Name, event.EventType, "failed").Inc()

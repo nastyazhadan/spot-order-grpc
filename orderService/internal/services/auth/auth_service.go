@@ -11,10 +11,10 @@ import (
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
-type AuthService struct {
-	jwtManager jwt.Manager
-	store      RefreshTokenStore
-	logger     *zapLogger.Logger
+type JWTManager interface {
+	GenerateAccessToken(userID uuid.UUID) (string, error)
+	GenerateRefreshToken(userID uuid.UUID, jti string) (string, error)
+	ParseToken(tokenString string, expectedType jwt.TokenType) (*jwt.Claims, error)
 }
 
 type RefreshTokenStore interface {
@@ -22,7 +22,13 @@ type RefreshTokenStore interface {
 	RevokeIfExists(ctx context.Context, userID uuid.UUID, jti string) (bool, error)
 }
 
-func New(jwtManager jwt.Manager, store RefreshTokenStore, logger *zapLogger.Logger) *AuthService {
+type AuthService struct {
+	jwtManager JWTManager
+	store      RefreshTokenStore
+	logger     *zapLogger.Logger
+}
+
+func New(jwtManager JWTManager, store RefreshTokenStore, logger *zapLogger.Logger) *AuthService {
 	return &AuthService{
 		jwtManager: jwtManager,
 		store:      store,

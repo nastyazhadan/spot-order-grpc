@@ -10,27 +10,21 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type Manager interface {
-	GenerateAccessToken(userID uuid.UUID) (string, error)
-	GenerateRefreshToken(userID uuid.UUID, jti string) (string, error)
-	ParseToken(tokenString string, expectedType TokenType) (*Claims, error)
-}
-
-type manager struct {
+type Manager struct {
 	secret     []byte
 	accessTTL  time.Duration
 	refreshTTL time.Duration
 }
 
-func NewManager(secret string, accessTTL, refreshTTL time.Duration) Manager {
-	return &manager{
+func NewManager(secret string, accessTTL, refreshTTL time.Duration) *Manager {
+	return &Manager{
 		secret:     []byte(secret),
 		accessTTL:  accessTTL,
 		refreshTTL: refreshTTL,
 	}
 }
 
-func (m *manager) GenerateAccessToken(userID uuid.UUID) (string, error) {
+func (m *Manager) GenerateAccessToken(userID uuid.UUID) (string, error) {
 	now := time.Now()
 
 	claims := &Claims{
@@ -52,7 +46,7 @@ func (m *manager) GenerateAccessToken(userID uuid.UUID) (string, error) {
 	return signed, nil
 }
 
-func (m *manager) GenerateRefreshToken(userID uuid.UUID, jti string) (string, error) {
+func (m *Manager) GenerateRefreshToken(userID uuid.UUID, jti string) (string, error) {
 	now := time.Now()
 
 	claims := &Claims{
@@ -75,7 +69,7 @@ func (m *manager) GenerateRefreshToken(userID uuid.UUID, jti string) (string, er
 	return signed, nil
 }
 
-func (m *manager) ParseToken(tokenString string, expectedType TokenType) (*Claims, error) {
+func (m *Manager) ParseToken(tokenString string, expectedType TokenType) (*Claims, error) {
 	claims := &Claims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {

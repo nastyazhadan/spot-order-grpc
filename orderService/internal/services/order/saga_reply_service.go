@@ -2,7 +2,6 @@ package order
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -19,7 +18,7 @@ import (
 )
 
 type InboxWriter interface {
-	BeginProcessing(ctx context.Context, transaction pgx.Tx, event models.InboxEvent) (bool, error)
+	BeginProcessing(ctx context.Context, transaction pgx.Tx, event models.InboxEvent) (bool, models.InboxEventStatus, error)
 	MarkProcessed(ctx context.Context, transaction pgx.Tx, eventID uuid.UUID, consumerGroup string) error
 	SaveFailed(ctx context.Context, event models.InboxEvent, errText string) error
 }
@@ -83,11 +82,7 @@ func (s *SagaReplyService) ProcessSagaReply(
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: begin transaction: %w", op, err)
 	}
-	defer func() {
-		if rollbackErr := transaction.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			s.logger.Error(ctx, "Saga reply transaction rollback failed", zap.Error(rollbackErr))
-		}
-	}()
+	defer RollbackTx(ctx, transaction, s.logger, "Saga reply transaction rollback failed", s.config.Timeouts.Service)
 
 	inboxEvent := models.InboxEvent{
 		ID:            uuid.New(),
@@ -98,29 +93,25 @@ func (s *SagaReplyService) ProcessSagaReply(
 		Status:        models.InboxEventStatusProcessing,
 	}
 
-	started, err := s.inboxStore.BeginProcessing(ctx, transaction, inboxEvent)
+	started, currentStatus, err := s.inboxStore.BeginProcessing(ctx, transaction, inboxEvent)
 	if err != nil {
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: begin inbox processing: %w", op, err)
 	}
 
 	if !started {
-		s.logger.Info(ctx, "Duplicate saga reply event skipped",
-			zap.String("event_id", event.EventID.String()),
-			zap.String("order_id", event.OrderID.String()),
-			zap.String("consumer_group", consumerGroup),
-		)
+		s.logSkippedEvent(ctx, event, consumerGroup, currentStatus)
 		return nil
 	}
 
 	if err = s.orderStatusStore.UpdateOrderStatus(ctx, transaction, event.OrderID, event.NewStatus); err != nil {
 		tracing.RecordError(span, err)
-		return s.failProcessing(ctx, op, inboxEvent, err)
+		return s.failProcessing(ctx, transaction, op, inboxEvent, err)
 	}
 
 	if err = s.inboxStore.MarkProcessed(ctx, transaction, event.EventID, consumerGroup); err != nil {
 		tracing.RecordError(span, err)
-		return s.failProcessing(ctx, op, inboxEvent, err)
+		return s.failProcessing(ctx, transaction, op, inboxEvent, err)
 	}
 
 	if err = transaction.Commit(ctx); err != nil {
@@ -133,11 +124,17 @@ func (s *SagaReplyService) ProcessSagaReply(
 
 func (s *SagaReplyService) failProcessing(
 	ctx context.Context,
+	transaction pgx.Tx,
 	op string,
 	inboxEvent models.InboxEvent,
 	processErr error,
 ) error {
-	if saveErr := s.inboxStore.SaveFailed(ctx, inboxEvent, processErr.Error()); saveErr != nil {
+	RollbackTx(ctx, transaction, s.logger, "Saga reply transaction rollback failed", s.config.Timeouts.Service)
+
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.config.Timeouts.Service)
+	defer cancel()
+
+	if saveErr := s.inboxStore.SaveFailed(saveCtx, inboxEvent, processErr.Error()); saveErr != nil {
 		s.logger.Error(ctx, "Failed to persist failed inbox event",
 			zap.String("event_id", inboxEvent.EventID.String()),
 			zap.String("consumer_group", inboxEvent.ConsumerGroup),
@@ -147,4 +144,23 @@ func (s *SagaReplyService) failProcessing(
 	}
 
 	return fmt.Errorf("%s: %w", op, processErr)
+}
+
+func (s *SagaReplyService) logSkippedEvent(
+	ctx context.Context,
+	event models.OrderStatusUpdatedEvent,
+	consumerGroup string,
+	status models.InboxEventStatus,
+) {
+	message := "Duplicate saga reply event skipped"
+	if status == models.InboxEventStatusProcessing {
+		message = "Saga reply event is already being processed"
+	}
+
+	s.logger.Info(ctx, message,
+		zap.String("event_id", event.EventID.String()),
+		zap.String("order_id", event.OrderID.String()),
+		zap.String("consumer_group", consumerGroup),
+		zap.String("inbox_status", string(status)),
+	)
 }

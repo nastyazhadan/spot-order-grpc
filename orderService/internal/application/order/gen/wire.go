@@ -19,7 +19,7 @@ import (
 type Container struct {
 	OrderService *order.OrderService
 	AuthService  *auth.AuthService
-	JWTManager   authjwt.Manager
+	JWTManager   *authjwt.Manager
 	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }

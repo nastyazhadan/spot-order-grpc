@@ -51,7 +51,7 @@ func NewContainer(ctx context.Context, marketViewer order.MarketViewer, eventPro
 type Container struct {
 	OrderService *order.OrderService
 	AuthService  *auth.AuthService
-	JWTManager   jwt.Manager
+	JWTManager   *jwt.Manager
 	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }

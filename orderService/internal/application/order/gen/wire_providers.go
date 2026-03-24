@@ -108,8 +108,8 @@ func provideEventProducer(store *outboxStore.OutboxStore, logger *zapLogger.Logg
 	return producer.New(store, logger)
 }
 
-func provideInboxStore(pool *pgxpool.Pool, logger *zapLogger.Logger, cfg config.OrderConfig) *inboxStore.InboxStore {
-	return inboxStore.New(pool, logger, cfg)
+func provideInboxStore(pool *pgxpool.Pool, cfg config.OrderConfig) *inboxStore.InboxStore {
+	return inboxStore.New(pool, cfg)
 }
 
 func provideRateLimiters(store *cache.Store, cfg config.OrderConfig) orderService.RateLimiters {
@@ -129,7 +129,7 @@ func provideRateLimiters(store *cache.Store, cfg config.OrderConfig) orderServic
 	}
 }
 
-func provideJWTManager(cfg config.OrderConfig) authjwt.Manager {
+func provideJWTManager(cfg config.OrderConfig) *authjwt.Manager {
 	return authjwt.NewManager(
 		cfg.Auth.JWTSecret,
 		cfg.Auth.AccessTokenTTL,
@@ -142,7 +142,7 @@ func provideRefreshTokenStore(store *cache.Store, cfg config.OrderConfig) *authS
 }
 
 func provideAuthService(
-	jwtManager authjwt.Manager,
+	jwtManager *authjwt.Manager,
 	store *authStore.RefreshTokenStore,
 	logger *zapLogger.Logger,
 ) *authService.AuthService {
@@ -336,7 +336,6 @@ func RegisterOutboxWorker(
 func RegisterKafkaConsumer(
 	lifecycle fx.Lifecycle,
 	consumer *consumer.OrderConsumer,
-	syncProducer sarama.SyncProducer,
 	consumerGroup sarama.ConsumerGroup,
 	logger *zapLogger.Logger,
 ) {
@@ -359,9 +358,25 @@ func RegisterKafkaConsumer(
 			if err := consumerGroup.Close(); err != nil {
 				logger.Error(stopCtx, "Failed to close consumer group", zap.Error(err))
 			}
+
+			return nil
+		},
+	})
+}
+
+func RegisterKafkaProducer(
+	lifecycle fx.Lifecycle,
+	syncProducer sarama.SyncProducer,
+	logger *zapLogger.Logger,
+) {
+	lifecycle.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			logger.Info(ctx, "Kafka producer: stopping")
+
 			if err := syncProducer.Close(); err != nil {
-				logger.Error(stopCtx, "Failed to close sync producer", zap.Error(err))
+				logger.Error(ctx, "Failed to close sync producer", zap.Error(err))
 			}
+
 			return nil
 		},
 	})

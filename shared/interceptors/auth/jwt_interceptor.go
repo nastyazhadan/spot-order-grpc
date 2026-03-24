@@ -20,7 +20,11 @@ const (
 	bearerPrefix        = "bearer "
 )
 
-func UnaryServerInterceptor(jwtManager authjwt.Manager, cfg config.AuthConfig) grpc.UnaryServerInterceptor {
+type TokenParser interface {
+	ParseToken(tokenString string, expectedType authjwt.TokenType) (*authjwt.Claims, error)
+}
+
+func UnaryServerInterceptor(jwtManager TokenParser, cfg config.AuthConfig) grpc.UnaryServerInterceptor {
 	skipMethods := makeSkipMethods(cfg.SkipMethods)
 
 	return func(

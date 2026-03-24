@@ -63,6 +63,7 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 			startGRPCServer,
 			wireGen.RegisterOutboxWorker,
 			wireGen.RegisterKafkaConsumer,
+			wireGen.RegisterKafkaProducer,
 		),
 	)
 

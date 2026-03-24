@@ -2,6 +2,7 @@ package inbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,21 +14,18 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
 
 type InboxStore struct {
 	pool   *pgxpool.Pool
-	logger *zapLogger.Logger
 	config config.OrderConfig
 }
 
-func New(pool *pgxpool.Pool, logger *zapLogger.Logger, cfg config.OrderConfig) *InboxStore {
+func New(pool *pgxpool.Pool, cfg config.OrderConfig) *InboxStore {
 	return &InboxStore{
 		pool:   pool,
-		logger: logger,
 		config: cfg,
 	}
 }
@@ -36,7 +34,7 @@ func (s *InboxStore) BeginProcessing(
 	ctx context.Context,
 	transaction pgx.Tx,
 	event models.InboxEvent,
-) (bool, error) {
+) (bool, models.InboxEventStatus, error) {
 	const op = "InboxStore.BeginProcessing"
 
 	ctx, span := tracing.StartSpan(ctx, "inbox.begin_processing",
@@ -48,19 +46,48 @@ func (s *InboxStore) BeginProcessing(
 	)
 	defer span.End()
 
+	started, status, err := s.tryStartProcessing(ctx, transaction, event)
+	if err == nil {
+		return started, status, nil
+	}
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		tracing.RecordError(span, err)
+		return false, "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	currentStatus, err := s.getCurrentStatus(ctx, transaction, event.EventID, event.ConsumerGroup)
+	if err != nil {
+		tracing.RecordError(span, err)
+		return false, "", fmt.Errorf("%s: get current inbox status: %w", op, err)
+	}
+
+	return false, currentStatus, nil
+}
+
+func (s *InboxStore) tryStartProcessing(
+	ctx context.Context,
+	transaction pgx.Tx,
+	event models.InboxEvent,
+) (bool, models.InboxEventStatus, error) {
+	const op = "InboxStore.tryStartProcessing"
+
 	start := time.Now()
-	command, err := transaction.Exec(ctx, `
-		INSERT INTO inbox (
-			id,
-			event_id,
-			topic,
-			consumer_group,
-			payload,
-			status
-		)
+
+	var status models.InboxEventStatus
+	err := transaction.QueryRow(ctx, `
+		INSERT INTO inbox (id, event_id, topic, consumer_group, payload, status)
 		VALUES ($1, $2, $3, $4, $5, 'processing')
-		ON CONFLICT (event_id, consumer_group) DO NOTHING
-	`, event.ID, event.EventID, event.Topic, event.ConsumerGroup, event.Payload)
+		ON CONFLICT (event_id, consumer_group) DO UPDATE
+		SET topic = EXCLUDED.topic,
+		    payload = EXCLUDED.payload,
+		    status = 'processing',
+		    failed_at = NULL,
+		    processed_at = NULL,
+		    error_message = NULL
+		WHERE inbox.status = 'failed'
+		RETURNING status
+	`, event.ID, event.EventID, event.Topic, event.ConsumerGroup, event.Payload).Scan(&status)
 
 	metrics.ObserveWithTrace(ctx,
 		metrics.DBQueryDuration.WithLabelValues(s.config.Service.Name, "inbox.begin_processing"),
@@ -68,15 +95,38 @@ func (s *InboxStore) BeginProcessing(
 	)
 
 	if err != nil {
-		tracing.RecordError(span, err)
-		return false, fmt.Errorf("%s: %w", op, err)
+		return false, "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	if command.RowsAffected() == 0 {
-		return false, nil
+	return true, status, nil
+}
+
+func (s *InboxStore) getCurrentStatus(
+	ctx context.Context,
+	transaction pgx.Tx,
+	eventID uuid.UUID,
+	consumerGroup string,
+) (models.InboxEventStatus, error) {
+	const op = "InboxStore.getCurrentStatus"
+
+	start := time.Now()
+
+	var status models.InboxEventStatus
+	err := transaction.QueryRow(ctx, `
+		SELECT status FROM inbox
+		WHERE event_id = $1 AND consumer_group = $2
+	`, eventID, consumerGroup).Scan(&status)
+
+	metrics.ObserveWithTrace(ctx,
+		metrics.DBQueryDuration.WithLabelValues(s.config.Service.Name, "inbox.get_current_status"),
+		time.Since(start).Seconds(),
+	)
+
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	return true, nil
+	return status, nil
 }
 
 func (s *InboxStore) MarkProcessed(
@@ -96,13 +146,13 @@ func (s *InboxStore) MarkProcessed(
 	defer span.End()
 
 	start := time.Now()
-	_, err := transaction.Exec(ctx, `
+	result, err := transaction.Exec(ctx, `
 		UPDATE inbox
 		SET status = 'processed',
-		    processed_at = NOW(),
-		    error_message = NULL
-		WHERE event_id = $1
-		  AND consumer_group = $2
+	    	processed_at = NOW(),
+	    	failed_at = NULL,
+	    	error_message = NULL
+		WHERE event_id = $1 AND consumer_group = $2 AND status = 'processing'
 	`, eventID, consumerGroup)
 
 	metrics.ObserveWithTrace(ctx,
@@ -113,6 +163,9 @@ func (s *InboxStore) MarkProcessed(
 	if err != nil {
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
+	}
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("%s: expected to update 1 row, updated %d", op, result.RowsAffected())
 	}
 
 	return nil
@@ -135,7 +188,7 @@ func (s *InboxStore) SaveFailed(
 	defer span.End()
 
 	start := time.Now()
-	_, err := s.pool.Exec(ctx, `
+	result, err := s.pool.Exec(ctx, `
 		INSERT INTO inbox (id, event_id, topic, consumer_group, payload, status, failed_at, error_message)
 		VALUES ($1, $2, $3, $4, $5, 'failed', NOW(), $6)
 		ON CONFLICT (event_id, consumer_group)
@@ -156,6 +209,9 @@ func (s *InboxStore) SaveFailed(
 	if err != nil {
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
+	}
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("%s: expected to affect 1 row, affected %d", op, result.RowsAffected())
 	}
 
 	return nil

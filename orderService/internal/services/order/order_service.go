@@ -23,10 +23,6 @@ import (
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
-type TransactionManager interface {
-	Begin(ctx context.Context) (pgx.Tx, error)
-}
-
 type OrderService struct {
 	transactionManager TransactionManager
 	saver              Saver
@@ -46,6 +42,10 @@ type Config struct {
 type RateLimiters struct {
 	Create RateLimiter
 	Get    RateLimiter
+}
+
+type TransactionManager interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
 type Saver interface {
@@ -239,11 +239,7 @@ func (s *OrderService) saveOrder(
 		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: begin transaction: %w", op, err)
 	}
 
-	defer func() {
-		if rollbackErr := transaction.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			s.logger.Error(ctx, "saveOrder: transaction rollback failed", zap.Error(rollbackErr))
-		}
-	}()
+	defer RollbackTx(ctx, transaction, s.logger, "saveOrder: transaction rollback failed", s.config.Timeout)
 
 	if err = s.saver.SaveOrder(ctx, transaction, order); err != nil {
 		tracing.RecordError(span, err)
@@ -344,4 +340,18 @@ func (s *OrderService) fetchOrder(
 
 func attributeUUID(key string, id uuid.UUID) attribute.KeyValue {
 	return attribute.String(key, id.String())
+}
+
+func RollbackTx(ctx context.Context,
+	transaction pgx.Tx,
+	logger *zapLogger.Logger,
+	message string,
+	timeout time.Duration,
+) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	defer cancel()
+
+	if err := transaction.Rollback(cleanupCtx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		logger.Error(cleanupCtx, message, zap.Error(err))
+	}
 }

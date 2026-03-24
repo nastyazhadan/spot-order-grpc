@@ -61,6 +61,10 @@ func NewWorker(
 	}
 }
 
+func (w *Worker) newOperationContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(parent), w.batchTimeout)
+}
+
 // Run запускает цикл опроса outbox. Блокирует до отмены ctx.
 // Запускается в отдельной горутине из Fx OnStart
 // Работают два независимых тикера:
@@ -96,19 +100,19 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 func (w *Worker) processBatch(ctx context.Context) {
-	batchCtx, cancel := context.WithTimeout(ctx, w.batchTimeout)
+	claimCtx, cancel := context.WithTimeout(ctx, w.batchTimeout)
 	defer cancel()
 
-	ctx, span := tracing.StartSpan(batchCtx, "outbox.worker.process_batch",
+	claimCtx, span := tracing.StartSpan(claimCtx, "outbox.worker.process_batch",
 		trace.WithAttributes(attribute.Int("batch.max_size", w.batchSize)),
 	)
 	defer span.End()
 
 	start := time.Now()
-	events, err := w.store.ClaimPendingEvents(ctx, w.batchSize)
+	events, err := w.store.ClaimPendingEvents(claimCtx, w.batchSize)
 	if err != nil {
 		tracing.RecordError(span, err)
-		w.logger.Error(ctx, "Failed to fetch outbox events", zap.Error(err))
+		w.logger.Error(claimCtx, "Failed to fetch outbox events", zap.Error(err))
 		return
 	}
 
@@ -122,29 +126,31 @@ func (w *Worker) processBatch(ctx context.Context) {
 		w.processEvent(ctx, event)
 	}
 
-	elapsed := time.Since(start).Seconds()
 	metrics.ObserveWithTrace(ctx,
 		metrics.OutboxWorkerDuration.WithLabelValues(w.cfg.Service.Name),
-		elapsed,
+		time.Since(start).Seconds(),
 	)
 }
 
 func (w *Worker) releaseStuck(ctx context.Context) {
-	ctx, span := tracing.StartSpan(ctx, "outbox.worker.release_stuck")
+	releaseCtx, cancel := w.newOperationContext(ctx)
+	defer cancel()
+
+	releaseCtx, span := tracing.StartSpan(releaseCtx, "outbox.worker.release_stuck")
 	defer span.End()
 
 	stuckBefore := time.Now().UTC().Add(-w.cfg.Kafka.Outbox.ProcessingTimeout)
 
-	released, err := w.store.ReleaseStuckEvents(ctx, stuckBefore)
+	released, err := w.store.ReleaseStuckEvents(releaseCtx, stuckBefore)
 	if err != nil {
 		tracing.RecordError(span, err)
-		w.logger.Error(ctx, "Failed to release stuck outbox events", zap.Error(err))
+		w.logger.Error(releaseCtx, "Failed to release stuck outbox events", zap.Error(err))
 		return
 	}
 
 	if released > 0 {
 		span.SetAttributes(attribute.Int64("released_count", released))
-		w.logger.Warn(ctx, "Released stuck outbox events back to pending",
+		w.logger.Warn(releaseCtx, "Released stuck outbox events back to pending",
 			zap.Int64("count", released),
 			zap.Time("stuck_before", stuckBefore),
 		)
@@ -153,7 +159,10 @@ func (w *Worker) releaseStuck(ctx context.Context) {
 }
 
 func (w *Worker) processEvent(ctx context.Context, event models.OutboxEvent) {
-	ctx, span := tracing.StartSpan(ctx, "outbox.worker.publish_event",
+	sendCtx, cancel := context.WithTimeout(ctx, w.batchTimeout)
+	defer cancel()
+
+	sendCtx, span := tracing.StartSpan(sendCtx, "outbox.worker.publish_event",
 		trace.WithAttributes(
 			attribute.String("event_type", event.EventType),
 			attribute.String("aggregate_id", event.AggregateID.String()),
@@ -162,17 +171,19 @@ func (w *Worker) processEvent(ctx context.Context, event models.OutboxEvent) {
 	)
 	defer span.End()
 
-	if err := w.publisher.Send(ctx, w.messageKey(event), event.Payload); err != nil {
+	if err := w.publisher.Send(sendCtx, w.messageKey(event), event.Payload); err != nil {
 		tracing.RecordError(span, err)
-
 		w.handleSendError(ctx, event, err)
 		return
 	}
 
-	if err := w.store.MarkPublished(ctx, event); err != nil {
+	stateCtx, stateCancel := w.newOperationContext(ctx)
+	defer stateCancel()
+
+	if err := w.store.MarkPublished(stateCtx, event); err != nil {
 		tracing.RecordError(span, err)
 
-		w.logger.Error(ctx, "Published to Kafka but failed to mark outbox event as published — possible duplicate",
+		w.logger.Error(stateCtx, "Published to Kafka but failed to mark outbox event as published — possible duplicate",
 			zap.String("outbox_id", event.ID.String()),
 			zap.String("event_id", event.EventID.String()),
 			zap.Error(err),
@@ -182,7 +193,7 @@ func (w *Worker) processEvent(ctx context.Context, event models.OutboxEvent) {
 
 	metrics.OutboxEventsTotal.WithLabelValues(w.cfg.Service.Name, event.EventType, "published").Inc()
 
-	w.logger.Info(ctx, "Outbox event published",
+	w.logger.Info(stateCtx, "Outbox event published",
 		zap.String("event_type", event.EventType),
 		zap.String("aggregate_id", event.AggregateID.String()),
 		zap.String("event_id", event.EventID.String()),
@@ -190,18 +201,21 @@ func (w *Worker) processEvent(ctx context.Context, event models.OutboxEvent) {
 }
 
 func (w *Worker) handleSendError(ctx context.Context, event models.OutboxEvent, sendErr error) {
+	stateCtx, cancel := w.newOperationContext(ctx)
+	defer cancel()
+
 	nextRetryCount := event.RetryCount + 1
 	errText := sendErr.Error()
 
 	if nextRetryCount >= w.maxRetries {
-		w.logger.Error(ctx, "Outbox event exhausted retries, marking as failed",
+		w.logger.Error(stateCtx, "Outbox event exhausted retries, marking as failed",
 			zap.String("event_type", event.EventType),
 			zap.String("aggregate_id", event.AggregateID.String()),
 			zap.Int("retry_count", event.RetryCount),
 			zap.Error(sendErr),
 		)
-		if markErr := w.store.MarkFailed(ctx, event, errText); markErr != nil {
-			w.logger.Error(ctx, "Failed to mark outbox event as failed",
+		if markErr := w.store.MarkFailed(stateCtx, event, errText); markErr != nil {
+			w.logger.Error(stateCtx, "Failed to mark outbox event as failed",
 				zap.String("outbox_id", event.ID.String()),
 				zap.Error(markErr),
 			)
@@ -212,15 +226,15 @@ func (w *Worker) handleSendError(ctx context.Context, event models.OutboxEvent, 
 	backoff := time.Duration(nextRetryCount) * w.pollInterval
 	nextRetryAt := time.Now().UTC().Add(backoff)
 
-	if retryErr := w.store.ScheduleRetry(ctx, event, nextRetryAt, errText); retryErr != nil {
-		w.logger.Error(ctx, "Failed to schedule retry for outbox event",
+	if retryErr := w.store.ScheduleRetry(stateCtx, event, nextRetryAt, errText); retryErr != nil {
+		w.logger.Error(stateCtx, "Failed to schedule retry for outbox event",
 			zap.String("outbox_id", event.ID.String()),
 			zap.Error(retryErr),
 		)
 		return
 	}
 
-	w.logger.Warn(ctx, "Failed to publish outbox event, scheduled retry",
+	w.logger.Warn(stateCtx, "Failed to publish outbox event, scheduled retry",
 		zap.String("event_type", event.EventType),
 		zap.String("aggregate_id", event.AggregateID.String()),
 		zap.Int("retry_count", nextRetryCount),
