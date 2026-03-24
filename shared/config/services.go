@@ -111,9 +111,11 @@ type TopicsConfig struct {
 }
 
 type OutboxConfig struct {
-	PollInterval time.Duration `mapstructure:"poll_interval"`
-	BatchSize    int           `mapstructure:"batch_size"`
-	MaxRetries   int           `mapstructure:"max_retries"`
+	PollInterval      time.Duration `mapstructure:"poll_interval"`
+	BatchSize         int           `mapstructure:"batch_size"`
+	BatchTimeout      time.Duration `mapstructure:"batch_timeout"`
+	MaxRetries        int           `mapstructure:"max_retries"`
+	ProcessingTimeout time.Duration `mapstructure:"processing_timeout"`
 }
 
 type RateLimiterByUserConfig struct {

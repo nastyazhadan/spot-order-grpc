@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -24,15 +23,19 @@ import (
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
+type TransactionManager interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
 type OrderService struct {
-	pool          *pgxpool.Pool
-	saver         Saver
-	getter        Getter
-	marketViewer  MarketViewer
-	rateLimiters  RateLimiters
-	config        Config
-	eventProducer EventProducer
-	logger        *zapLogger.Logger
+	transactionManager TransactionManager
+	saver              Saver
+	getter             Getter
+	marketViewer       MarketViewer
+	rateLimiters       RateLimiters
+	config             Config
+	eventProducer      EventProducer
+	logger             *zapLogger.Logger
 }
 
 type Config struct {
@@ -68,24 +71,24 @@ type EventProducer interface {
 }
 
 func New(
-	pool *pgxpool.Pool,
+	manager TransactionManager,
 	saver Saver,
 	getter Getter,
 	viewer MarketViewer,
 	limiters RateLimiters,
-	config Config,
+	cfg Config,
 	producer EventProducer,
 	logger *zapLogger.Logger,
 ) *OrderService {
 	return &OrderService{
-		pool:          pool,
-		saver:         saver,
-		getter:        getter,
-		marketViewer:  viewer,
-		rateLimiters:  limiters,
-		config:        config,
-		eventProducer: producer,
-		logger:        logger,
+		transactionManager: manager,
+		saver:              saver,
+		getter:             getter,
+		marketViewer:       viewer,
+		rateLimiters:       limiters,
+		config:             cfg,
+		eventProducer:      producer,
+		logger:             logger,
 	}
 }
 
@@ -212,7 +215,7 @@ func (s *OrderService) validateMarket(
 	return nil
 }
 
-// saveOrder реализует паттерн Transactional outbox
+// saveOrder реализует паттерн Transactional outbox, оркестрирует сагу
 func (s *OrderService) saveOrder(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -227,36 +230,10 @@ func (s *OrderService) saveOrder(
 	defer span.End()
 
 	now := time.Now().UTC()
-	orderID := uuid.New()
-	orderStatus := shared.OrderStatusCreated
-	correlationID := uuid.New()
+	order := buildOrder(userID, marketID, orderType, price, quantity, now)
+	event := buildOrderCreatedEvent(order, uuid.New(), now)
 
-	order := models.Order{
-		ID:        orderID,
-		UserID:    userID,
-		MarketID:  marketID,
-		Type:      orderType,
-		Price:     price,
-		Quantity:  quantity,
-		Status:    orderStatus,
-		CreatedAt: now,
-	}
-
-	event := models.OrderCreatedEvent{
-		EventID:       uuid.New(),
-		OrderID:       order.ID,
-		UserID:        order.UserID,
-		MarketID:      order.MarketID,
-		Type:          order.Type,
-		Price:         order.Price,
-		Quantity:      order.Quantity,
-		Status:        order.Status,
-		CorrelationID: correlationID,
-		CausationID:   nil,
-		CreatedAt:     now,
-	}
-
-	transaction, err := s.pool.Begin(ctx)
+	transaction, err := s.transactionManager.Begin(ctx)
 	if err != nil {
 		tracing.RecordError(span, err)
 		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: begin transaction: %w", op, err)
@@ -271,7 +248,7 @@ func (s *OrderService) saveOrder(
 	if err = s.saver.SaveOrder(ctx, transaction, order); err != nil {
 		tracing.RecordError(span, err)
 		if errors.Is(err, repositoryErrors.ErrOrderAlreadyExists) {
-			return uuid.Nil, shared.OrderStatusCancelled, sharedErrors.ErrAlreadyExists{ID: orderID}
+			return uuid.Nil, shared.OrderStatusCancelled, sharedErrors.ErrAlreadyExists{ID: order.ID}
 		}
 
 		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: %w", op, err)
@@ -287,7 +264,47 @@ func (s *OrderService) saveOrder(
 		return uuid.Nil, shared.OrderStatusCancelled, fmt.Errorf("%s: commit transaction: %w", op, err)
 	}
 
-	return orderID, orderStatus, nil
+	return order.ID, order.Status, nil
+}
+
+func buildOrder(
+	userID uuid.UUID,
+	marketID uuid.UUID,
+	orderType shared.OrderType,
+	price shared.Decimal,
+	quantity int64,
+	now time.Time,
+) models.Order {
+	return models.Order{
+		ID:        uuid.New(),
+		UserID:    userID,
+		MarketID:  marketID,
+		Type:      orderType,
+		Price:     price,
+		Quantity:  quantity,
+		Status:    shared.OrderStatusCreated,
+		CreatedAt: now,
+	}
+}
+
+func buildOrderCreatedEvent(
+	order models.Order,
+	correlationID uuid.UUID,
+	now time.Time,
+) models.OrderCreatedEvent {
+	return models.OrderCreatedEvent{
+		EventID:       uuid.New(),
+		OrderID:       order.ID,
+		UserID:        order.UserID,
+		MarketID:      order.MarketID,
+		Type:          order.Type,
+		Price:         order.Price,
+		Quantity:      order.Quantity,
+		Status:        order.Status,
+		CorrelationID: correlationID,
+		CausationID:   nil,
+		CreatedAt:     now,
+	}
 }
 
 func (s *OrderService) fetchOrder(

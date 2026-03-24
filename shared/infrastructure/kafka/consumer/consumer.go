@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -14,7 +15,7 @@ import (
 )
 
 type DLQPublisher interface {
-	Send(ctx context.Context, key, value []byte) error
+	SendMessage(ctx context.Context, msg kafka.Message) error
 }
 
 type MessageHandler func(ctx context.Context, msg kafka.Message) error
@@ -29,7 +30,8 @@ type consumer struct {
 	middlewares []Middleware
 }
 
-func New(group sarama.ConsumerGroup,
+func New(
+	group sarama.ConsumerGroup,
 	topics []string,
 	name string,
 	logger *zapLogger.Logger,
@@ -106,41 +108,75 @@ func RetryWithDLQMiddleware(
 							continue
 						}
 					}
-
-					metrics.KafkaMessagesConsumedTotal.
-						WithLabelValues(serviceName, msg.Topic, "dlq").Inc()
-
-					if dlqPublisher != nil {
-						if dlqErr := dlqPublisher.Send(ctx, msg.Key, msg.Value); dlqErr != nil {
-							logger.Error(ctx, "Failed to send message to DLQ",
-								zap.String("topic", msg.Topic),
-								zap.Error(dlqErr),
-							)
-							return dlqErr
-						}
-
-						logger.Error(ctx, "Message sent to DLQ after all retries",
-							zap.String("topic", msg.Topic),
-							zap.Int("retries", maxRetries),
-							zap.Error(lastErr),
-						)
-
-						return nil
-					}
-
-					logger.Error(ctx, "Message processing failed after all retries (no DLQ configured)",
-						zap.String("topic", msg.Topic),
-						zap.Int("retries", maxRetries),
-						zap.Error(lastErr),
-					)
-
-					return lastErr
+					return sendToDLQ(ctx, msg, serviceName, dlqPublisher, logger, lastErr, maxRetries)
 				}
-
 				return nil
 			}
-
 			return lastErr
 		}
+	}
+}
+
+func sendToDLQ(
+	ctx context.Context,
+	msg kafka.Message,
+	serviceName string,
+	dlqPublisher DLQPublisher,
+	logger *zapLogger.Logger,
+	lastErr error,
+	retryCount int,
+) error {
+	if dlqPublisher == nil {
+		logger.Error(ctx, "Message processing failed (no DLQ configured)",
+			zap.String("topic", msg.Topic),
+			zap.Int("retries", retryCount),
+			zap.Error(lastErr),
+		)
+		return lastErr
+	}
+
+	dlqMessage := buildDLQMessage(msg, lastErr, retryCount)
+
+	if dlqError := dlqPublisher.SendMessage(ctx, dlqMessage); dlqError != nil {
+		logger.Error(ctx, "Failed to send message to DLQ",
+			zap.String("topic", msg.Topic),
+			zap.Error(dlqError),
+		)
+		return dlqError
+	}
+
+	metrics.KafkaMessagesConsumedTotal.WithLabelValues(serviceName, msg.Topic, "dlq").Inc()
+
+	logger.Error(ctx, "Message sent to DLQ after all retries",
+		zap.String("topic", msg.Topic),
+		zap.Int("retries", retryCount),
+		zap.Error(lastErr),
+	)
+
+	return nil
+}
+
+func buildDLQMessage(msg kafka.Message, lastErr error, retryCount int) kafka.Message {
+	headers := make(map[string][]byte, len(msg.Headers)+3)
+
+	for key, value := range msg.Headers {
+		copied := make([]byte, len(value))
+		copy(copied, value)
+		headers[key] = copied
+	}
+
+	headers["dlq-original-topic"] = []byte(msg.Topic)
+	headers["dlq-error"] = []byte(lastErr.Error())
+	headers["dlq-retry-count"] = []byte(strconv.Itoa(retryCount))
+
+	return kafka.Message{
+		Headers:        headers,
+		Timestamp:      msg.Timestamp,
+		BlockTimestamp: msg.BlockTimestamp,
+		Key:            msg.Key,
+		Value:          msg.Value,
+		Topic:          msg.Topic,
+		Partition:      msg.Partition,
+		Offset:         msg.Offset,
 	}
 }

@@ -18,10 +18,6 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 )
 
-type TransactionManager interface {
-	Begin(ctx context.Context) (pgx.Tx, error)
-}
-
 type InboxWriter interface {
 	BeginProcessing(ctx context.Context, transaction pgx.Tx, event models.InboxEvent) (bool, error)
 	MarkProcessed(ctx context.Context, transaction pgx.Tx, eventID uuid.UUID, consumerGroup string) error
@@ -64,6 +60,12 @@ func (s *SagaReplyService) ProcessSagaReply(
 	event models.OrderStatusUpdatedEvent,
 ) error {
 	const op = "SagaReplyService.ProcessSagaReply"
+
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.config.Timeouts.Service)
+		defer cancel()
+	}
 
 	ctx, span := tracing.StartSpan(ctx, "saga_reply.process",
 		trace.WithAttributes(
@@ -113,12 +115,12 @@ func (s *SagaReplyService) ProcessSagaReply(
 
 	if err = s.orderStatusStore.UpdateOrderStatus(ctx, transaction, event.OrderID, event.NewStatus); err != nil {
 		tracing.RecordError(span, err)
-		return s.failProcessing(ctx, op, transaction, inboxEvent, err)
+		return s.failProcessing(ctx, op, inboxEvent, err)
 	}
 
 	if err = s.inboxStore.MarkProcessed(ctx, transaction, event.EventID, consumerGroup); err != nil {
 		tracing.RecordError(span, err)
-		return s.failProcessing(ctx, op, transaction, inboxEvent, err)
+		return s.failProcessing(ctx, op, inboxEvent, err)
 	}
 
 	if err = transaction.Commit(ctx); err != nil {
@@ -132,14 +134,9 @@ func (s *SagaReplyService) ProcessSagaReply(
 func (s *SagaReplyService) failProcessing(
 	ctx context.Context,
 	op string,
-	transaction pgx.Tx,
 	inboxEvent models.InboxEvent,
 	processErr error,
 ) error {
-	if rollbackErr := transaction.Rollback(ctx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-		s.logger.Error(ctx, "Saga reply transaction rollback failed", zap.Error(rollbackErr))
-	}
-
 	if saveErr := s.inboxStore.SaveFailed(ctx, inboxEvent, processErr.Error()); saveErr != nil {
 		s.logger.Error(ctx, "Failed to persist failed inbox event",
 			zap.String("event_id", inboxEvent.EventID.String()),

@@ -211,6 +211,7 @@ func provideOutboxWorker(
 		publisher,
 		cfg.Kafka.Outbox.PollInterval,
 		cfg.Kafka.Outbox.BatchSize,
+		cfg.Kafka.Outbox.BatchTimeout,
 		cfg.Kafka.Outbox.MaxRetries,
 		logger,
 		cfg,

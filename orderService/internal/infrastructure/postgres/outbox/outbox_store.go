@@ -243,6 +243,43 @@ func (s *OutboxStore) MarkFailed(ctx context.Context, event models.OutboxEvent, 
 	return nil
 }
 
+// ReleaseStuckEvents сбрасывает застрявшие события обратно в статус pending.
+// Застрявшее событие — то, которое осталось в processing дольше processingTimeout.
+func (s *OutboxStore) ReleaseStuckEvents(ctx context.Context, stuckBefore time.Time) (int64, error) {
+	const op = "OutboxStore.ReleaseStuckEvents"
+
+	ctx, span := tracing.StartSpan(ctx, "outbox.release_stuck",
+		trace.WithAttributes(
+			attribute.String("stuck_before", stuckBefore.String()),
+		),
+	)
+	defer span.End()
+
+	start := time.Now()
+	result, err := s.pool.Exec(ctx, `
+		UPDATE outbox
+		SET status    = 'pending',
+		    locked_at = NULL
+		WHERE status = 'processing'
+		  AND locked_at < $1
+	`, stuckBefore)
+
+	metrics.ObserveWithTrace(ctx,
+		metrics.DBQueryDuration.WithLabelValues(s.config.Service.Name, "outbox.release_stuck"),
+		time.Since(start).Seconds(),
+	)
+
+	if err != nil {
+		tracing.RecordError(span, err)
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+
+	released := result.RowsAffected()
+	span.SetAttributes(attribute.Int64("released_count", released))
+
+	return released, nil
+}
+
 func (s *OutboxStore) countPendingEvents(ctx context.Context) (int64, error) {
 	var pendingCount int64
 

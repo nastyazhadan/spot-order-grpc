@@ -39,6 +39,17 @@ func New(
 }
 
 func (p *producer) Send(ctx context.Context, key, value []byte) error {
+	return p.sendMessage(ctx, kafka.Message{
+		Key:   key,
+		Value: value,
+	})
+}
+
+func (p *producer) SendMessage(ctx context.Context, msg kafka.Message) error {
+	return p.sendMessage(ctx, msg)
+}
+
+func (p *producer) sendMessage(ctx context.Context, msg kafka.Message) error {
 	ctx, span := otel.Tracer(instrumentationName).Start(
 		ctx,
 		"kafka.produce",
@@ -52,18 +63,28 @@ func (p *producer) Send(ctx context.Context, key, value []byte) error {
 	defer span.End()
 
 	carrier := kafka.HeadersCarrier{}
+
+	for key, value := range msg.Headers {
+		copied := make([]byte, len(value))
+		copy(copied, value)
+		carrier[key] = copied
+	}
+
 	otel.GetTextMapPropagator().Inject(ctx, carrier)
 
 	headers := make([]sarama.RecordHeader, 0, len(carrier))
-	for k, v := range carrier {
-		headers = append(headers, sarama.RecordHeader{Key: []byte(k), Value: v})
+	for key, value := range carrier {
+		headers = append(headers, sarama.RecordHeader{
+			Key:   []byte(key),
+			Value: value,
+		})
 	}
 
 	start := time.Now()
 	partition, offset, err := p.syncProducer.SendMessage(&sarama.ProducerMessage{
 		Topic:   p.topic,
-		Key:     sarama.ByteEncoder(key),
-		Value:   sarama.ByteEncoder(value),
+		Key:     sarama.ByteEncoder(msg.Key),
+		Value:   sarama.ByteEncoder(msg.Value),
 		Headers: headers,
 	})
 	elapsed := time.Since(start).Seconds()
@@ -79,6 +100,7 @@ func (p *producer) Send(ctx context.Context, key, value []byte) error {
 		p.logger.Error(ctx, "Failed to publish Kafka message",
 			zap.String("topic", p.topic),
 			zap.Error(err))
+
 		return err
 	}
 
@@ -88,7 +110,7 @@ func (p *producer) Send(ctx context.Context, key, value []byte) error {
 		zap.String("topic", p.topic),
 		zap.Int32("partition", partition),
 		zap.Int64("offset", offset),
-		zap.String("key", string(key)),
+		zap.String("key", string(msg.Key)),
 	)
 
 	return nil

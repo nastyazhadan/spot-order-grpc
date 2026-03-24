@@ -88,7 +88,9 @@ order:
     outbox:
       poll_interval: 1s
       batch_size: 100
+      batch_timeout: 5s
       max_retries: 5
+      processing_timeout: 5m
 
 
 spot:
