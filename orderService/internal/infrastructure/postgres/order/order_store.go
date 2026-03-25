@@ -80,14 +80,16 @@ func (o *OrderStore) SaveOrder(ctx context.Context, transaction pgx.Tx, order mo
 	return nil
 }
 
-func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, error) {
+func (o *OrderStore) GetOrder(ctx context.Context, id, userID uuid.UUID) (models.Order, error) {
 	const op = "infrastructure.OrderStore.GetOrder"
 
 	ctx, span := tracing.StartSpan(ctx, "postgres.get_order",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
 			attribute.String("db.system", databaseName),
-			attribute.String("order_id", id.String())),
+			attribute.String("order_id", id.String()),
+			attribute.String("user_id", userID.String()),
+		),
 	)
 	defer span.End()
 
@@ -102,8 +104,8 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 	rows, err := o.pool.Query(ctx,
 		`SELECT id, user_id, market_id, type, price, quantity, status, created_at
 		 FROM orders
-		 WHERE id = $1`,
-		id,
+		 WHERE id = $1 AND user_id = $2`,
+		id, userID,
 	)
 	if err != nil {
 		tracing.RecordError(span, err)
@@ -125,6 +127,7 @@ func (o *OrderStore) GetOrder(ctx context.Context, id uuid.UUID) (models.Order, 
 		tracing.RecordError(span, err)
 		return models.Order{}, fmt.Errorf("%s: %w", op, err)
 	}
+
 	span.SetAttributes(
 		attribute.String("order_status", order.Status.String()),
 		attribute.String("order_type", order.Type.String()),

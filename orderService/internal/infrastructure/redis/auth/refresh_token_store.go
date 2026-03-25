@@ -8,10 +8,9 @@ import (
 	"github.com/google/uuid"
 	redisGo "github.com/redis/go-redis/v9"
 
+	"github.com/nastyazhadan/spot-order-grpc/shared/auth"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 )
-
-const refreshTokenPrefix = "refresh"
 
 // Атомарно проверяет старый refresh token, записывает новый с TTL и удаляет старый
 var rotateScript = redisGo.NewScript(`
@@ -40,13 +39,17 @@ func New(store *cache.Store, ttl time.Duration) *RefreshTokenStore {
 	}
 }
 
+func (s *RefreshTokenStore) Save(ctx context.Context, userID uuid.UUID, jti string) error {
+	return auth.Save(ctx, s.store, s.ttl, userID, jti)
+}
+
 func (s *RefreshTokenStore) Rotate(ctx context.Context, userID uuid.UUID, oldJTI, newJTI string) (bool, error) {
 	result, err := rotateScript.Run(
 		ctx,
 		s.store.ScriptRunner(),
 		[]string{
-			s.key(userID, oldJTI),
-			s.key(userID, newJTI),
+			auth.Key(userID, oldJTI),
+			auth.Key(userID, newJTI),
 		},
 		s.ttl.Milliseconds(),
 	).Int()
@@ -55,8 +58,4 @@ func (s *RefreshTokenStore) Rotate(ctx context.Context, userID uuid.UUID, oldJTI
 	}
 
 	return result == 1, nil
-}
-
-func (s *RefreshTokenStore) key(userID uuid.UUID, jti string) string {
-	return fmt.Sprintf("%s:%s:%s", refreshTokenPrefix, userID, jti)
 }

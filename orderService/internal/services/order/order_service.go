@@ -53,7 +53,7 @@ type Saver interface {
 }
 
 type Getter interface {
-	GetOrder(ctx context.Context, id uuid.UUID) (models.Order, error)
+	GetOrder(ctx context.Context, id, userID uuid.UUID) (models.Order, error)
 }
 
 type MarketViewer interface {
@@ -315,7 +315,7 @@ func (s *OrderService) fetchOrder(
 	)
 	defer span.End()
 
-	order, err := s.getter.GetOrder(ctx, orderID)
+	order, err := s.getter.GetOrder(ctx, orderID, userID)
 	if err != nil {
 		tracing.RecordError(span, err)
 		if errors.Is(err, repositoryErrors.ErrOrderNotFound) {
@@ -324,16 +324,11 @@ func (s *OrderService) fetchOrder(
 
 		return models.Order{}, err
 	}
+
 	span.SetAttributes(
 		attribute.String("order_status", order.Status.String()),
 		attribute.String("order_type", order.Type.String()),
 	)
-
-	if order.UserID != userID {
-		err = sharedErrors.ErrNotFound{ID: orderID}
-		tracing.RecordError(span, err)
-		return models.Order{}, err
-	}
 
 	return order, nil
 }

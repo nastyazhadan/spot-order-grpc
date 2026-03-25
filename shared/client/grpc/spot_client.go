@@ -63,8 +63,9 @@ func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) (
 
 func (c *SpotClient) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
 	response, err := c.getMarketByIDBreaker.Execute(func() (*proto.GetMarketByIDResponse, error) {
-		return c.api.GetMarketById(ctx, &proto.GetMarketByIDRequest{
-			MarketId: id.String(),
+		return c.api.GetMarketByID(ctx, &proto.GetMarketByIDRequest{
+			MarketId:  id.String(),
+			UserRoles: []proto.UserRole{proto.UserRole_ROLE_USER},
 		})
 	})
 	if err != nil {

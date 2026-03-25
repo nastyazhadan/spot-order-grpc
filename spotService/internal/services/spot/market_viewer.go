@@ -112,7 +112,7 @@ func (s *MarketViewer) GetMarketByID(
 	)
 	defer span.End()
 
-	market, err := s.getMarket(ctx, id)
+	market, err := s.getMarketActual(ctx, id)
 	if err != nil {
 		tracing.RecordError(span, err)
 		return models.Market{}, err
@@ -127,19 +127,10 @@ func (s *MarketViewer) GetMarketByID(
 	return market, nil
 }
 
-func (s *MarketViewer) getMarket(ctx context.Context, id uuid.UUID) (models.Market, error) {
-	const op = "MarketViewer.getMarket"
+func (s *MarketViewer) getMarketActual(ctx context.Context, id uuid.UUID) (models.Market, error) {
+	const op = "MarketViewer.getMarketFresh"
 
-	market, err := s.marketCacheRepository.GetByID(ctx, id)
-	if err == nil {
-		return market, nil
-	}
-
-	if !errors.Is(err, repositoryErrors.ErrMarketNotFound) {
-		s.logger.Error(ctx, "internal cache error", zap.Error(err))
-	}
-
-	market, err = s.marketRepository.GetByID(ctx, id)
+	market, err := s.marketRepository.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, repositoryErrors.ErrMarketNotFound) {
 			return models.Market{}, sharedErrors.ErrMarketNotFound{ID: id}
@@ -149,7 +140,8 @@ func (s *MarketViewer) getMarket(ctx context.Context, id uuid.UUID) (models.Mark
 	}
 
 	if err = s.marketCacheRepository.SetByID(ctx, market, s.cacheTTL); err != nil {
-		s.logger.Warn(ctx, "failed to cache market by id", zap.Error(err))
+		s.logger.Warn(ctx, "failed to cache market by id", zap.Error(err),
+			zap.String("market_id", market.ID.String()))
 	}
 
 	return market, nil

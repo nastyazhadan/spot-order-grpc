@@ -233,7 +233,7 @@ func provideSaramaConsumerGroup(cfg config.OrderConfig) (sarama.ConsumerGroup, e
 	saramaCfg := sarama.NewConfig()
 	saramaCfg.Consumer.Group.Session.Timeout = cfg.Kafka.Consumer.SessionTimeout
 	saramaCfg.Consumer.Group.Heartbeat.Interval = cfg.Kafka.Consumer.HeartbeatInterval
-	saramaCfg.Consumer.Offsets.Initial = sarama.OffsetNewest
+	saramaCfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 
 	group, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.Kafka.Consumer.GroupID, saramaCfg)
 	if err != nil {

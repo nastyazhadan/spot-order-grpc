@@ -104,7 +104,8 @@ func (g *groupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim s
 					zap.Error(err),
 				)
 				span.End()
-				continue
+
+				return ErrStopConsumerSession
 			}
 
 			metrics.KafkaMessagesConsumedTotal.WithLabelValues(g.serviceName, message.Topic, "success").Inc()

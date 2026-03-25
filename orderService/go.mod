@@ -14,6 +14,7 @@ require (
 	github.com/google/wire v0.7.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	github.com/jackc/pgx/v5 v5.9.1
+	github.com/joho/godotenv v1.5.1
 	github.com/nastyazhadan/spot-order-grpc/protos v0.0.0-20260323211033-a7216e999bcb
 	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260323211033-a7216e999bcb
 	github.com/prometheus/client_golang v1.23.2
@@ -77,7 +78,6 @@ require (
 	github.com/jcmturner/gofork v1.7.6 // indirect
 	github.com/jcmturner/gokrb5/v8 v8.4.4 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
-	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect

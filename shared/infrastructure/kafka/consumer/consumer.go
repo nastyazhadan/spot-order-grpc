@@ -14,7 +14,10 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
 
-var ErrMessageHandledByDLQ = errors.New("message handled by dlq")
+var (
+	ErrMessageHandledByDLQ = errors.New("message handled by dlq")
+	ErrStopConsumerSession = errors.New("stop consumer session")
+)
 
 type DLQPublisher interface {
 	SendMessage(ctx context.Context, msg kafka.Message) error
@@ -39,7 +42,7 @@ func New(
 	logger *zapLogger.Logger,
 	middlewares ...Middleware,
 ) *consumer {
-	middlewares = append(middlewares, PanicRecoveryMiddleware(logger))
+	middlewares = append([]Middleware{PanicRecoveryMiddleware(logger)}, middlewares...)
 
 	return &consumer{
 		group:       group,
@@ -58,6 +61,11 @@ func (c *consumer) Consume(ctx context.Context, handler MessageHandler) error {
 		if err := c.group.Consume(ctx, c.topics, newHandler); err != nil {
 			if errors.Is(err, sarama.ErrClosedConsumerGroup) {
 				return nil
+			}
+
+			if errors.Is(err, ErrStopConsumerSession) {
+				c.logger.Warn(ctx, "Kafka consumer session stopped, restarting session")
+				continue
 			}
 
 			c.logger.Error(ctx, "Kafka consume error", zap.Error(err))

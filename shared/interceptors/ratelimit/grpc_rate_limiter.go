@@ -28,7 +28,7 @@ func OrderUnaryServerInterceptor(cfg config.OrderConfig, logger *zapLogger.Logge
 func SpotUnaryServerInterceptor(cfg config.SpotConfig, logger *zapLogger.Logger) grpc.UnaryServerInterceptor {
 	return newUnaryServerInterceptor(map[string]int{
 		spotProto.SpotInstrumentService_ViewMarkets_FullMethodName:   cfg.GRPCRateLimit.ViewMarkets,
-		spotProto.SpotInstrumentService_GetMarketById_FullMethodName: cfg.GRPCRateLimit.GetMarketByID,
+		spotProto.SpotInstrumentService_GetMarketByID_FullMethodName: cfg.GRPCRateLimit.GetMarketByID,
 	}, cfg.Service.Name, logger)
 }
 
