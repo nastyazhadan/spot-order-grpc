@@ -155,3 +155,7 @@ spot:
       batch_timeout: 5s
       max_retries: 5
       processing_timeout: 5m
+  market_poller:
+    poll_interval: 1s
+    processing_timeout: 5s
+    batch_size: 100

@@ -196,8 +196,9 @@ func provideMarketPoller(
 		store,
 		marketProducer,
 		cursorStore,
-		cfg.Kafka.Outbox.PollInterval,
-		cfg.Kafka.Outbox.BatchSize,
+		cfg.MarketPoller.PollInterval,
+		cfg.MarketPoller.ProcessingTimeout,
+		cfg.MarketPoller.BatchSize,
 		logger,
 	)
 }

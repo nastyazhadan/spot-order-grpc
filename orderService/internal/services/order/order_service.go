@@ -27,7 +27,6 @@ type OrderService struct {
 	transactionManager TransactionManager
 	saver              Saver
 	getter             Getter
-	canceler           Canceler
 	marketViewer       MarketViewer
 	blockStore         MarketBlockStore
 	rateLimiters       RateLimiters
@@ -60,10 +59,6 @@ type MarketBlockStore interface {
 	IsBlocked(ctx context.Context, marketID uuid.UUID) (bool, error)
 }
 
-type Canceler interface {
-	CancelOrderIfActive(ctx context.Context, transaction pgx.Tx, orderID uuid.UUID) (bool, error)
-}
-
 type Getter interface {
 	GetOrder(ctx context.Context, id, userID uuid.UUID) (models.Order, error)
 }
@@ -87,7 +82,6 @@ func New(
 	manager TransactionManager,
 	saver Saver,
 	getter Getter,
-	canceler Canceler,
 	viewer MarketViewer,
 	store MarketBlockStore,
 	limiters RateLimiters,
@@ -99,7 +93,6 @@ func New(
 		transactionManager: manager,
 		saver:              saver,
 		getter:             getter,
-		canceler:           canceler,
 		marketViewer:       viewer,
 		blockStore:         store,
 		rateLimiters:       limiters,
@@ -137,12 +130,10 @@ func (s *OrderService) CreateOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
-	orderID, correlationID, orderStatus, err := s.saveOrder(ctx, userID, marketID, orderType, price, quantity)
+	orderID, orderStatus, err := s.saveOrder(ctx, userID, marketID, orderType, price, quantity)
 	if err != nil {
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
-
-	orderStatus = s.checkOrderAfterCommit(ctx, marketID, orderID, correlationID, orderStatus)
 
 	metrics.OrdersCreatedTotal.WithLabelValues(s.config.ServiceName, marketID.String()).Inc()
 
@@ -305,7 +296,7 @@ func (s *OrderService) saveOrder(
 	orderType orderModel.OrderType,
 	price orderModel.Decimal,
 	quantity int64,
-) (uuid.UUID, uuid.UUID, orderModel.OrderStatus, error) {
+) (uuid.UUID, orderModel.OrderStatus, error) {
 	const op = "OrderService.saveOrder"
 
 	ctx, span := tracing.StartSpan(ctx, "order.save_order_transaction")
@@ -320,7 +311,7 @@ func (s *OrderService) saveOrder(
 	transaction, err := s.transactionManager.Begin(ctx)
 	if err != nil {
 		tracing.RecordError(span, err)
-		return uuid.Nil, uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: begin transaction: %w", op, err)
+		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: begin transaction: %w", op, err)
 	}
 
 	defer RollbackTx(ctx, transaction, s.logger, "saveOrder: transaction rollback failed", s.config.Timeout)
@@ -328,23 +319,23 @@ func (s *OrderService) saveOrder(
 	if err = s.saver.SaveOrder(ctx, transaction, order); err != nil {
 		tracing.RecordError(span, err)
 		if errors.Is(err, repositoryErrors.ErrOrderAlreadyExists) {
-			return uuid.Nil, uuid.Nil, orderModel.OrderStatusUnspecified, sharedErrors.ErrAlreadyExists{ID: order.ID}
+			return uuid.Nil, orderModel.OrderStatusUnspecified, sharedErrors.ErrAlreadyExists{ID: order.ID}
 		}
 
-		return uuid.Nil, uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
+		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if err = s.eventProducer.ProduceOrderCreated(ctx, transaction, event); err != nil {
 		tracing.RecordError(span, err)
-		return uuid.Nil, uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
+		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if err = transaction.Commit(ctx); err != nil {
 		tracing.RecordError(span, err)
-		return uuid.Nil, uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: commit transaction: %w", op, err)
+		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: commit transaction: %w", op, err)
 	}
 
-	return order.ID, correlationID, order.Status, nil
+	return order.ID, order.Status, nil
 }
 
 func RollbackTx(ctx context.Context,
@@ -359,101 +350,6 @@ func RollbackTx(ctx context.Context,
 	if err := transaction.Rollback(cleanupCtx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
 		logger.Error(cleanupCtx, message, zap.Error(err))
 	}
-}
-
-func (s *OrderService) checkOrderAfterCommit(
-	ctx context.Context,
-	marketID, orderID, correlationID uuid.UUID,
-	currentStatus orderModel.OrderStatus,
-) orderModel.OrderStatus {
-	recheckCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.config.Timeout)
-	defer cancel()
-
-	blocked, err := s.blockStore.IsBlocked(recheckCtx, marketID)
-	if err != nil {
-		s.logger.Error(recheckCtx, "Post-commit market block recheck failed",
-			zap.String("market_id", marketID.String()),
-			zap.String("order_id", orderID.String()),
-			zap.Error(err),
-		)
-		return currentStatus
-	}
-
-	if !blocked {
-		return currentStatus
-	}
-
-	cancelled, cancelErr := s.cancelOrderAfterCommit(recheckCtx, orderID, correlationID)
-	if cancelErr != nil {
-		s.logger.Error(recheckCtx, "Failed to cancel newly created order after market block",
-			zap.String("market_id", marketID.String()),
-			zap.String("order_id", orderID.String()),
-			zap.Error(cancelErr),
-		)
-		return currentStatus
-	}
-
-	if cancelled {
-		s.logger.Warn(recheckCtx, "Order was cancelled after commit because market is blocked",
-			zap.String("market_id", marketID.String()),
-			zap.String("order_id", orderID.String()),
-		)
-		return orderModel.OrderStatusCancelled
-	}
-
-	return currentStatus
-}
-
-func (s *OrderService) cancelOrderAfterCommit(
-	ctx context.Context,
-	orderID uuid.UUID,
-	correlationID uuid.UUID,
-) (bool, error) {
-	const op = "OrderService.cancelOrderAfterCommit"
-
-	ctx, span := tracing.StartSpan(ctx, "order.cancel_after_commit",
-		trace.WithAttributes(
-			attributeUUID("order_id", orderID),
-		),
-	)
-	defer span.End()
-
-	transaction, err := s.transactionManager.Begin(ctx)
-	if err != nil {
-		tracing.RecordError(span, err)
-		return false, fmt.Errorf("%s: begin transaction: %w", op, err)
-	}
-	defer RollbackTx(ctx, transaction, s.logger, "cancelOrderAfterCommit: transaction rollback failed", s.config.Timeout)
-
-	cancelled, err := s.canceler.CancelOrderIfActive(ctx, transaction, orderID)
-	if err != nil {
-		tracing.RecordError(span, err)
-		return false, fmt.Errorf("%s: %w", op, err)
-	}
-	if cancelled {
-		statusEvent := buildOrderStatusUpdatedEvent(
-			orderID,
-			orderModel.OrderStatusCancelled,
-			"market blocked during post-commit recheck",
-			correlationID,
-			nil,
-			time.Now().UTC(),
-		)
-
-		if err = s.eventProducer.ProduceOrderStatusUpdated(ctx, transaction, statusEvent); err != nil {
-			tracing.RecordError(span, err)
-			return false, fmt.Errorf("%s: produce OrderStatusUpdatedEvent: %w", op, err)
-		}
-	}
-
-	if err = transaction.Commit(ctx); err != nil {
-		tracing.RecordError(span, err)
-		return false, fmt.Errorf("%s: commit transaction: %w", op, err)
-	}
-
-	span.SetAttributes(attribute.Bool("order_cancelled", cancelled))
-
-	return cancelled, nil
 }
 
 func buildOrder(
@@ -493,25 +389,6 @@ func buildOrderCreatedEvent(
 		CorrelationID: correlationID,
 		CausationID:   nil,
 		CreatedAt:     now,
-	}
-}
-
-func buildOrderStatusUpdatedEvent(
-	orderID uuid.UUID,
-	newStatus orderModel.OrderStatus,
-	reason string,
-	correlationID uuid.UUID,
-	causationID *uuid.UUID,
-	now time.Time,
-) models.OrderStatusUpdatedEvent {
-	return models.OrderStatusUpdatedEvent{
-		EventID:       uuid.New(),
-		OrderID:       orderID,
-		NewStatus:     newStatus,
-		Reason:        reason,
-		CorrelationID: correlationID,
-		CausationID:   causationID,
-		UpdatedAt:     now,
 	}
 }
 

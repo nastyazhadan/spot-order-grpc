@@ -113,39 +113,12 @@ func (s *CompensationService) ProcessMarketStateChanged(
 	}
 
 	if !shouldProcess {
-		s.logSkippedEvent(ctx, event, consumerGroup, currentStatus)
-
-		if err = transaction.Commit(ctx); err != nil {
-			tracing.RecordError(span, err)
-			return fmt.Errorf("%s: commit skipped transaction: %w", op, err)
-		}
-
-		return nil
+		return s.handleSkippedEvent(ctx, span, transaction, event, consumerGroup, currentStatus)
 	}
 
-	if !event.Enabled || event.DeletedAt != nil {
-		if err = s.blockStore.Block(ctx, event.MarketID); err != nil {
-			tracing.RecordError(span, err)
-			return s.failProcessing(ctx, transaction, op, inboxEvent, err)
-		}
-
-		cancelledIDs, cancelError := s.orderStore.CancelActiveOrdersByMarket(ctx, transaction, event.MarketID)
-		if cancelError != nil {
-			tracing.RecordError(span, cancelError)
-			return s.failProcessing(ctx, transaction, op, inboxEvent, cancelError)
-		}
-
-		if err = s.publishCancelledOrderEvents(ctx, transaction, event, cancelledIDs); err != nil {
-			tracing.RecordError(span, err)
-			return s.failProcessing(ctx, transaction, op, inboxEvent, err)
-		}
-		span.SetAttributes(attribute.Int("orders_cancelled_count", len(cancelledIDs)))
-
-	} else {
-		if err = s.blockStore.Unblock(ctx, event.MarketID); err != nil {
-			tracing.RecordError(span, err)
-			return s.failProcessing(ctx, transaction, op, inboxEvent, err)
-		}
+	if err = s.applyCompensationTransaction(ctx, span, transaction, event); err != nil {
+		tracing.RecordError(span, err)
+		return s.failProcessing(ctx, transaction, op, inboxEvent, err)
 	}
 
 	if err = s.inboxStore.MarkProcessed(ctx, transaction, event.EventID, consumerGroup); err != nil {
@@ -157,6 +130,60 @@ func (s *CompensationService) ProcessMarketStateChanged(
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: commit transaction: %w", op, err)
 	}
+
+	if err = s.syncMarketBlockState(ctx, event); err != nil {
+		tracing.RecordError(span, err)
+		return fmt.Errorf("%s: sync market block state after commit: %w", op, err)
+	}
+
+	return nil
+}
+
+func (s *CompensationService) handleSkippedEvent(
+	ctx context.Context,
+	span trace.Span,
+	transaction pgx.Tx,
+	event sharedModels.MarketStateChangedEvent,
+	consumerGroup string,
+	currentStatus models.InboxEventStatus,
+) error {
+	s.logSkippedEvent(ctx, event, consumerGroup, currentStatus)
+
+	if err := transaction.Commit(ctx); err != nil {
+		tracing.RecordError(span, err)
+		return fmt.Errorf("commit skipped transaction: %w", err)
+	}
+
+	if currentStatus == models.InboxEventStatusProcessed {
+		if err := s.syncMarketBlockState(ctx, event); err != nil {
+			tracing.RecordError(span, err)
+			return fmt.Errorf("resync market block state for processed event: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (s *CompensationService) applyCompensationTransaction(
+	ctx context.Context,
+	span trace.Span,
+	transaction pgx.Tx,
+	event sharedModels.MarketStateChangedEvent,
+) error {
+	if event.Enabled && event.DeletedAt == nil {
+		return nil
+	}
+
+	cancelledIDs, err := s.orderStore.CancelActiveOrdersByMarket(ctx, transaction, event.MarketID)
+	if err != nil {
+		return err
+	}
+
+	if err = s.publishCancelledOrderEvents(ctx, transaction, event, cancelledIDs); err != nil {
+		return err
+	}
+
+	span.SetAttributes(attribute.Int("orders_cancelled_count", len(cancelledIDs)))
 
 	return nil
 }
@@ -229,4 +256,15 @@ func (s *CompensationService) publishCancelledOrderEvents(
 	}
 
 	return nil
+}
+
+func (s *CompensationService) syncMarketBlockState(
+	ctx context.Context,
+	event sharedModels.MarketStateChangedEvent,
+) error {
+	if !event.Enabled || event.DeletedAt != nil {
+		return s.blockStore.Block(ctx, event.MarketID)
+	}
+
+	return s.blockStore.Unblock(ctx, event.MarketID)
 }

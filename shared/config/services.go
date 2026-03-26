@@ -34,6 +34,7 @@ type SpotConfig struct {
 	Metrics       MetricsConfig           `mapstructure:"metrics"`
 	KeepAlive     KeepAliveConfig         `mapstructure:"keep_alive"`
 	Kafka         KafkaConfig             `mapstructure:"kafka"`
+	MarketPoller  MarketPollerConfig      `mapstructure:"market_poller"`
 }
 
 type ServiceConfig struct {
@@ -117,6 +118,12 @@ type OutboxConfig struct {
 	BatchTimeout      time.Duration `mapstructure:"batch_timeout"`
 	MaxRetries        int           `mapstructure:"max_retries"`
 	ProcessingTimeout time.Duration `mapstructure:"processing_timeout"`
+}
+
+type MarketPollerConfig struct {
+	PollInterval      time.Duration `mapstructure:"poll_interval"`
+	ProcessingTimeout time.Duration `mapstructure:"processing_timeout"`
+	BatchSize         int           `mapstructure:"batch_size"`
 }
 
 type RateLimiterByUserConfig struct {

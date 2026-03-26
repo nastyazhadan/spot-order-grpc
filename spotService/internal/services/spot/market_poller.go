@@ -29,15 +29,16 @@ type MarketEventProducer interface {
 }
 
 type MarketPoller struct {
-	reader       MarketReader
-	producer     MarketEventProducer
-	cursorStore  CursorStore
-	pollInterval time.Duration
-	batchSize    int
-	pollerName   string
-	lastSeenAt   time.Time
-	lastSeenID   uuid.UUID
-	logger       *zapLogger.Logger
+	reader            MarketReader
+	producer          MarketEventProducer
+	cursorStore       CursorStore
+	pollInterval      time.Duration
+	processingTimeout time.Duration
+	batchSize         int
+	pollerName        string
+	lastSeenAt        time.Time
+	lastSeenID        uuid.UUID
+	logger            *zapLogger.Logger
 }
 
 func NewMarketPoller(
@@ -45,17 +46,19 @@ func NewMarketPoller(
 	producer MarketEventProducer,
 	store CursorStore,
 	interval time.Duration,
+	timeout time.Duration,
 	size int,
 	logger *zapLogger.Logger,
 ) *MarketPoller {
 	return &MarketPoller{
-		reader:       reader,
-		producer:     producer,
-		cursorStore:  store,
-		pollInterval: interval,
-		batchSize:    size,
-		pollerName:   marketStateChangedPollerName,
-		logger:       logger,
+		reader:            reader,
+		producer:          producer,
+		cursorStore:       store,
+		pollInterval:      interval,
+		processingTimeout: timeout,
+		batchSize:         size,
+		pollerName:        marketStateChangedPollerName,
+		logger:            logger,
 	}
 }
 
@@ -65,11 +68,14 @@ func (p *MarketPoller) Run(ctx context.Context) {
 		return
 	}
 
+	p.poll(ctx)
+
 	ticker := time.NewTicker(p.pollInterval)
 	defer ticker.Stop()
 
 	p.logger.Info(ctx, "Market poller started",
 		zap.Duration("poll_interval", p.pollInterval),
+		zap.Duration("processing_timeout", p.processingTimeout),
 		zap.Int("batch_size", p.batchSize),
 		zap.Time("last_seen_at", p.lastSeenAt),
 		zap.String("last_seen_id", p.lastSeenID.String()),
@@ -103,7 +109,7 @@ func (p *MarketPoller) loadCursor(ctx context.Context) error {
 }
 
 func (p *MarketPoller) poll(ctx context.Context) {
-	pollCtx, cancel := context.WithTimeout(ctx, p.pollInterval)
+	pollCtx, cancel := context.WithTimeout(ctx, p.processingTimeout)
 	defer cancel()
 
 	for {

@@ -333,7 +333,6 @@ func provideOrderService(
 		pool,
 		store,
 		store,
-		store,
 		marketViewer,
 		blockStore,
 		rateLimiters,

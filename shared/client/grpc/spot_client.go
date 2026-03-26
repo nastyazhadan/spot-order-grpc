@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	models2 "github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 	"github.com/sony/gobreaker/v2"
 	"google.golang.org/grpc"
 
@@ -31,7 +30,7 @@ func NewSpotClient(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig,
 	}
 }
 
-func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models2.Market, error) {
+func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models.Market, error) {
 	userRoles := make([]proto.UserRole, 0, len(roles))
 	for _, role := range roles {
 		userRoles = append(userRoles, mapper.UserRoleToProto(role))
@@ -50,7 +49,7 @@ func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) (
 		return nil, err
 	}
 
-	out := make([]models2.Market, 0, len(response.GetMarkets()))
+	out := make([]models.Market, 0, len(response.GetMarkets()))
 	for _, market := range response.GetMarkets() {
 		mappedMarket, mapError := mapper.MarketFromProto(market)
 		if mapError != nil {
@@ -62,7 +61,7 @@ func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) (
 	return out, nil
 }
 
-func (c *SpotClient) GetMarketByID(ctx context.Context, id uuid.UUID) (models2.Market, error) {
+func (c *SpotClient) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
 	response, err := c.getMarketByIDBreaker.Execute(func() (*proto.GetMarketByIDResponse, error) {
 		return c.api.GetMarketByID(ctx, &proto.GetMarketByIDRequest{
 			MarketId:  id.String(),
@@ -70,12 +69,12 @@ func (c *SpotClient) GetMarketByID(ctx context.Context, id uuid.UUID) (models2.M
 		})
 	})
 	if err != nil {
-		return models2.Market{}, err
+		return models.Market{}, err
 	}
 
 	market, err := mapper.MarketFromProto(response.GetMarket())
 	if err != nil {
-		return models2.Market{}, fmt.Errorf("map market from proto: %w", err)
+		return models.Market{}, fmt.Errorf("map market from proto: %w", err)
 	}
 
 	return market, nil

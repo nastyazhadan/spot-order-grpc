@@ -73,11 +73,13 @@ func (m *Manager) ParseToken(tokenString string, expectedType TokenType) (*Claim
 	claims := &Claims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		if token.Method != jwt.SigningMethodHS256 {
 			return nil, status.Error(codes.Unauthenticated, "unexpected signing method")
 		}
 		return m.secret, nil
-	})
+	},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+	)
 
 	if errors.Is(err, jwt.ErrTokenExpired) {
 		return nil, status.Error(codes.Unauthenticated, "token expired")
