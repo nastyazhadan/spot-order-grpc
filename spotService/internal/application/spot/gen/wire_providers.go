@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
@@ -206,17 +207,34 @@ func provideMarketPoller(
 func RegisterMarketPoller(
 	lifecycle fx.Lifecycle,
 	poller *spotService.MarketPoller,
+	logger *zapLogger.Logger,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 
 	lifecycle.Append(fx.Hook{
-		OnStart: func(_ context.Context) error {
-			go poller.Run(ctx)
+		OnStart: func(startCtx context.Context) error {
+			logger.Info(startCtx, "Market poller: starting")
+
+			go func() {
+				defer close(done)
+				poller.Run(ctx)
+			}()
+
 			return nil
 		},
-		OnStop: func(_ context.Context) error {
+		OnStop: func(stopCtx context.Context) error {
+			logger.Info(stopCtx, "Market poller: stopping")
 			cancel()
-			return nil
+
+			select {
+			case <-done:
+				logger.Info(stopCtx, "Market poller: stopped")
+				return nil
+			case <-stopCtx.Done():
+				logger.Warn(stopCtx, "Market poller: stop timeout exceeded", zap.Error(stopCtx.Err()))
+				return stopCtx.Err()
+			}
 		},
 	})
 }
@@ -242,16 +260,48 @@ func RegisterOutboxWorker(
 	logger *zapLogger.Logger,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 
 	lifecycle.Append(fx.Hook{
-		OnStart: func(_ context.Context) error {
-			logger.Info(ctx, "Outbox worker: starting")
-			go worker.Run(ctx)
+		OnStart: func(startCtx context.Context) error {
+			logger.Info(startCtx, "Outbox worker: starting")
+
+			go func() {
+				defer close(done)
+				worker.Run(ctx)
+			}()
+
 			return nil
 		},
-		OnStop: func(_ context.Context) error {
-			logger.Info(ctx, "Outbox worker: stopping")
+		OnStop: func(stopCtx context.Context) error {
+			logger.Info(stopCtx, "Outbox worker: stopping")
 			cancel()
+
+			select {
+			case <-done:
+				logger.Info(stopCtx, "Outbox worker: stopped")
+				return nil
+			case <-stopCtx.Done():
+				logger.Warn(stopCtx, "Outbox worker: stop timeout exceeded", zap.Error(stopCtx.Err()))
+				return stopCtx.Err()
+			}
+		},
+	})
+}
+
+func RegisterKafkaProducer(
+	lifecycle fx.Lifecycle,
+	syncProducer sarama.SyncProducer,
+	logger *zapLogger.Logger,
+) {
+	lifecycle.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			logger.Info(ctx, "Kafka producer: stopping")
+
+			if err := syncProducer.Close(); err != nil {
+				logger.Error(ctx, "Failed to close sync producer", zap.Error(err))
+			}
+
 			return nil
 		},
 	})

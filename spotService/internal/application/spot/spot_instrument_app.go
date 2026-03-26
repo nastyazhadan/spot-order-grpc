@@ -52,6 +52,7 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 			registerTracing,
 			registerMetrics,
 			startGRPCServer,
+			wireGen.RegisterKafkaProducer,
 			wireGen.RegisterOutboxWorker,
 			wireGen.RegisterMarketPoller,
 		),

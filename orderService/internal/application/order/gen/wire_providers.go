@@ -348,17 +348,31 @@ func RegisterOutboxWorker(
 	logger *zapLogger.Logger,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 
 	lifecycle.Append(fx.Hook{
-		OnStart: func(_ context.Context) error {
-			logger.Info(ctx, "Outbox worker: starting")
-			go worker.Run(ctx)
+		OnStart: func(startCtx context.Context) error {
+			logger.Info(startCtx, "Outbox worker: starting")
+
+			go func() {
+				defer close(done)
+				worker.Run(ctx)
+			}()
+
 			return nil
 		},
-		OnStop: func(_ context.Context) error {
-			logger.Info(ctx, "Outbox worker: stopping")
+		OnStop: func(stopCtx context.Context) error {
+			logger.Info(stopCtx, "Outbox worker: stopping")
 			cancel()
-			return nil
+
+			select {
+			case <-done:
+				logger.Info(stopCtx, "Outbox worker: stopped")
+				return nil
+			case <-stopCtx.Done():
+				logger.Warn(stopCtx, "Outbox worker: stop timeout exceeded", zap.Error(stopCtx.Err()))
+				return stopCtx.Err()
+			}
 		},
 	})
 }
@@ -370,19 +384,23 @@ func RegisterKafkaConsumer(
 	logger *zapLogger.Logger,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 
 	lifecycle.Append(fx.Hook{
-		OnStart: func(_ context.Context) error {
-			logger.Info(ctx, "Kafka consumer: starting")
+		OnStart: func(startCtx context.Context) error {
+			logger.Info(startCtx, "Kafka consumer: starting")
 			go func() {
+				defer close(done)
+
 				if err := consumer.Run(ctx); err != nil {
 					if ctx.Err() != nil {
-						logger.Info(ctx, "Kafka consumer stopped")
+						logger.Info(context.Background(), "Kafka consumer stopped")
 						return
 					}
-					logger.Error(ctx, "Kafka consumer exited with error", zap.Error(err))
+					logger.Error(context.Background(), "Kafka consumer exited with error", zap.Error(err))
 				}
 			}()
+
 			return nil
 		},
 		OnStop: func(stopCtx context.Context) error {
@@ -393,7 +411,14 @@ func RegisterKafkaConsumer(
 				logger.Error(stopCtx, "Failed to close consumer group", zap.Error(err))
 			}
 
-			return nil
+			select {
+			case <-done:
+				logger.Info(stopCtx, "Kafka consumer: stopped")
+				return nil
+			case <-stopCtx.Done():
+				logger.Warn(stopCtx, "Kafka consumer: stop timeout exceeded", zap.Error(stopCtx.Err()))
+				return stopCtx.Err()
+			}
 		},
 	})
 }

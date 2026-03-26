@@ -213,5 +213,18 @@ func validateSpotKafka(cfg config.SpotConfig) error {
 		)
 	}
 
+	if cfg.Kafka.Outbox.ProcessingTimeout <= 0 {
+		return fmt.Errorf("kafka.outbox.processing_timeout must be greater than 0, got %s",
+			cfg.Kafka.Outbox.ProcessingTimeout)
+	}
+
+	if cfg.Kafka.Outbox.BatchTimeout >= cfg.Kafka.Outbox.ProcessingTimeout {
+		return fmt.Errorf(
+			"kafka.outbox.batch_timeout (%s) must be less than processing_timeout (%s)",
+			cfg.Kafka.Outbox.BatchTimeout,
+			cfg.Kafka.Outbox.ProcessingTimeout,
+		)
+	}
+
 	return nil
 }
