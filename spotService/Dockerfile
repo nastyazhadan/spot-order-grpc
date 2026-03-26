@@ -4,12 +4,12 @@ FROM golang:1.25.0 AS builder
 WORKDIR /build/spotOrder
 
 COPY go.work go.work.sum* ./
-COPY orderConsumer/go.mod orderConsumer/go.sum ./orderConsumer/
+COPY orderService/go.mod orderService/go.sum ./orderService/
 COPY protos/go.mod protos/go.sum ./protos/
 COPY shared/go.mod shared/go.sum ./shared/
 COPY spotService/go.mod spotService/go.sum ./spotService/
 
-RUN cd orderConsumer && go mod download && \
+RUN cd orderService && go mod download && \
     cd ../protos && go mod download && \
     cd ../shared && go mod download && \
     cd ../spotService && go mod download

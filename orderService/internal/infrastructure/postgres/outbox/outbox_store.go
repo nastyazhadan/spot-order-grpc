@@ -87,7 +87,7 @@ func (s *OutboxStore) ClaimPendingEvents(ctx context.Context, limit int) ([]mode
 		WITH candidates AS (
 			SELECT id FROM outbox
 			WHERE status = 'pending' AND available_at <= NOW()
-			ORDER BY created_at
+			ORDER BY created_at, id
 			LIMIT $1
 			FOR UPDATE SKIP LOCKED
 		)

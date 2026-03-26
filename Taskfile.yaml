@@ -121,7 +121,7 @@ tasks:
     desc: Сгенерировать JWT токен
     cmds:
       - echo "{{.BLUE}}Генерация JWT токена...{{.NC}}"
-      - go run ./shared/interceptors/auth/main
+      - go run ./orderService/cmd/dev/
       - echo "{{.GREEN}}JWT токен сгенерирован{{.NC}}"
 
   tidy:

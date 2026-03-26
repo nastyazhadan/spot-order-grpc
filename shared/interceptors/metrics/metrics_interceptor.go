@@ -19,10 +19,12 @@ func UnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor {
 		handler grpc.UnaryHandler,
 	) (resp any, err error) {
 		start := time.Now()
-		metrics.InFlightRequests.WithLabelValues(serviceName, serverInfo.FullMethod).Inc()
+
+		inFlight := metrics.InFlightRequests.WithLabelValues(serviceName, serverInfo.FullMethod)
+		inFlight.Inc()
 
 		defer func() {
-			metrics.InFlightRequests.WithLabelValues(serviceName, serverInfo.FullMethod).Dec()
+			inFlight.Dec()
 
 			code := status.Code(err).String()
 

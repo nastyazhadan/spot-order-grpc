@@ -11,7 +11,7 @@ import (
 var (
 	RequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_grpc_requests_total",
+			Name: "grpc_server_requests_total",
 			Help: "Throughput - total number of gRPC requests by service, method and status code",
 		},
 		[]string{"service", "method", "status"},
@@ -19,7 +19,7 @@ var (
 
 	RequestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "spotorder_grpc_request_duration_seconds",
+			Name:    "grpc_server_request_duration_seconds",
 			Help:    "gRPC handler duration in seconds — server-side latency and response time",
 			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
 		},
@@ -28,15 +28,15 @@ var (
 
 	InFlightRequests = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "spotorder_in_flight_requests",
-			Help: "Number of currently active gRPC requests",
+			Name: "grpc_server_in_flight_requests",
+			Help: "Current number of in-flight gRPC requests",
 		},
-		[]string{"service"},
+		[]string{"service", "method"},
 	)
 
 	OrdersCreatedTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_orders_created_total",
+			Name: "grpc_server_orders_created_total",
 			Help: "Total number of successfully created orders by service and market",
 		},
 		[]string{"service", "market_id"},
@@ -44,7 +44,7 @@ var (
 
 	RateLimitRejectedTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_rate_limit_rejected_total",
+			Name: "grpc_server_rate_limit_rejected_total",
 			Help: "Total number of requests rejected by the rate limiter",
 		},
 		[]string{"service", "method"},
@@ -52,7 +52,7 @@ var (
 
 	CacheHitsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_cache_hits_total",
+			Name: "grpc_server_cache_hits_total",
 			Help: "Total number of cache hits",
 		},
 		[]string{"service", "operation"},
@@ -60,7 +60,7 @@ var (
 
 	CacheMissesTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_cache_misses_total",
+			Name: "grpc_server_cache_misses_total",
 			Help: "Total number of cache misses",
 		},
 		[]string{"service", "operation"},
@@ -68,7 +68,7 @@ var (
 
 	CacheOperationDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "spotorder_cache_operation_duration_seconds",
+			Name:    "grpc_server_cache_operation_duration_seconds",
 			Help:    "Latency of Redis cache operations",
 			Buckets: []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1},
 		},
@@ -77,7 +77,7 @@ var (
 
 	DBQueryDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "spotorder_db_query_duration_seconds",
+			Name:    "grpc_server_db_query_duration_seconds",
 			Help:    "Latency of Postgres queries",
 			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
 		},
@@ -86,7 +86,7 @@ var (
 
 	CircuitBreakerStateChangesTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_circuit_breaker_state_changes_total",
+			Name: "grpc_server_circuit_breaker_state_changes_total",
 			Help: "Total number of circuit breaker state transitions",
 		},
 		[]string{"name", "from", "to"},
@@ -94,7 +94,7 @@ var (
 
 	CircuitBreakerOpenTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_circuit_breaker_open_total",
+			Name: "grpc_server_circuit_breaker_open_total",
 			Help: "Total number of times the circuit breaker opened",
 		},
 		[]string{"name"},
@@ -102,7 +102,7 @@ var (
 
 	ShutdownsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_shutdowns_total",
+			Name: "grpc_server_shutdowns_total",
 			Help: "Total number of service shutdowns by service and reason",
 		},
 		[]string{"service", "reason"},
@@ -110,7 +110,7 @@ var (
 
 	KafkaMessagesPublishedTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_kafka_messages_published_total",
+			Name: "grpc_server_kafka_messages_published_total",
 			Help: "Total number of Kafka messages successfully published",
 		},
 		[]string{"service", "topic"},
@@ -118,7 +118,7 @@ var (
 
 	KafkaPublishErrorsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_kafka_publish_errors_total",
+			Name: "grpc_server_kafka_publish_errors_total",
 			Help: "Total number of Kafka publish errors",
 		},
 		[]string{"service", "topic"},
@@ -126,7 +126,7 @@ var (
 
 	KafkaPublishDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "spotorder_kafka_publish_duration_seconds",
+			Name:    "grpc_server_kafka_publish_duration_seconds",
 			Help:    "Latency of Kafka message publish operations",
 			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
 		},
@@ -135,7 +135,7 @@ var (
 
 	KafkaMessagesConsumedTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_kafka_messages_consumed_total",
+			Name: "grpc_server_kafka_messages_consumed_total",
 			Help: "Total number of Kafka messages consumed",
 		},
 		[]string{"service", "topic", "result"},
@@ -143,7 +143,7 @@ var (
 
 	KafkaConsumeDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "spotorder_kafka_consume_duration_seconds",
+			Name:    "grpc_server_kafka_consume_duration_seconds",
 			Help:    "Latency of Kafka message processing",
 			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
 		},
@@ -152,7 +152,7 @@ var (
 
 	OutboxEventsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "spotorder_outbox_events_total",
+			Name: "grpc_server_outbox_events_total",
 			Help: "Total number of outbox events processed by the worker",
 		},
 		[]string{"service", "event_type", "result"},
@@ -160,19 +160,19 @@ var (
 
 	OutboxPendingEvents = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "spotorder_outbox_pending_events",
+			Name: "grpc_server_outbox_pending_events",
 			Help: "Number of unprocessed events in the outbox table",
 		},
-		[]string{"service"},
+		[]string{"service", "topic"},
 	)
 
 	OutboxWorkerDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "spotorder_outbox_worker_iteration_duration_seconds",
+			Name:    "grpc_server_outbox_worker_iteration_duration_seconds",
 			Help:    "Duration of a single outbox worker poll iteration",
 			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
 		},
-		[]string{"service"},
+		[]string{"service", "topic"},
 	)
 )
 
