@@ -33,6 +33,7 @@ func NewContainer(
 		provideRedisClient,
 		provideCacheStore,
 		provideMarketStore,
+		provideMarketCursorStore,
 		provideMarketCacheRepository,
 		provideSpotOutboxStore,
 		provideSaramaSyncProducer,

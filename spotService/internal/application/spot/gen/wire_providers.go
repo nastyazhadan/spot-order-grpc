@@ -15,6 +15,7 @@ import (
 	sharedProducer "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka/producer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	outbox "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/kafka"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/cursor"
 	outboxStore "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/outbox"
 	spotStore "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/spot"
 	spotCache "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis"
@@ -27,6 +28,7 @@ var KafkaProviders = fx.Options(
 	fx.Provide(
 		provideSaramaSyncProducer,
 		provideSpotOutboxStore,
+		provideMarketCursorStore,
 		provideMarketStateChangedProducer,
 		provideSpotOutboxWorker,
 		provideMarketEventProducer,
@@ -82,6 +84,10 @@ func provideCacheStore(client *redis.Client) *cache.Store {
 
 func provideMarketStore(pool *pgxpool.Pool, cfg config.SpotConfig) *spotStore.MarketStore {
 	return spotStore.NewMarketStore(pool, cfg)
+}
+
+func provideMarketCursorStore(pool *pgxpool.Pool) *cursor.Store {
+	return cursor.New(pool)
 }
 
 func provideMarketCacheRepository(
@@ -173,20 +179,23 @@ func provideSpotOutboxWorker(
 
 func provideMarketEventProducer(
 	store *outboxStore.OutboxStore,
+	cursorStore *cursor.Store,
 	logger *zapLogger.Logger,
 ) *producer.MarketProducer {
-	return producer.New(store, logger)
+	return producer.New(store, cursorStore, logger)
 }
 
 func provideMarketPoller(
 	store *spotStore.MarketStore,
-	producer *producer.MarketProducer,
+	marketProducer *producer.MarketProducer,
+	cursorStore *cursor.Store,
 	cfg config.SpotConfig,
 	logger *zapLogger.Logger,
 ) *spotService.MarketPoller {
 	return spotService.NewMarketPoller(
 		store,
-		producer,
+		marketProducer,
+		cursorStore,
 		cfg.Kafka.Outbox.PollInterval,
 		cfg.Kafka.Outbox.BatchSize,
 		logger,

@@ -289,6 +289,25 @@ func (s *OutboxStore) SaveOutboxEvent(ctx context.Context, event models.OutboxEv
 	return nil
 }
 
+func (s *OutboxStore) SaveOutboxEventTransaction(ctx context.Context, transaction pgx.Tx, event models.OutboxEvent) error {
+	const op = "OutboxStore.SaveOutboxEventTx"
+
+	_, err := transaction.Exec(ctx, `
+		INSERT INTO outbox (id, event_id, event_type, aggregate_id, payload, status, retry_count, available_at)
+		VALUES ($1, $2, $3, $4, $5, 'pending', 0, NOW())
+	`, event.ID, event.EventID, event.EventType, event.AggregateID, event.Payload)
+
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
+func (s *OutboxStore) BeginTransaction(ctx context.Context) (pgx.Tx, error) {
+	return s.pool.BeginTx(ctx, pgx.TxOptions{})
+}
+
 func (s *OutboxStore) countPendingEvents(ctx context.Context) (int64, error) {
 	var pendingCount int64
 

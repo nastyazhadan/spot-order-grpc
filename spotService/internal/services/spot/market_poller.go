@@ -2,28 +2,39 @@ package spot
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-	"github.com/nastyazhadan/spot-order-grpc/shared/models"
+	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 )
 
+const marketStateChangedPollerName = "market_state_changed_poller"
+
+type CursorStore interface {
+	Get(ctx context.Context, pollerName string) (models.PollerCursor, error)
+}
+
 type MarketReader interface {
-	ListUpdatedSince(ctx context.Context, since time.Time, afterID uuid.UUID, limit int) ([]models.Market, error)
+	ListUpdatedSince(ctx context.Context, since time.Time, afterID uuid.UUID, limit int) ([]sharedModels.Market, error)
 }
 
 type MarketEventProducer interface {
-	ProduceMarketStateChanged(ctx context.Context, event models.MarketStateChangedEvent) error
+	ProduceMarketStateChangedBatch(ctx context.Context, events []sharedModels.MarketStateChangedEvent, cursor models.PollerCursor) error
 }
 
 type MarketPoller struct {
 	reader       MarketReader
 	producer     MarketEventProducer
+	cursorStore  CursorStore
 	pollInterval time.Duration
 	batchSize    int
+	pollerName   string
 	lastSeenAt   time.Time
 	lastSeenID   uuid.UUID
 	logger       *zapLogger.Logger
@@ -32,6 +43,7 @@ type MarketPoller struct {
 func NewMarketPoller(
 	reader MarketReader,
 	producer MarketEventProducer,
+	store CursorStore,
 	interval time.Duration,
 	size int,
 	logger *zapLogger.Logger,
@@ -39,16 +51,18 @@ func NewMarketPoller(
 	return &MarketPoller{
 		reader:       reader,
 		producer:     producer,
+		cursorStore:  store,
 		pollInterval: interval,
 		batchSize:    size,
+		pollerName:   marketStateChangedPollerName,
 		logger:       logger,
 	}
 }
 
 func (p *MarketPoller) Run(ctx context.Context) {
-	if p.lastSeenAt.IsZero() {
-		p.lastSeenAt = time.Now().UTC()
-		p.lastSeenID = uuid.Nil
+	if err := p.loadCursor(ctx); err != nil {
+		p.logger.Error(ctx, "Failed to load market poller cursor", zap.Error(err))
+		return
 	}
 
 	ticker := time.NewTicker(p.pollInterval)
@@ -72,6 +86,22 @@ func (p *MarketPoller) Run(ctx context.Context) {
 	}
 }
 
+func (p *MarketPoller) loadCursor(ctx context.Context) error {
+	cursor, err := p.cursorStore.Get(ctx, p.pollerName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			p.lastSeenAt = time.Time{}
+			p.lastSeenID = uuid.Nil
+			return nil
+		}
+		return err
+	}
+
+	p.lastSeenAt = cursor.LastSeenAt.UTC()
+	p.lastSeenID = cursor.LastSeenID
+	return nil
+}
+
 func (p *MarketPoller) poll(ctx context.Context) {
 	pollCtx, cancel := context.WithTimeout(ctx, p.pollInterval)
 	defer cancel()
@@ -91,24 +121,34 @@ func (p *MarketPoller) poll(ctx context.Context) {
 			return
 		}
 
+		events := make([]sharedModels.MarketStateChangedEvent, 0, len(markets))
 		for _, market := range markets {
 			if pollCtx.Err() != nil {
 				return
 			}
 
-			event := p.buildMarketStateChangedEvent(market)
-			if err = p.producer.ProduceMarketStateChanged(pollCtx, event); err != nil {
-				p.logger.Error(pollCtx, "Failed to enqueue market state changed event",
-					zap.String("market_id", market.ID.String()),
-					zap.Error(err),
-				)
-				return
-			}
+			events = append(events, p.buildMarketStateChangedEvent(market))
 		}
 
 		last := markets[len(markets)-1]
-		p.lastSeenAt = last.UpdatedAt.UTC()
-		p.lastSeenID = last.ID
+		nextCursor := models.PollerCursor{
+			PollerName: p.pollerName,
+			LastSeenAt: last.UpdatedAt.UTC(),
+			LastSeenID: last.ID,
+		}
+
+		if err = p.producer.ProduceMarketStateChangedBatch(pollCtx, events, nextCursor); err != nil {
+			p.logger.Error(pollCtx, "Failed to enqueue market state changed batch",
+				zap.Int("markets_count", len(markets)),
+				zap.Time("last_seen_at", nextCursor.LastSeenAt),
+				zap.String("last_seen_id", nextCursor.LastSeenID.String()),
+				zap.Error(err),
+			)
+			return
+		}
+
+		p.lastSeenAt = nextCursor.LastSeenAt
+		p.lastSeenID = nextCursor.LastSeenID
 
 		if len(markets) < p.batchSize {
 			return
@@ -116,8 +156,8 @@ func (p *MarketPoller) poll(ctx context.Context) {
 	}
 }
 
-func (p *MarketPoller) buildMarketStateChangedEvent(market models.Market) models.MarketStateChangedEvent {
-	return models.MarketStateChangedEvent{
+func (p *MarketPoller) buildMarketStateChangedEvent(market sharedModels.Market) sharedModels.MarketStateChangedEvent {
+	return sharedModels.MarketStateChangedEvent{
 		EventID:       uuid.New(),
 		MarketID:      market.ID,
 		Enabled:       market.Enabled,

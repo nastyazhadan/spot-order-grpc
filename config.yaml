@@ -85,6 +85,7 @@ order:
       order_created: "order.created"
       order_status_updated: "order.status.updated"
       market_state_changed: "market.state.changed"
+      market_state_changed_dlq: "market.state.changed.dlq"
     outbox:
       poll_interval: 1s
       batch_size: 100

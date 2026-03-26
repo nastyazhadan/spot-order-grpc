@@ -40,6 +40,7 @@ var KafkaProviders = fx.Options(
 	fx.Provide(
 		provideSaramaSyncProducer,
 		provideKafkaPublisher,
+		provideDLQPublisher,
 
 		provideOutboxStore,
 		provideInboxStore,
@@ -217,6 +218,19 @@ func provideKafkaPublisher(
 	)
 }
 
+func provideDLQPublisher(
+	syncProducer sarama.SyncProducer,
+	cfg config.OrderConfig,
+	logger *zapLogger.Logger,
+) sharedConsumer.DLQPublisher {
+	return sharedProducer.New(
+		syncProducer,
+		cfg.Kafka.Topics.MarketStateChangedDLQ,
+		cfg.Service.Name,
+		logger,
+	)
+}
+
 func provideOutboxWorker(
 	store *outboxStore.OutboxStore,
 	publisher outbox.EventPublisher,
@@ -253,14 +267,28 @@ func provideConsumerGroup(cfg config.OrderConfig) (sarama.ConsumerGroup, error) 
 func provideConsumerService(
 	group sarama.ConsumerGroup,
 	service *orderService.CompensationService,
+	dlqPublisher sharedConsumer.DLQPublisher,
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) *consumer.MarketConsumer {
+	middlewares := make([]sharedConsumer.Middleware, 0, 1)
+
+	if cfg.Kafka.Consumer.DLQEnabled {
+		middlewares = append(middlewares, sharedConsumer.RetryWithDLQMiddleware(
+			cfg.Kafka.Consumer.MaxRetries,
+			cfg.Kafka.Consumer.RetryBackoff,
+			cfg.Service.Name,
+			dlqPublisher,
+			logger,
+		))
+	}
+
 	kafkaConsumer := sharedConsumer.New(
 		group,
 		[]string{cfg.Kafka.Topics.MarketStateChanged},
 		cfg.Service.Name,
 		logger,
+		middlewares...,
 	)
 
 	return consumer.NewMarketConsumer(

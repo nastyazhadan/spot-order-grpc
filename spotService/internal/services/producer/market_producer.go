@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -15,18 +16,26 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 )
 
+type CursorStore interface {
+	SaveCursorTransaction(ctx context.Context, transaction pgx.Tx, cursor models.PollerCursor) error
+}
+
 type OutboxWriter interface {
 	SaveOutboxEvent(ctx context.Context, event models.OutboxEvent) error
+	BeginTransaction(ctx context.Context) (pgx.Tx, error)
+	SaveOutboxEventTransaction(ctx context.Context, transaction pgx.Tx, event models.OutboxEvent) error
 }
 
 type MarketProducer struct {
 	outboxWriter OutboxWriter
+	cursorStore  CursorStore
 	logger       *zapLogger.Logger
 }
 
-func New(writer OutboxWriter, logger *zapLogger.Logger) *MarketProducer {
+func New(writer OutboxWriter, store CursorStore, logger *zapLogger.Logger) *MarketProducer {
 	return &MarketProducer{
 		outboxWriter: writer,
+		cursorStore:  store,
 		logger:       logger,
 	}
 }
@@ -50,10 +59,67 @@ func (p *MarketProducer) ProduceMarketStateChanged(
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	p.logger.Info(ctx, "MarketStateChangesEvent prepared for outbox saving",
+	p.logger.Info(ctx, "MarketStateChangedEvent saved to outbox",
 		zap.String("market_id", event.MarketID.String()),
 		zap.String("event_id", event.EventID.String()),
 		zap.String("outbox_event_id", outboxEvent.ID.String()),
+	)
+
+	return nil
+}
+
+func (p *MarketProducer) ProduceMarketStateChangedBatch(
+	ctx context.Context,
+	events []sharedModels.MarketStateChangedEvent,
+	cursor models.PollerCursor,
+) error {
+	const op = "MarketProducer.ProduceMarketStateChangedBatch"
+
+	if len(events) == 0 {
+		return nil
+	}
+
+	ctx, span := tracing.StartSpan(ctx, "producer.produce_market_state_changed_batch")
+	defer span.End()
+
+	tx, err := p.outboxWriter.BeginTransaction(ctx)
+	if err != nil {
+		tracing.RecordError(span, err)
+		return fmt.Errorf("%s: begin tx: %w", op, err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	for _, event := range events {
+		outboxEvent, buildError := p.buildOutboxEvent(ctx, span, event)
+		if buildError != nil {
+			return fmt.Errorf("%s: build outbox event: %w", op, buildError)
+		}
+
+		if err = p.outboxWriter.SaveOutboxEventTransaction(ctx, tx, outboxEvent); err != nil {
+			tracing.RecordError(span, err)
+			return fmt.Errorf("%s: save outbox event: %w", op, err)
+		}
+	}
+
+	if err = p.cursorStore.SaveCursorTransaction(ctx, tx, cursor); err != nil {
+		tracing.RecordError(span, err)
+
+		return fmt.Errorf("%s: save cursor: %w", op, err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		tracing.RecordError(span, err)
+
+		return fmt.Errorf("%s: commit: %w", op, err)
+	}
+
+	p.logger.Info(ctx, "MarketStateChangedEvent batch saved to outbox with cursor",
+		zap.Int("events_count", len(events)),
+		zap.Time("last_seen_at", cursor.LastSeenAt),
+		zap.String("last_seen_id", cursor.LastSeenID.String()),
+		zap.String("poller_name", cursor.PollerName),
 	)
 
 	return nil

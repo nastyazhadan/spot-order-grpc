@@ -105,9 +105,10 @@ type ConsumerConfig struct {
 }
 
 type TopicsConfig struct {
-	OrderCreated       string `mapstructure:"order_created"`
-	OrderStatusUpdated string `mapstructure:"order_status_updated"`
-	MarketStateChanged string `mapstructure:"market_state_changed"`
+	OrderCreated          string `mapstructure:"order_created"`
+	OrderStatusUpdated    string `mapstructure:"order_status_updated"`
+	MarketStateChanged    string `mapstructure:"market_state_changed"`
+	MarketStateChangedDLQ string `mapstructure:"market_state_changed_dlq"`
 }
 
 type OutboxConfig struct {
