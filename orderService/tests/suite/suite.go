@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/order"
 	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/order"
+	models2 "github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 	"github.com/testcontainers/testcontainers-go"
 	pgContainer "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -54,11 +55,11 @@ const (
 )
 
 type MockMarketViewer struct {
-	Markets []models.Market
+	Markets []models2.Market
 	Err     error
 }
 
-func (m *MockMarketViewer) ViewMarkets(_ context.Context, _ []models.UserRole) ([]models.Market, error) {
+func (m *MockMarketViewer) ViewMarkets(_ context.Context, _ []models.UserRole) ([]models2.Market, error) {
 	if m.Err != nil {
 		return nil, m.Err
 	}
@@ -171,7 +172,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 	getLimiter := repoRedis.NewOrderRateLimiter(redisClient, getRateLimit, getRateWindow, getRedisPrefix)
 
 	marketViewer := &MockMarketViewer{
-		Markets: []models.Market{},
+		Markets: []models2.Market{},
 	}
 
 	orderRepo := repoPostgres.New(pool)
@@ -219,7 +220,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 	}
 }
 
-func (s *Suite) SetAvailableMarkets(markets ...models.Market) {
+func (s *Suite) SetAvailableMarkets(markets ...models2.Market) {
 	s.MarketViewer.Markets = markets
 	s.MarketViewer.Err = nil
 }
@@ -262,8 +263,8 @@ func (s *Suite) OrderExistsInDB(ctx context.Context, orderID string) bool {
 	return exists
 }
 
-func NewMarket() models.Market {
-	return models.Market{
+func NewMarket() models2.Market {
+	return models2.Market{
 		ID:        uuid.New(),
 		Name:      "BTC-USDT",
 		Enabled:   true,

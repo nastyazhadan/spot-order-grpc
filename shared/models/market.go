@@ -11,4 +11,5 @@ type Market struct {
 	Name      string
 	Enabled   bool
 	DeletedAt *time.Time
+	UpdatedAt time.Time
 }

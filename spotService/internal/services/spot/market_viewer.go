@@ -37,8 +37,6 @@ type MarketRepository interface {
 type MarketCacheRepository interface {
 	GetAll(ctx context.Context, roleKey string) ([]models.Market, error)
 	SetAll(ctx context.Context, market []models.Market, roleKey string, ttl time.Duration) error
-	GetByID(ctx context.Context, id uuid.UUID) (models.Market, error)
-	SetByID(ctx context.Context, market models.Market, ttl time.Duration) error
 }
 
 type MarketViewer struct {
@@ -137,11 +135,6 @@ func (s *MarketViewer) getMarketActual(ctx context.Context, id uuid.UUID) (model
 		}
 
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
-	}
-
-	if err = s.marketCacheRepository.SetByID(ctx, market, s.cacheTTL); err != nil {
-		s.logger.Warn(ctx, "failed to cache market by id", zap.Error(err),
-			zap.String("market_id", market.ID.String()))
 	}
 
 	return market, nil
@@ -246,13 +239,6 @@ func (s *MarketViewer) loadAndWarmCache(ctx context.Context, roleKey string) ([]
 
 	if err = s.marketCacheRepository.SetAll(ctx, filtered, roleKey, s.cacheTTL); err != nil {
 		s.logger.Warn(ctx, "failed to update cache", zap.Error(err))
-	}
-
-	for _, market := range allMarkets {
-		if err = s.marketCacheRepository.SetByID(ctx, market, s.cacheTTL); err != nil {
-			s.logger.Warn(ctx, "failed to cache market by id", zap.Error(err),
-				zap.String("market_id", market.ID.String()))
-		}
 	}
 
 	return filtered, nil

@@ -261,12 +261,11 @@ type OrderStatusUpdatedEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	OrderId       string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	SagaId        string                 `protobuf:"bytes,3,opt,name=saga_id,json=sagaId,proto3" json:"saga_id,omitempty"`
-	NewStatus     OrderStatus            `protobuf:"varint,4,opt,name=new_status,json=newStatus,proto3,enum=events.v1.OrderStatus" json:"new_status,omitempty"`
-	Reason        string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
-	CorrelationId string                 `protobuf:"bytes,6,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
-	CausationId   string                 `protobuf:"bytes,7,opt,name=causation_id,json=causationId,proto3" json:"causation_id,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	NewStatus     OrderStatus            `protobuf:"varint,3,opt,name=new_status,json=newStatus,proto3,enum=events.v1.OrderStatus" json:"new_status,omitempty"`
+	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	CorrelationId string                 `protobuf:"bytes,5,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
+	CausationId   string                 `protobuf:"bytes,6,opt,name=causation_id,json=causationId,proto3" json:"causation_id,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -315,13 +314,6 @@ func (x *OrderStatusUpdatedEvent) GetOrderId() string {
 	return ""
 }
 
-func (x *OrderStatusUpdatedEvent) GetSagaId() string {
-	if x != nil {
-		return x.SagaId
-	}
-	return ""
-}
-
 func (x *OrderStatusUpdatedEvent) GetNewStatus() OrderStatus {
 	if x != nil {
 		return x.NewStatus
@@ -357,6 +349,98 @@ func (x *OrderStatusUpdatedEvent) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+type MarketStateChangedEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	MarketId      string                 `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	Enabled       bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	DeletedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
+	CorrelationId string                 `protobuf:"bytes,5,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
+	CausationId   string                 `protobuf:"bytes,6,opt,name=causation_id,json=causationId,proto3" json:"causation_id,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MarketStateChangedEvent) Reset() {
+	*x = MarketStateChangedEvent{}
+	mi := &file_events_v1_events_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MarketStateChangedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarketStateChangedEvent) ProtoMessage() {}
+
+func (x *MarketStateChangedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_events_v1_events_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarketStateChangedEvent.ProtoReflect.Descriptor instead.
+func (*MarketStateChangedEvent) Descriptor() ([]byte, []int) {
+	return file_events_v1_events_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *MarketStateChangedEvent) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *MarketStateChangedEvent) GetMarketId() string {
+	if x != nil {
+		return x.MarketId
+	}
+	return ""
+}
+
+func (x *MarketStateChangedEvent) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *MarketStateChangedEvent) GetDeletedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeletedAt
+	}
+	return nil
+}
+
+func (x *MarketStateChangedEvent) GetCorrelationId() string {
+	if x != nil {
+		return x.CorrelationId
+	}
+	return ""
+}
+
+func (x *MarketStateChangedEvent) GetCausationId() string {
+	if x != nil {
+		return x.CausationId
+	}
+	return ""
+}
+
+func (x *MarketStateChangedEvent) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 var File_events_v1_events_proto protoreflect.FileDescriptor
 
 const file_events_v1_events_proto_rawDesc = "" +
@@ -376,18 +460,27 @@ const file_events_v1_events_proto_rawDesc = "" +
 	"\fcausation_id\x18\n" +
 	" \x01(\tR\vcausationId\x129\n" +
 	"\n" +
-	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xbc\x02\n" +
+	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xa3\x02\n" +
 	"\x17OrderStatusUpdatedEvent\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x19\n" +
-	"\border_id\x18\x02 \x01(\tR\aorderId\x12\x17\n" +
-	"\asaga_id\x18\x03 \x01(\tR\x06sagaId\x125\n" +
+	"\border_id\x18\x02 \x01(\tR\aorderId\x125\n" +
 	"\n" +
-	"new_status\x18\x04 \x01(\x0e2\x16.events.v1.OrderStatusR\tnewStatus\x12\x16\n" +
-	"\x06reason\x18\x05 \x01(\tR\x06reason\x12%\n" +
-	"\x0ecorrelation_id\x18\x06 \x01(\tR\rcorrelationId\x12!\n" +
-	"\fcausation_id\x18\a \x01(\tR\vcausationId\x129\n" +
+	"new_status\x18\x03 \x01(\x0e2\x16.events.v1.OrderStatusR\tnewStatus\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12%\n" +
+	"\x0ecorrelation_id\x18\x05 \x01(\tR\rcorrelationId\x12!\n" +
+	"\fcausation_id\x18\x06 \x01(\tR\vcausationId\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt*v\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xab\x02\n" +
+	"\x17MarketStateChangedEvent\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x1b\n" +
+	"\tmarket_id\x18\x02 \x01(\tR\bmarketId\x12\x18\n" +
+	"\aenabled\x18\x03 \x01(\bR\aenabled\x129\n" +
+	"\n" +
+	"deleted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\x12%\n" +
+	"\x0ecorrelation_id\x18\x05 \x01(\tR\rcorrelationId\x12!\n" +
+	"\fcausation_id\x18\x06 \x01(\tR\vcausationId\x129\n" +
+	"\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt*v\n" +
 	"\vOrderStatus\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eSTATUS_CREATED\x10\x01\x12\x12\n" +
@@ -415,27 +508,30 @@ func file_events_v1_events_proto_rawDescGZIP() []byte {
 }
 
 var file_events_v1_events_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_events_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_events_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_events_v1_events_proto_goTypes = []any{
 	(OrderStatus)(0),                // 0: events.v1.OrderStatus
 	(OrderType)(0),                  // 1: events.v1.OrderType
 	(*OrderCreatedEvent)(nil),       // 2: events.v1.OrderCreatedEvent
 	(*OrderStatusUpdatedEvent)(nil), // 3: events.v1.OrderStatusUpdatedEvent
-	(*decimal.Decimal)(nil),         // 4: google.type.Decimal
-	(*timestamppb.Timestamp)(nil),   // 5: google.protobuf.Timestamp
+	(*MarketStateChangedEvent)(nil), // 4: events.v1.MarketStateChangedEvent
+	(*decimal.Decimal)(nil),         // 5: google.type.Decimal
+	(*timestamppb.Timestamp)(nil),   // 6: google.protobuf.Timestamp
 }
 var file_events_v1_events_proto_depIdxs = []int32{
 	1, // 0: events.v1.OrderCreatedEvent.order_type:type_name -> events.v1.OrderType
-	4, // 1: events.v1.OrderCreatedEvent.price:type_name -> google.type.Decimal
+	5, // 1: events.v1.OrderCreatedEvent.price:type_name -> google.type.Decimal
 	0, // 2: events.v1.OrderCreatedEvent.status:type_name -> events.v1.OrderStatus
-	5, // 3: events.v1.OrderCreatedEvent.created_at:type_name -> google.protobuf.Timestamp
+	6, // 3: events.v1.OrderCreatedEvent.created_at:type_name -> google.protobuf.Timestamp
 	0, // 4: events.v1.OrderStatusUpdatedEvent.new_status:type_name -> events.v1.OrderStatus
-	5, // 5: events.v1.OrderStatusUpdatedEvent.updated_at:type_name -> google.protobuf.Timestamp
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	6, // 5: events.v1.OrderStatusUpdatedEvent.updated_at:type_name -> google.protobuf.Timestamp
+	6, // 6: events.v1.MarketStateChangedEvent.deleted_at:type_name -> google.protobuf.Timestamp
+	6, // 7: events.v1.MarketStateChangedEvent.updated_at:type_name -> google.protobuf.Timestamp
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_events_v1_events_proto_init() }
@@ -449,7 +545,7 @@ func file_events_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_events_v1_events_proto_rawDesc), len(file_events_v1_events_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

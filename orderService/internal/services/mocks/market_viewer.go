@@ -6,6 +6,7 @@ import (
 	context "context"
 
 	models "github.com/nastyazhadan/spot-order-grpc/shared/models"
+	models2 "github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -15,23 +16,23 @@ type MarketViewer struct {
 }
 
 // ViewMarkets provides a mock function with given fields: ctx, roles
-func (_m *MarketViewer) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models.Market, error) {
+func (_m *MarketViewer) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models2.Market, error) {
 	ret := _m.Called(ctx, roles)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ViewMarkets")
 	}
 
-	var r0 []models.Market
+	var r0 []models2.Market
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, []models.UserRole) ([]models.Market, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, []models.UserRole) ([]models2.Market, error)); ok {
 		return rf(ctx, roles)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, []models.UserRole) []models.Market); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, []models.UserRole) []models2.Market); ok {
 		r0 = rf(ctx, roles)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]models.Market)
+			r0 = ret.Get(0).([]models2.Market)
 		}
 	}
 

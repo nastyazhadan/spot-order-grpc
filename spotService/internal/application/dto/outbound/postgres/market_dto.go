@@ -12,6 +12,7 @@ type Market struct {
 	Name      string     `db:"name"`
 	Enabled   bool       `db:"enabled"`
 	DeletedAt *time.Time `db:"deleted_at"`
+	UpdatedAt time.Time  `db:"updated_at"`
 }
 
 func (m Market) ToDomain() models.Market {
@@ -20,5 +21,6 @@ func (m Market) ToDomain() models.Market {
 		Name:      m.Name,
 		Enabled:   m.Enabled,
 		DeletedAt: m.DeletedAt,
+		UpdatedAt: m.UpdatedAt,
 	}
 }

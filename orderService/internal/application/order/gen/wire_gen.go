@@ -19,7 +19,7 @@ import (
 
 // Injectors from wire.go:
 
-func NewContainer(ctx context.Context, marketViewer order.MarketViewer, eventProducer order.EventProducer, cfg config.OrderConfig, logger *zap.Logger) (*Container, error) {
+func NewContainer(ctx context.Context, marketViewer order.MarketViewer, cfg config.OrderConfig, logger *zap.Logger) (*Container, error) {
 	pool, err := providePostgresPool(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -30,9 +30,12 @@ func NewContainer(ctx context.Context, marketViewer order.MarketViewer, eventPro
 		return nil, err
 	}
 	store := provideCacheStore(client)
+	marketBlockStore := provideBlockStore(store)
 	rateLimiters := provideRateLimiters(store, cfg)
 	orderConfig := provideOrderServiceConfig(cfg)
-	orderService := provideOrderService(pool, orderStore, marketViewer, rateLimiters, orderConfig, eventProducer, logger)
+	outboxStore := provideOutboxStore(pool, logger, cfg)
+	eventProducer := provideEventProducer(outboxStore, logger)
+	orderService := provideOrderService(pool, orderStore, marketViewer, marketBlockStore, rateLimiters, orderConfig, eventProducer, logger)
 	manager := provideJWTManager(cfg)
 	refreshTokenStore := provideRefreshTokenStore(store, cfg)
 	authService := provideAuthService(manager, refreshTokenStore, logger)

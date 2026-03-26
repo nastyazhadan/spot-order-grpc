@@ -47,10 +47,13 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 			provideListener,
 			provideGRPCServer,
 		),
+		wireGen.KafkaProviders,
 		fx.Invoke(
 			registerTracing,
 			registerMetrics,
 			startGRPCServer,
+			wireGen.RegisterOutboxWorker,
+			wireGen.RegisterMarketPoller,
 		),
 	)
 

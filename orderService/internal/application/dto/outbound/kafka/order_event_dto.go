@@ -13,12 +13,23 @@ import (
 	protoEvent "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/events/v1"
 )
 
-func Marshal(event models.OrderCreatedEvent) ([]byte, error) {
-	protobuf := ToProtoOrderCreated(event)
+func MarshalOrderCreated(event models.OrderCreatedEvent) ([]byte, error) {
+	data := ToProtoOrderCreated(event)
 
-	data, err := proto.Marshal(protobuf)
+	result, err := proto.Marshal(data)
 	if err != nil {
-		return nil, fmt.Errorf("proto.Marshal OrderCreatedEvent: %w", err)
+		return nil, fmt.Errorf("proto.MarshalOrderCreated: %w", err)
+	}
+
+	return result, nil
+}
+
+func MarshalOrderStatusUpdated(event models.OrderStatusUpdatedEvent) ([]byte, error) {
+	result := ToProtoOrderStatusUpdated(event)
+
+	data, err := proto.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("proto.MarshalOrderStatusUpdated: %w", err)
 	}
 
 	return data, nil
@@ -44,12 +55,11 @@ func ToProtoOrderStatusUpdated(event models.OrderStatusUpdatedEvent) *protoEvent
 	return &protoEvent.OrderStatusUpdatedEvent{
 		EventId:       event.EventID.String(),
 		OrderId:       event.OrderID.String(),
-		SagaId:        event.SagaID.String(),
 		NewStatus:     toProtoOrderStatus(event.NewStatus),
 		Reason:        event.Reason,
 		CorrelationId: event.CorrelationID.String(),
 		CausationId:   uuidPtrToString(event.CausationID),
-		UpdatedAt:     timestamppb.New(event.UpdatedAt.UTC()),
+		UpdatedAt:     timestamppb.New(event.UpdatedAt),
 	}
 }
 

@@ -27,7 +27,6 @@ type Container struct {
 func NewContainer(
 	ctx context.Context,
 	marketViewer order.MarketViewer,
-	eventProducer order.EventProducer,
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) (*Container, error) {
@@ -35,13 +34,20 @@ func NewContainer(
 		providePostgresPool,
 		provideRedisClient,
 		provideCacheStore,
+
 		provideOrderStore,
+		provideOutboxStore,
+		provideBlockStore,
+		provideEventProducer,
+
 		provideRateLimiters,
 		provideJWTManager,
 		provideRefreshTokenStore,
 		provideAuthService,
+
 		provideOrderServiceConfig,
 		provideOrderService,
+
 		wire.Struct(new(Container), "*"),
 	)
 	return nil, nil

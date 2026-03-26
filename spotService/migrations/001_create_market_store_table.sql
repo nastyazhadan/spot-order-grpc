@@ -6,7 +6,9 @@ CREATE TABLE IF NOT EXISTS market_store
     id UUID PRIMARY KEY,
     name TEXT NOT NULL,
     enabled BOOLEAN NOT NULL,
-    deleted_at TIMESTAMPTZ
+    deleted_at TIMESTAMPTZ,
+
+    CONSTRAINT chk_market_name CHECK (length(trim(name)) > 0)
 );
 
 INSERT INTO market_store (id, name, enabled, deleted_at) VALUES

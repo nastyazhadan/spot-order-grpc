@@ -41,11 +41,11 @@ type OrderCreatedEvent struct {
 	CreatedAt     time.Time
 }
 
-// OrderStatusUpdatedEvent поступает от Saga-оркестратора через inbox-паттерн (топик order.saga.reply)
+// OrderStatusUpdatedEvent публикуется в Kafka через Transactional Outbox
+// после фактического committed-изменения статуса ордера.
 type OrderStatusUpdatedEvent struct {
 	EventID       uuid.UUID
 	OrderID       uuid.UUID
-	SagaID        uuid.UUID
 	NewStatus     shared.OrderStatus
 	Reason        string
 	CorrelationID uuid.UUID

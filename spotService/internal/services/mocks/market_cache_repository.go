@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	models "github.com/nastyazhadan/spot-order-grpc/shared/models"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	mock "github.com/stretchr/testify/mock"
 
 	time "time"

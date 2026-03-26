@@ -22,7 +22,6 @@ import (
 	wireGen "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order/gen"
 	grpcAuth "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/auth"
 	grpcOrder "github.com/nastyazhadan/spot-order-grpc/orderService/internal/grpc/order"
-	orderService "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	grpcClient "github.com/nastyazhadan/spot-order-grpc/shared/client/grpc"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
@@ -203,11 +202,10 @@ func provideGRPCClient(
 func provideContainer(
 	ctx context.Context,
 	marketClient *grpcClient.SpotClient,
-	eventProducer orderService.EventProducer,
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) (*wireGen.Container, error) {
-	container, err := wireGen.NewContainer(ctx, marketClient, eventProducer, cfg, logger)
+	container, err := wireGen.NewContainer(ctx, marketClient, cfg, logger)
 	if err != nil {
 		return nil, err
 	}

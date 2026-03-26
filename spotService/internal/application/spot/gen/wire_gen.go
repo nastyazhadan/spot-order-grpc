@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/kafka"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 	"github.com/redis/go-redis/v9"
 )
@@ -30,8 +31,19 @@ func NewContainer(ctx context.Context, cfg config.SpotConfig, logger *zap.Logger
 	store := provideCacheStore(client)
 	marketCacheRepository := provideMarketCacheRepository(store, cfg)
 	marketViewer := provideSpotService(marketStore, marketCacheRepository, cfg, logger)
+	outboxStore := provideSpotOutboxStore(pool, logger, cfg)
+	marketProducer := provideMarketEventProducer(outboxStore, logger)
+	marketPoller := provideMarketPoller(marketStore, marketProducer, cfg, logger)
+	syncProducer, err := provideSaramaSyncProducer(cfg)
+	if err != nil {
+		return nil, err
+	}
+	eventPublisher := provideMarketStateChangedProducer(syncProducer, cfg, logger)
+	worker := provideSpotOutboxWorker(outboxStore, eventPublisher, cfg, logger)
 	container := &Container{
 		SpotService:  marketViewer,
+		MarketPoller: marketPoller,
+		OutboxWorker: worker,
 		RedisClient:  client,
 		PostgresPool: pool,
 	}
@@ -42,6 +54,8 @@ func NewContainer(ctx context.Context, cfg config.SpotConfig, logger *zap.Logger
 
 type Container struct {
 	SpotService  *spot.MarketViewer
+	MarketPoller *spot.MarketPoller
+	OutboxWorker *outbox.Worker
 	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }

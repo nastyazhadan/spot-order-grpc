@@ -1,10 +1,10 @@
 package inbound
 
 import (
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
-
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func MarketToProto(market models.Market) *proto.Market {

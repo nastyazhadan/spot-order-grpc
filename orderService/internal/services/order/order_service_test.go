@@ -12,6 +12,7 @@ import (
 	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 
 	fakeValue "github.com/brianvoe/gofakeit/v6"
 	"github.com/google/uuid"
@@ -52,7 +53,7 @@ func TestCreateOrder(t *testing.T) {
 			quantity:  randomQuantity,
 			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
-				markets := []sharedModels.Market{
+				markets := []models.Market{
 					{
 						ID:      marketID,
 						Enabled: true,
@@ -112,7 +113,7 @@ func TestCreateOrder(t *testing.T) {
 			setupMocks: func(_ *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
 				createLimiter.On("Allow", mock.Anything, mock.Anything).Return(true, nil)
 				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
-					Return([]sharedModels.Market{}, nil)
+					Return([]models.Market{}, nil)
 			},
 			expectedStatus: shared.OrderStatusCancelled,
 			expectedErr:    serviceErrors.ErrMarketsNotFound,
@@ -126,7 +127,7 @@ func TestCreateOrder(t *testing.T) {
 			quantity:  randomQuantity,
 			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
-				markets := []sharedModels.Market{{
+				markets := []models.Market{{
 					ID:      marketID,
 					Enabled: true,
 				}}
@@ -171,7 +172,7 @@ func TestCreateOrder(t *testing.T) {
 			quantity:  randomQuantity,
 			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
-				markets := []sharedModels.Market{{
+				markets := []models.Market{{
 					ID:      marketID,
 					Enabled: true,
 				}}
@@ -198,7 +199,7 @@ func TestCreateOrder(t *testing.T) {
 			quantity:  1,
 			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
-				markets := []sharedModels.Market{{
+				markets := []models.Market{{
 					ID:      marketID,
 					Enabled: true,
 				}}

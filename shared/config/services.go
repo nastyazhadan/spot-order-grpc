@@ -33,6 +33,7 @@ type SpotConfig struct {
 	Tracing       TracingConfig           `mapstructure:"tracing"`
 	Metrics       MetricsConfig           `mapstructure:"metrics"`
 	KeepAlive     KeepAliveConfig         `mapstructure:"keep_alive"`
+	Kafka         KafkaConfig             `mapstructure:"kafka"`
 }
 
 type ServiceConfig struct {
@@ -104,9 +105,9 @@ type ConsumerConfig struct {
 }
 
 type TopicsConfig struct {
-	OrderCreated      string `mapstructure:"order_created"`
-	OrderSagaReply    string `mapstructure:"order_saga_reply"`
-	OrderSagaReplyDLQ string `mapstructure:"order_saga_reply_dlq"`
+	OrderCreated       string `mapstructure:"order_created"`
+	OrderStatusUpdated string `mapstructure:"order_status_updated"`
+	MarketStateChanged string `mapstructure:"market_state_changed"`
 }
 
 type OutboxConfig struct {

@@ -11,11 +11,14 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-	svcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
+	outbox "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/kafka"
+	spotService "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
 )
 
 type Container struct {
-	SpotService  *svcSpot.MarketViewer
+	SpotService  *spotService.MarketViewer
+	MarketPoller *spotService.MarketPoller
+	OutboxWorker *outbox.Worker
 	RedisClient  *redis.Client
 	PostgresPool *pgxpool.Pool
 }
@@ -31,6 +34,12 @@ func NewContainer(
 		provideCacheStore,
 		provideMarketStore,
 		provideMarketCacheRepository,
+		provideSpotOutboxStore,
+		provideSaramaSyncProducer,
+		provideMarketStateChangedProducer,
+		provideSpotOutboxWorker,
+		provideMarketEventProducer,
+		provideMarketPoller,
 		provideSpotService,
 		wire.Struct(new(Container), "*"),
 	)

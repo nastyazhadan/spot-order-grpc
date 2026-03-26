@@ -24,14 +24,57 @@ func Load() (*config.SpotConfig, error) {
 		return nil, errors.New("SPOT_DB_URI is required")
 	}
 
-	if err := validateSpotTimeouts(cfg); err != nil {
+	if err := validateSpotConfig(cfg); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
 }
 
+func validateSpotConfig(cfg config.SpotConfig) error {
+	if err := validateSpotTimeouts(cfg); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func validateSpotTimeouts(cfg config.SpotConfig) error {
+	if cfg.Timeouts.Service <= 0 {
+		return fmt.Errorf(
+			"timeouts.service must be greater than 0, got %s",
+			cfg.Timeouts.Service,
+		)
+	}
+
+	if cfg.Redis.ConnectionTimeout <= 0 {
+		return fmt.Errorf(
+			"redis.connection_timeout must be greater than 0, got %s",
+			cfg.Redis.ConnectionTimeout,
+		)
+	}
+
+	if cfg.KeepAlive.PingTime <= 0 {
+		return fmt.Errorf(
+			"keep_alive.ping_time must be greater than 0, got %s",
+			cfg.KeepAlive.PingTime,
+		)
+	}
+
+	if cfg.KeepAlive.PingTimeout <= 0 {
+		return fmt.Errorf(
+			"keep_alive.ping_timeout must be greater than 0, got %s",
+			cfg.KeepAlive.PingTimeout,
+		)
+	}
+
+	if cfg.KeepAlive.MinPingInterval <= 0 {
+		return fmt.Errorf(
+			"keep_alive.min_ping_interval must be greater than 0, got %s",
+			cfg.KeepAlive.MinPingInterval,
+		)
+	}
+
 	if cfg.Redis.ConnectionTimeout >= cfg.Timeouts.Service {
 		return fmt.Errorf(
 			"redis.connection_timeout (%s) must be less than service_timeout (%s)",

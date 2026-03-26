@@ -2,19 +2,17 @@ package outbox
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 )
 
 type EventStore interface {
@@ -26,7 +24,7 @@ type EventStore interface {
 }
 
 type EventPublisher interface {
-	SendMessage(ctx context.Context, msg kafka.Message) error
+	Send(ctx context.Context, key, value []byte) error
 }
 
 type Worker struct {
@@ -37,7 +35,7 @@ type Worker struct {
 	batchTimeout time.Duration
 	maxRetries   int
 	logger       *zapLogger.Logger
-	cfg          config.OrderConfig
+	cfg          config.SpotConfig
 }
 
 func NewWorker(
@@ -48,7 +46,7 @@ func NewWorker(
 	timeout time.Duration,
 	maxRetries int,
 	logger *zapLogger.Logger,
-	cfg config.OrderConfig,
+	cfg config.SpotConfig,
 ) *Worker {
 	return &Worker{
 		store:        store,
@@ -104,7 +102,7 @@ func (w *Worker) processBatch(ctx context.Context) {
 	claimCtx, cancel := context.WithTimeout(ctx, w.batchTimeout)
 	defer cancel()
 
-	claimCtx, span := tracing.StartSpan(claimCtx, "outbox.worker.process_batch",
+	claimCtx, span := tracing.StartSpan(claimCtx, "spot.outbox.worker.process_batch",
 		trace.WithAttributes(attribute.Int("batch.max_size", w.batchSize)),
 	)
 	defer span.End()
@@ -137,7 +135,7 @@ func (w *Worker) releaseStuck(ctx context.Context) {
 	releaseCtx, cancel := w.newOperationContext(ctx)
 	defer cancel()
 
-	releaseCtx, span := tracing.StartSpan(releaseCtx, "outbox.worker.release_stuck")
+	releaseCtx, span := tracing.StartSpan(releaseCtx, "spot.outbox.worker.release_stuck")
 	defer span.End()
 
 	stuckBefore := time.Now().UTC().Add(-w.cfg.Kafka.Outbox.ProcessingTimeout)
@@ -163,7 +161,7 @@ func (w *Worker) processEvent(ctx context.Context, event models.OutboxEvent) {
 	sendCtx, cancel := context.WithTimeout(ctx, w.batchTimeout)
 	defer cancel()
 
-	sendCtx, span := tracing.StartSpan(sendCtx, "outbox.worker.publish_event",
+	sendCtx, span := tracing.StartSpan(sendCtx, "spot.outbox.worker.publish_event",
 		trace.WithAttributes(
 			attribute.String("event_type", event.EventType),
 			attribute.String("aggregate_id", event.AggregateID.String()),
@@ -172,21 +170,7 @@ func (w *Worker) processEvent(ctx context.Context, event models.OutboxEvent) {
 	)
 	defer span.End()
 
-	topic := w.messageTopic(event)
-	if topic == "" {
-		err := fmt.Errorf("unsupported outbox event type: %s", event.EventType)
-		tracing.RecordError(span, err)
-		w.handleSendError(ctx, event, err)
-		return
-	}
-
-	msg := kafka.Message{
-		Topic: topic,
-		Key:   w.messageKey(event),
-		Value: event.Payload,
-	}
-
-	if err := w.publisher.SendMessage(sendCtx, msg); err != nil {
+	if err := w.publisher.Send(sendCtx, w.messageKey(event), event.Payload); err != nil {
 		tracing.RecordError(span, err)
 		w.handleSendError(ctx, event, err)
 		return
@@ -258,17 +242,6 @@ func (w *Worker) handleSendError(ctx context.Context, event models.OutboxEvent, 
 		zap.Time("next_retry_at", nextRetryAt),
 		zap.Error(sendErr),
 	)
-}
-
-func (w *Worker) messageTopic(event models.OutboxEvent) string {
-	switch event.EventType {
-	case models.OrderCreatedEventType:
-		return w.cfg.Kafka.Topics.OrderCreated
-	case models.OrderStatusUpdatedEventType:
-		return w.cfg.Kafka.Topics.OrderStatusUpdated
-	default:
-		return ""
-	}
 }
 
 func (w *Worker) messageKey(event models.OutboxEvent) []byte {

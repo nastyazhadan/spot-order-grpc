@@ -178,6 +178,103 @@ func (o *OrderStore) UpdateOrderStatus(
 	return nil
 }
 
+func (o *OrderStore) CancelOrderIfActive(
+	ctx context.Context,
+	transaction pgx.Tx,
+	orderID uuid.UUID,
+) (bool, error) {
+	const op = "OrderStore.CancelOrderIfActive"
+
+	ctx, span := tracing.StartSpan(ctx, "order.cancel_if_active",
+		trace.WithAttributes(
+			attribute.String("order_id", orderID.String()),
+		),
+	)
+	defer span.End()
+
+	start := time.Now()
+	result, err := transaction.Exec(ctx, `
+		UPDATE orders
+		SET status = $2
+		WHERE id = $1 AND status IN ($3, $4)
+	`,
+		orderID,
+		int16(shared.OrderStatusCancelled),
+		int16(shared.OrderStatusCreated),
+		int16(shared.OrderStatusPending),
+	)
+
+	metrics.ObserveWithTrace(ctx,
+		metrics.DBQueryDuration.WithLabelValues(o.config.Service.Name, "order.cancel_if_active"),
+		time.Since(start).Seconds(),
+	)
+
+	if err != nil {
+		tracing.RecordError(span, err)
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	cancelled := result.RowsAffected() > 0
+	span.SetAttributes(attribute.Bool("order_cancelled", cancelled))
+
+	return cancelled, nil
+}
+
+func (o *OrderStore) CancelActiveOrdersByMarket(
+	ctx context.Context,
+	transaction pgx.Tx,
+	marketID uuid.UUID,
+) ([]uuid.UUID, error) {
+	const op = "OrderStore.CancelActiveOrdersByMarket"
+
+	ctx, span := tracing.StartSpan(ctx, "order.cancel_active_by_market",
+		trace.WithAttributes(
+			attribute.String("market_id", marketID.String()),
+		),
+	)
+	defer span.End()
+
+	start := time.Now()
+	rows, err := transaction.Query(ctx, `
+		UPDATE orders
+		SET status = $2
+		WHERE market_id = $1 AND status IN ($3, $4)
+		RETURNING id
+	`,
+		marketID,
+		int16(shared.OrderStatusCancelled),
+		int16(shared.OrderStatusCreated),
+		int16(shared.OrderStatusPending),
+	)
+
+	metrics.ObserveWithTrace(ctx,
+		metrics.DBQueryDuration.WithLabelValues(o.config.Service.Name, "order.cancel_active_by_market"),
+		time.Since(start).Seconds(),
+	)
+
+	if err != nil {
+		tracing.RecordError(span, err)
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	cancelledIDs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (uuid.UUID, error) {
+		var id uuid.UUID
+		if scanErr := row.Scan(&id); scanErr != nil {
+			return uuid.Nil, scanErr
+		}
+		return id, nil
+	})
+	if err != nil {
+		tracing.RecordError(span, err)
+		return nil, fmt.Errorf("%s: collect cancelled order ids: %w", op, err)
+	}
+
+	span.SetAttributes(attribute.Int("orders_cancelled_count", len(cancelledIDs)))
+
+	return cancelledIDs, nil
+}
+
 func isPrimaryKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {

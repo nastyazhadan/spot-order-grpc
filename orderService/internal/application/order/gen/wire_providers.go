@@ -10,12 +10,13 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/kafka"
+	outbox "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/kafka"
 	inboxStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/inbox"
 	orderStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/order"
 	outboxStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/outbox"
 	authStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/auth"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/order"
+	blockStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/market"
+	orderCache "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/order"
 	authService "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/auth"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/consumer"
 	orderService "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
@@ -38,15 +39,17 @@ const (
 var KafkaProviders = fx.Options(
 	fx.Provide(
 		provideSaramaSyncProducer,
-		provideOrderCreatedProducer,
-		provideSagaReplyDLQProducer,
+		provideKafkaPublisher,
+
 		provideOutboxStore,
 		provideInboxStore,
 		provideOutboxWorker,
 		provideEventProducer,
-		provideSaramaConsumerGroup,
-		provideSagaReplyService,
-		provideOrderConsumerService,
+
+		provideConsumerGroup,
+		provideCompensationService,
+		provideConsumerService,
+		provideBlockStore,
 	),
 )
 
@@ -104,6 +107,10 @@ func provideOutboxStore(pool *pgxpool.Pool, logger *zapLogger.Logger, cfg config
 	return outboxStore.New(pool, logger, cfg)
 }
 
+func provideBlockStore(store *cache.Store) *blockStore.MarketBlockStore {
+	return blockStore.New(store)
+}
+
 func provideEventProducer(store *outboxStore.OutboxStore, logger *zapLogger.Logger) orderService.EventProducer {
 	return producer.New(store, logger)
 }
@@ -114,13 +121,13 @@ func provideInboxStore(pool *pgxpool.Pool, cfg config.OrderConfig) *inboxStore.I
 
 func provideRateLimiters(store *cache.Store, cfg config.OrderConfig) orderService.RateLimiters {
 	return orderService.RateLimiters{
-		Create: order.NewOrderRateLimiter(
+		Create: orderCache.NewOrderRateLimiter(
 			store,
 			cfg.RateLimitByUser.CreateOrder,
 			cfg.RateLimitByUser.Window,
 			prefixCreateLimiter,
 		),
-		Get: order.NewOrderRateLimiter(
+		Get: orderCache.NewOrderRateLimiter(
 			store,
 			cfg.RateLimitByUser.GetOrderStatus,
 			cfg.RateLimitByUser.Window,
@@ -197,8 +204,7 @@ func provideSaramaSyncProducer(cfg config.OrderConfig) (sarama.SyncProducer, err
 	return syncProducer, nil
 }
 
-// provideOrderCreatedProducer создаёт Kafka-продюсер для топика order.created
-func provideOrderCreatedProducer(
+func provideKafkaPublisher(
 	syncProducer sarama.SyncProducer,
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
@@ -229,8 +235,9 @@ func provideOutboxWorker(
 	)
 }
 
-func provideSaramaConsumerGroup(cfg config.OrderConfig) (sarama.ConsumerGroup, error) {
+func provideConsumerGroup(cfg config.OrderConfig) (sarama.ConsumerGroup, error) {
 	saramaCfg := sarama.NewConfig()
+
 	saramaCfg.Consumer.Group.Session.Timeout = cfg.Kafka.Consumer.SessionTimeout
 	saramaCfg.Consumer.Group.Heartbeat.Interval = cfg.Kafka.Consumer.HeartbeatInterval
 	saramaCfg.Consumer.Offsets.Initial = sarama.OffsetOldest
@@ -239,73 +246,56 @@ func provideSaramaConsumerGroup(cfg config.OrderConfig) (sarama.ConsumerGroup, e
 	if err != nil {
 		return nil, fmt.Errorf("sarama.NewConsumerGroup: %w", err)
 	}
+
 	return group, nil
 }
 
-func provideSagaReplyService(
+func provideConsumerService(
+	group sarama.ConsumerGroup,
+	service *orderService.CompensationService,
+	cfg config.OrderConfig,
+	logger *zapLogger.Logger,
+) *consumer.MarketConsumer {
+	kafkaConsumer := sharedConsumer.New(
+		group,
+		[]string{cfg.Kafka.Topics.MarketStateChanged},
+		cfg.Service.Name,
+		logger,
+	)
+
+	return consumer.NewMarketConsumer(
+		kafkaConsumer,
+		service,
+		cfg.Kafka.Consumer.GroupID,
+		logger,
+	)
+}
+
+func provideCompensationService(
 	pool *pgxpool.Pool,
 	orderStore *orderStore.OrderStore,
 	inboxStore *inboxStore.InboxStore,
+	blockStore *blockStore.MarketBlockStore,
+	eventProducer orderService.EventProducer,
 	logger *zapLogger.Logger,
 	cfg config.OrderConfig,
-) *orderService.SagaReplyService {
-	return orderService.NewSagaReplyService(
+) *orderService.CompensationService {
+	return orderService.NewCompensationService(
 		pool,
 		inboxStore,
 		orderStore,
+		blockStore,
+		eventProducer,
 		logger,
 		cfg,
 	)
-}
-
-func provideSagaReplyDLQProducer(
-	syncProducer sarama.SyncProducer,
-	cfg config.OrderConfig,
-	logger *zapLogger.Logger,
-) sharedConsumer.DLQPublisher {
-	return sharedProducer.New(
-		syncProducer,
-		cfg.Kafka.Topics.OrderSagaReplyDLQ,
-		cfg.Service.Name,
-		logger,
-	)
-}
-
-// provideOrderConsumerService создаёт сервис consumer (inbox / saga-reply)
-func provideOrderConsumerService(
-	group sarama.ConsumerGroup,
-	sagaService *orderService.SagaReplyService,
-	dlqProducer sharedConsumer.DLQPublisher,
-	cfg config.OrderConfig,
-	logger *zapLogger.Logger,
-) *consumer.OrderConsumer {
-	var middlewares []sharedConsumer.Middleware
-
-	if cfg.Kafka.Consumer.DLQEnabled {
-		middlewares = append(middlewares, sharedConsumer.RetryWithDLQMiddleware(
-			cfg.Kafka.Consumer.MaxRetries,
-			cfg.Kafka.Consumer.RetryBackoff,
-			cfg.Service.Name,
-			dlqProducer,
-			logger,
-		))
-	}
-
-	kafkaConsumer := sharedConsumer.New(
-		group,
-		[]string{cfg.Kafka.Topics.OrderSagaReply},
-		cfg.Service.Name,
-		logger,
-		middlewares...,
-	)
-
-	return consumer.New(kafkaConsumer, sagaService, logger, cfg)
 }
 
 func provideOrderService(
 	pool *pgxpool.Pool,
 	store *orderStore.OrderStore,
 	marketViewer orderService.MarketViewer,
+	blockStore *blockStore.MarketBlockStore,
 	rateLimiters orderService.RateLimiters,
 	cfg orderService.Config,
 	eventProducer orderService.EventProducer,
@@ -315,7 +305,9 @@ func provideOrderService(
 		pool,
 		store,
 		store,
+		store,
 		marketViewer,
+		blockStore,
 		rateLimiters,
 		cfg,
 		eventProducer,
@@ -346,8 +338,8 @@ func RegisterOutboxWorker(
 
 func RegisterKafkaConsumer(
 	lifecycle fx.Lifecycle,
-	consumer *consumer.OrderConsumer,
-	consumerGroup sarama.ConsumerGroup,
+	consumer *consumer.MarketConsumer,
+	group sarama.ConsumerGroup,
 	logger *zapLogger.Logger,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -370,7 +362,7 @@ func RegisterKafkaConsumer(
 			logger.Info(stopCtx, "Kafka consumer: stopping")
 			cancel()
 
-			if err := consumerGroup.Close(); err != nil {
+			if err := group.Close(); err != nil {
 				logger.Error(stopCtx, "Failed to close consumer group", zap.Error(err))
 			}
 
