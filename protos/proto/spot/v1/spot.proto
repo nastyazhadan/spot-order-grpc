@@ -24,6 +24,7 @@ message Market {
   string name = 2 [(buf.validate.field).string.min_len = 1];
   bool enabled = 3;
   google.protobuf.Timestamp deleted_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
 }
 
 message ViewMarketsRequest{

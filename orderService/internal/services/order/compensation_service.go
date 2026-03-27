@@ -279,5 +279,6 @@ func (s *CompensationService) syncMarketBlockState(
 ) error {
 	blocked := !event.Enabled || event.DeletedAt != nil
 
-	return s.blockStore.SyncState(ctx, event.MarketID, blocked, event.UpdatedAt)
+	_, err := s.blockStore.SyncState(ctx, event.MarketID, blocked, event.UpdatedAt)
+	return err
 }

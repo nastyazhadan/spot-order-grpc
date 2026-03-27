@@ -184,7 +184,10 @@ func provideGRPCServer(
 	cfg config.SpotConfig,
 	appLogger *zapLogger.Logger,
 ) (*grpc.Server, error) {
-	validator := validate.UnaryServerInterceptor()
+	validator, err := validate.UnaryServerInterceptor()
+	if err != nil {
+		return nil, err
+	}
 	recoverer := recovery.UnaryServerInterceptor(appLogger)
 	tracer := tracing.UnaryServerInterceptor()
 	logger := logInterceptor.UnaryServerInterceptor(appLogger)

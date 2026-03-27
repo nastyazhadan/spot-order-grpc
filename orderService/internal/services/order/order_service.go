@@ -54,7 +54,7 @@ type Saver interface {
 }
 
 type MarketBlockStore interface {
-	SyncState(ctx context.Context, marketID uuid.UUID, blocked bool, updatedAt time.Time) error
+	SyncState(ctx context.Context, marketID uuid.UUID, blocked bool, updatedAt time.Time) (bool, error)
 	IsBlocked(ctx context.Context, marketID uuid.UUID) (bool, error)
 }
 
@@ -298,14 +298,18 @@ func (s *OrderService) ensureMarketNotBlocked(
 		return err
 	}
 
-	if err = s.blockStore.SyncState(ctx, marketID, false, market.UpdatedAt); err != nil {
+	updated, err := s.blockStore.SyncState(ctx, marketID, false, market.UpdatedAt)
+	if err != nil {
 		s.logger.Warn(ctx, "Failed to remove stale market block after recheck",
 			zap.String("market_id", market.ID.String()),
 			zap.Error(err))
-	} else {
+	} else if updated {
 		s.logger.Warn(ctx, "Removed stale market block after recheck",
 			zap.String("market_id", market.ID.String()),
 		)
+	} else {
+		s.logger.Warn(ctx, "Skipped removing stale market block after recheck because Redis has newer state",
+			zap.String("market_id", market.ID.String()))
 	}
 
 	return nil

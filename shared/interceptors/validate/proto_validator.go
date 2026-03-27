@@ -11,10 +11,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
+func UnaryServerInterceptor() (grpc.UnaryServerInterceptor, error) {
 	validator, err := protovalidate.New()
 	if err != nil {
-		panic(fmt.Errorf("protovalidate.New: %w", err))
+		return nil, fmt.Errorf("protovalidate.New: %w", err)
 	}
 
 	return func(
@@ -29,5 +29,5 @@ func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 			}
 		}
 		return handler(context, request)
-	}
+	}, nil
 }

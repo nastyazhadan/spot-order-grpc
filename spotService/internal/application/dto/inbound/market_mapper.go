@@ -13,10 +13,16 @@ func MarketToProto(market models.Market) *proto.Market {
 		deletedAt = timestamppb.New(*market.DeletedAt)
 	}
 
+	var updateAt *timestamppb.Timestamp
+	if !market.UpdatedAt.IsZero() {
+		updateAt = timestamppb.New(market.UpdatedAt)
+	}
+
 	return &proto.Market{
 		Id:        market.ID.String(),
 		Name:      market.Name,
 		Enabled:   market.Enabled,
 		DeletedAt: deletedAt,
+		UpdatedAt: updateAt,
 	}
 }

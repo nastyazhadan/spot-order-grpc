@@ -37,16 +37,6 @@ message OrderCreatedEvent {
   google.protobuf.Timestamp created_at = 11;
 }
 
-message OrderStatusUpdatedEvent {
-  string event_id = 1;
-  string order_id = 2;
-  OrderStatus  new_status = 3;
-  string reason = 4;
-  string correlation_id = 5;
-  string causation_id = 6;
-  google.protobuf.Timestamp updated_at = 7;
-}
-
 message MarketStateChangedEvent {
   string event_id = 1;
   string market_id = 2;

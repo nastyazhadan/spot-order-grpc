@@ -81,6 +81,7 @@ type Market struct {
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Enabled       bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	DeletedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -139,6 +140,13 @@ func (x *Market) GetEnabled() bool {
 func (x *Market) GetDeletedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.DeletedAt
+	}
+	return nil
+}
+
+func (x *Market) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
 	}
 	return nil
 }
@@ -331,13 +339,15 @@ var File_spot_v1_spot_proto protoreflect.FileDescriptor
 
 const file_spot_v1_spot_proto_rawDesc = "" +
 	"\n" +
-	"\x12spot/v1/spot.proto\x12\aspot.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\x94\x01\n" +
+	"\x12spot/v1/spot.proto\x12\aspot.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xcf\x01\n" +
 	"\x06Market\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\x1b\n" +
 	"\x04name\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12\x18\n" +
 	"\aenabled\x18\x03 \x01(\bR\aenabled\x129\n" +
 	"\n" +
-	"deleted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\"[\n" +
+	"deleted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"[\n" +
 	"\x12ViewMarketsRequest\x12E\n" +
 	"\n" +
 	"user_roles\x18\x01 \x03(\x0e2\x11.spot.v1.UserRoleB\x13\xbaH\x10\x92\x01\r\b\x01\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\tuserRoles\"@\n" +
@@ -384,19 +394,20 @@ var file_spot_v1_spot_proto_goTypes = []any{
 }
 var file_spot_v1_spot_proto_depIdxs = []int32{
 	6, // 0: spot.v1.Market.deleted_at:type_name -> google.protobuf.Timestamp
-	0, // 1: spot.v1.ViewMarketsRequest.user_roles:type_name -> spot.v1.UserRole
-	1, // 2: spot.v1.ViewMarketsResponse.markets:type_name -> spot.v1.Market
-	0, // 3: spot.v1.GetMarketByIDRequest.user_roles:type_name -> spot.v1.UserRole
-	1, // 4: spot.v1.GetMarketByIDResponse.market:type_name -> spot.v1.Market
-	2, // 5: spot.v1.SpotInstrumentService.ViewMarkets:input_type -> spot.v1.ViewMarketsRequest
-	4, // 6: spot.v1.SpotInstrumentService.GetMarketByID:input_type -> spot.v1.GetMarketByIDRequest
-	3, // 7: spot.v1.SpotInstrumentService.ViewMarkets:output_type -> spot.v1.ViewMarketsResponse
-	5, // 8: spot.v1.SpotInstrumentService.GetMarketByID:output_type -> spot.v1.GetMarketByIDResponse
-	7, // [7:9] is the sub-list for method output_type
-	5, // [5:7] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	6, // 1: spot.v1.Market.updated_at:type_name -> google.protobuf.Timestamp
+	0, // 2: spot.v1.ViewMarketsRequest.user_roles:type_name -> spot.v1.UserRole
+	1, // 3: spot.v1.ViewMarketsResponse.markets:type_name -> spot.v1.Market
+	0, // 4: spot.v1.GetMarketByIDRequest.user_roles:type_name -> spot.v1.UserRole
+	1, // 5: spot.v1.GetMarketByIDResponse.market:type_name -> spot.v1.Market
+	2, // 6: spot.v1.SpotInstrumentService.ViewMarkets:input_type -> spot.v1.ViewMarketsRequest
+	4, // 7: spot.v1.SpotInstrumentService.GetMarketByID:input_type -> spot.v1.GetMarketByIDRequest
+	3, // 8: spot.v1.SpotInstrumentService.ViewMarkets:output_type -> spot.v1.ViewMarketsResponse
+	5, // 9: spot.v1.SpotInstrumentService.GetMarketByID:output_type -> spot.v1.GetMarketByIDResponse
+	8, // [8:10] is the sub-list for method output_type
+	6, // [6:8] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_spot_v1_spot_proto_init() }

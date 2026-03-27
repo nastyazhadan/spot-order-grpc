@@ -17,6 +17,11 @@ func MarketFromProto(market *proto.Market) (models.Market, error) {
 		deletedAt = &t
 	}
 
+	var updatedAt time.Time
+	if protoUpdatedAt := market.GetUpdatedAt(); protoUpdatedAt != nil {
+		updatedAt = protoUpdatedAt.AsTime().UTC()
+	}
+
 	id, err := uuid.Parse(market.GetId())
 	if err != nil {
 		return models.Market{}, fmt.Errorf("invalid market id %q: %w", market.GetId(), err)
@@ -27,6 +32,7 @@ func MarketFromProto(market *proto.Market) (models.Market, error) {
 		Name:      market.GetName(),
 		Enabled:   market.GetEnabled(),
 		DeletedAt: deletedAt,
+		UpdatedAt: updatedAt,
 	}, nil
 }
 

@@ -55,7 +55,7 @@ func (s *MarketBlockStore) SyncState(
 	marketID uuid.UUID,
 	blocked bool,
 	updatedAt time.Time,
-) error {
+) (bool, error) {
 	const op = "redis.MarketBlockStore.SyncState"
 
 	state := unblockedState
@@ -65,17 +65,26 @@ func (s *MarketBlockStore) SyncState(
 
 	timestamp := updatedAt.UTC().UnixMicro()
 
-	if _, err := syncMarketBlockStateScript.Run(
+	result, err := syncMarketBlockStateScript.Run(
 		ctx,
 		s.store.ScriptRunner(),
 		[]string{blockKey(marketID)},
 		timestamp,
 		state,
-	).Result(); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+	).Int()
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	return nil
+	switch result {
+	case 1:
+		return true, nil
+	case 2:
+		return false, nil
+	default:
+		return false, fmt.Errorf("%s: unexpected script result %d", op, result)
+
+	}
 }
 
 func (s *MarketBlockStore) IsBlocked(ctx context.Context, marketID uuid.UUID) (bool, error) {
