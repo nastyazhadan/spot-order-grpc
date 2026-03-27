@@ -17,6 +17,8 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_started
+      kafka:
+        condition: service_healthy
     healthcheck:
       test: [ "CMD", "grpc_health_probe", "-addr=:50052" ]
       interval: 10s

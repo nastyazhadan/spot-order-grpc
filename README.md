@@ -89,7 +89,6 @@ PostgreSQL при старте создаёт базы `order_db` и `spot_db`, 
 | `OTEL_HEALTHCHECK_PORT` | health-check порт OTel Collector (по умолчанию `13133`) |
 | `PROMETHEUS_METRICS_PORT` | HTTP-порт метрик самого OTel Collector (`8888`) |
 | `PROMETHEUS_PORT` | внешний порт Prometheus |
-| `PUSHGATEWAY_PORT` | внешний порт Pushgateway |
 | `GRAFANA_PORT` | внешний порт Grafana |
 | `GRAFANA_ADMIN_USER` | логин администратора Grafana |
 | `GRAFANA_ADMIN_PASSWORD` | пароль администратора Grafana |
@@ -137,7 +136,6 @@ PostgreSQL при старте создаёт базы `order_db` и `spot_db`, 
 | `tracing.service_version` | `1.0.0` | версия сервиса |
 | `metrics.http_address` | `:9091` | HTTP-адрес Prometheus metrics endpoint |
 | `metrics.export_interval` | `15s` | интервал экспорта OTEL metrics |
-| `metrics.push_gateway_url` | `http://pushgateway:9093` | адрес Pushgateway |
 | `keep_alive.ping_time` | `20s` | интервал server keepalive ping |
 | `keep_alive.ping_timeout` | `5s` | timeout ожидания pong |
 | `keep_alive.min_ping_interval` | `10s` | минимальный интервал клиентских ping |
@@ -455,7 +453,7 @@ spotOrder/
 │   │   ├── recovery/                       # перехват паник
 │   │   ├── tracing/                        # tracing interceptors + propagator
 │   │   └── validate/                       # protovalidate interceptor
-│   ├── metrics/                            # Prometheus-метрики и shutdown push
+│   ├── metrics/                            # Prometheus-метрики и shutdown
 │   └── models/                             # общие модели (Market, UserRole, Decimal)
 │
 ├── protos/

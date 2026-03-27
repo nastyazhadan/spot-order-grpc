@@ -267,19 +267,58 @@ func (s *OrderService) ensureMarketNotBlocked(
 	)
 	defer span.End()
 
-	blocked, err := s.blockStore.IsBlocked(ctx, marketID)
+	blocked, err := s.getMarketBlockedState(ctx, span, marketID)
 	if err != nil {
-		tracing.RecordError(span, err)
 		return err
 	}
-
-	span.SetAttributes(attribute.Bool("market_blocked", blocked))
 
 	if !blocked {
 		return nil
 	}
 
-	// Еще раз проверяем доступность рынка, т.к. redis может быть неактуальным
+	return s.recheckBlockedMarket(ctx, span, marketID)
+}
+
+func (s *OrderService) getMarketBlockedState(
+	ctx context.Context,
+	span trace.Span,
+	marketID uuid.UUID,
+) (bool, error) {
+	blocked, err := s.blockStore.IsBlocked(ctx, marketID)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			tracing.RecordError(span, err)
+			return false, err
+		}
+
+		span.SetAttributes(
+			attribute.Bool("market_block_store_lookup_failed", true),
+			attribute.Bool("market_block_store_fallback", true),
+		)
+
+		s.logger.Warn(ctx, "Market block store lookup failed, falling back to market validation",
+			zap.String("market_id", marketID.String()),
+			zap.Error(err),
+		)
+
+		return false, nil
+	}
+
+	span.SetAttributes(
+		attribute.Bool("market_block_store_lookup_failed", false),
+		attribute.Bool("market_block_store_fallback", false),
+		attribute.Bool("market_blocked", blocked),
+	)
+
+	return blocked, nil
+}
+
+// Еще раз проверяем доступность рынка, т.к. redis может быть неактуальным
+func (s *OrderService) recheckBlockedMarket(
+	ctx context.Context,
+	span trace.Span,
+	marketID uuid.UUID,
+) error {
 	market, err := s.marketViewer.GetMarketByID(ctx, marketID)
 	if err != nil {
 		tracing.RecordError(span, err)
@@ -294,7 +333,8 @@ func (s *OrderService) ensureMarketNotBlocked(
 
 	span.SetAttributes(
 		attribute.Bool("market_enabled_recheck", market.Enabled),
-		attribute.Bool("market_deleted_recheck", market.DeletedAt != nil))
+		attribute.Bool("market_deleted_recheck", market.DeletedAt != nil),
+	)
 
 	if !market.Enabled || market.DeletedAt != nil {
 		err = sharedErrors.ErrMarketNotFound{ID: market.ID}
@@ -302,13 +342,22 @@ func (s *OrderService) ensureMarketNotBlocked(
 		return err
 	}
 
-	updated, err := s.blockStore.SyncState(ctx, marketID, false, market.UpdatedAt)
+	s.syncStaleMarketBlock(ctx, market)
+
+	return nil
+}
+
+func (s *OrderService) syncStaleMarketBlock(
+	ctx context.Context,
+	market sharedModels.Market,
+) {
+	updated, err := s.blockStore.SyncState(ctx, market.ID, false, market.UpdatedAt)
 	if err != nil {
 		s.logger.Warn(ctx, "Failed to remove stale market block after recheck",
 			zap.String("market_id", market.ID.String()),
 			zap.Error(err),
 		)
-		return nil
+		return
 	}
 
 	if updated {
@@ -316,8 +365,6 @@ func (s *OrderService) ensureMarketNotBlocked(
 			zap.String("market_id", market.ID.String()),
 		)
 	}
-
-	return nil
 }
 
 // saveOrder сохраняет заказ и пишет OrderCreatedEvent в outbox в одной транзакции
