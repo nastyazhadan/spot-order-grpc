@@ -33,7 +33,7 @@ func NewContainer(ctx context.Context, cfg config.SpotConfig, logger *zap.Logger
 	marketViewer := provideSpotService(marketStore, marketCacheRepository, cfg, logger)
 	outboxStore := provideSpotOutboxStore(pool, logger, cfg)
 	cursorStore := provideMarketCursorStore(pool)
-	marketProducer := provideMarketEventProducer(outboxStore, cursorStore, logger)
+	marketProducer := provideMarketEventProducer(outboxStore, cursorStore, logger, cfg)
 	marketPoller := provideMarketPoller(marketStore, marketProducer, cursorStore, cfg, logger)
 	syncProducer, err := provideSaramaSyncProducer(cfg)
 	if err != nil {

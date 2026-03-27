@@ -262,9 +262,7 @@ func (s *CompensationService) syncMarketBlockState(
 	ctx context.Context,
 	event sharedModels.MarketStateChangedEvent,
 ) error {
-	if !event.Enabled || event.DeletedAt != nil {
-		return s.blockStore.Block(ctx, event.MarketID)
-	}
+	blocked := !event.Enabled || event.DeletedAt != nil
 
-	return s.blockStore.Unblock(ctx, event.MarketID)
+	return s.blockStore.SyncState(ctx, event.MarketID, blocked, event.UpdatedAt)
 }

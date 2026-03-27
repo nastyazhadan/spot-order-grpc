@@ -182,8 +182,9 @@ func provideMarketEventProducer(
 	store *outboxStore.OutboxStore,
 	cursorStore *cursor.Store,
 	logger *zapLogger.Logger,
+	cfg config.SpotConfig,
 ) *producer.MarketProducer {
-	return producer.New(store, cursorStore, logger)
+	return producer.New(store, cursorStore, logger, cfg)
 }
 
 func provideMarketPoller(

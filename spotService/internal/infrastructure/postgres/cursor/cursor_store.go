@@ -42,7 +42,7 @@ func (s *Store) Get(ctx context.Context, pollerName string) (models.PollerCursor
 }
 
 func (s *Store) SaveCursorTransaction(ctx context.Context, transaction pgx.Tx, cursor models.PollerCursor) error {
-	const op = "CursorStore.SaveCursorTransactiom"
+	const op = "CursorStore.SaveCursorTransaction"
 
 	dtoCursor := dto.FromDomain(cursor)
 

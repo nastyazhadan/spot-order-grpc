@@ -54,8 +54,7 @@ type Saver interface {
 }
 
 type MarketBlockStore interface {
-	Block(ctx context.Context, marketID uuid.UUID) error
-	Unblock(ctx context.Context, marketID uuid.UUID) error
+	SyncState(ctx context.Context, marketID uuid.UUID, blocked bool, updatedAt time.Time) error
 	IsBlocked(ctx context.Context, marketID uuid.UUID) (bool, error)
 }
 

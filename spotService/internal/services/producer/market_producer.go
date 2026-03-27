@@ -2,10 +2,12 @@ package producer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -30,13 +32,15 @@ type MarketProducer struct {
 	outboxWriter OutboxWriter
 	cursorStore  CursorStore
 	logger       *zapLogger.Logger
+	config       config.SpotConfig
 }
 
-func New(writer OutboxWriter, store CursorStore, logger *zapLogger.Logger) *MarketProducer {
+func New(writer OutboxWriter, store CursorStore, logger *zapLogger.Logger, cfg config.SpotConfig) *MarketProducer {
 	return &MarketProducer{
 		outboxWriter: writer,
 		cursorStore:  store,
 		logger:       logger,
+		config:       cfg,
 	}
 }
 
@@ -82,14 +86,12 @@ func (p *MarketProducer) ProduceMarketStateChangedBatch(
 	ctx, span := tracing.StartSpan(ctx, "producer.produce_market_state_changed_batch")
 	defer span.End()
 
-	tx, err := p.outboxWriter.BeginTransaction(ctx)
+	transaction, err := p.outboxWriter.BeginTransaction(ctx)
 	if err != nil {
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: begin tx: %w", op, err)
 	}
-	defer func() {
-		_ = tx.Rollback(ctx)
-	}()
+	defer p.rollbackTransaction(ctx, transaction, p.logger, "Failed to rollback market producer transaction")
 
 	for _, event := range events {
 		outboxEvent, buildError := p.buildOutboxEvent(ctx, span, event)
@@ -97,21 +99,19 @@ func (p *MarketProducer) ProduceMarketStateChangedBatch(
 			return fmt.Errorf("%s: build outbox event: %w", op, buildError)
 		}
 
-		if err = p.outboxWriter.SaveOutboxEventTransaction(ctx, tx, outboxEvent); err != nil {
+		if err = p.outboxWriter.SaveOutboxEventTransaction(ctx, transaction, outboxEvent); err != nil {
 			tracing.RecordError(span, err)
 			return fmt.Errorf("%s: save outbox event: %w", op, err)
 		}
 	}
 
-	if err = p.cursorStore.SaveCursorTransaction(ctx, tx, cursor); err != nil {
+	if err = p.cursorStore.SaveCursorTransaction(ctx, transaction, cursor); err != nil {
 		tracing.RecordError(span, err)
-
 		return fmt.Errorf("%s: save cursor: %w", op, err)
 	}
 
-	if err = tx.Commit(ctx); err != nil {
+	if err = transaction.Commit(ctx); err != nil {
 		tracing.RecordError(span, err)
-
 		return fmt.Errorf("%s: commit: %w", op, err)
 	}
 
@@ -169,4 +169,18 @@ func (p *MarketProducer) saveOutboxEvent(
 	}
 
 	return nil
+}
+
+func (p *MarketProducer) rollbackTransaction(
+	ctx context.Context,
+	transaction pgx.Tx,
+	logger *zapLogger.Logger,
+	message string,
+) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.config.Timeouts.Service)
+	defer cancel()
+
+	if err := transaction.Rollback(cleanupCtx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		logger.Error(cleanupCtx, message, zap.Error(err))
+	}
 }

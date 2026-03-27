@@ -120,26 +120,34 @@ func (m *MarketStore) ListUpdatedSince(
 ) ([]models.Market, error) {
 	const op = "MarketStore.ListUpdatedSince"
 
+	ctx, span := tracing.StartSpan(ctx, "postgres.list_updated_since",
+		trace.WithSpanKind(trace.SpanKindClient),
+	)
+	defer span.End()
+
 	start := time.Now()
+	defer func() {
+		metrics.ObserveWithTrace(ctx,
+			metrics.DBQueryDuration.WithLabelValues(m.config.Service.Name, "market.list_updated_since"),
+			time.Since(start).Seconds(),
+		)
+	}()
+
 	rows, err := m.pool.Query(ctx, `
 		SELECT id, name, enabled, deleted_at, updated_at FROM market_store
 		WHERE (updated_at > $1) OR (updated_at = $1 AND id > $2)
 		ORDER BY updated_at ASC, id ASC
 		LIMIT $3
 	`, since.UTC(), afterID, limit)
-
-	metrics.ObserveWithTrace(ctx,
-		metrics.DBQueryDuration.WithLabelValues(m.config.Service.Name, "market.list_updated_since"),
-		time.Since(start).Seconds(),
-	)
-
 	if err != nil {
+		tracing.RecordError(span, err)
 		return nil, fmt.Errorf("%s: query: %w", op, err)
 	}
 	defer rows.Close()
 
 	dtoMarkets, err := pgx.CollectRows(rows, pgx.RowToStructByName[dto.Market])
 	if err != nil {
+		span.RecordError(err)
 		return nil, fmt.Errorf("%s: collect: %w", op, err)
 	}
 

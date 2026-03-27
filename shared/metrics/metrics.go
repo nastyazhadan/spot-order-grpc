@@ -163,7 +163,7 @@ var (
 			Name: "grpc_server_outbox_pending_events",
 			Help: "Number of unprocessed events in the outbox table",
 		},
-		[]string{"service", "topic"},
+		[]string{"service"},
 	)
 
 	OutboxWorkerDuration = promauto.NewHistogramVec(
@@ -172,7 +172,7 @@ var (
 			Help:    "Duration of a single outbox worker poll iteration",
 			Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
 		},
-		[]string{"service", "topic"},
+		[]string{"service"},
 	)
 )
 

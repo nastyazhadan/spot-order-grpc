@@ -126,7 +126,7 @@ func (s *MarketViewer) GetMarketByID(
 }
 
 func (s *MarketViewer) getMarketActual(ctx context.Context, id uuid.UUID) (models.Market, error) {
-	const op = "MarketViewer.getMarketFresh"
+	const op = "MarketViewer.getMarketActual"
 
 	market, err := s.marketRepository.GetByID(ctx, id)
 	if err != nil {
