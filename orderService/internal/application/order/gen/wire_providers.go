@@ -223,6 +223,10 @@ func provideDLQPublisher(
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) sharedConsumer.DLQPublisher {
+	if !cfg.Kafka.Consumer.DLQEnabled {
+		return nil
+	}
+
 	return sharedProducer.New(
 		syncProducer,
 		cfg.Kafka.Topics.MarketStateChangedDLQ,
@@ -271,17 +275,25 @@ func provideConsumerService(
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) *consumer.MarketConsumer {
-	middlewares := make([]sharedConsumer.Middleware, 0, 1)
+	middlewares := make([]sharedConsumer.Middleware, 0, 2)
 
 	if cfg.Kafka.Consumer.DLQEnabled {
-		middlewares = append(middlewares, sharedConsumer.RetryWithDLQMiddleware(
+		middlewares = append(middlewares,
+			sharedConsumer.DLQMiddleware(
+				cfg.Service.Name,
+				dlqPublisher,
+				logger,
+			),
+		)
+	}
+
+	middlewares = append(middlewares,
+		sharedConsumer.RetryMiddleware(
 			cfg.Kafka.Consumer.MaxRetries,
 			cfg.Kafka.Consumer.RetryBackoff,
-			cfg.Service.Name,
-			dlqPublisher,
 			logger,
-		))
-	}
+		),
+	)
 
 	kafkaConsumer := sharedConsumer.New(
 		group,
@@ -436,6 +448,7 @@ func RegisterKafkaProducer(
 
 			if err := syncProducer.Close(); err != nil {
 				logger.Error(ctx, "Failed to close sync producer", zap.Error(err))
+				return err
 			}
 
 			return nil

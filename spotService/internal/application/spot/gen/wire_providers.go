@@ -303,6 +303,7 @@ func RegisterKafkaProducer(
 
 			if err := syncProducer.Close(); err != nil {
 				logger.Error(ctx, "Failed to close sync producer", zap.Error(err))
+				return err
 			}
 
 			return nil

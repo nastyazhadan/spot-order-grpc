@@ -2,16 +2,21 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/sony/gobreaker/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/client/grpc/breaker"
 	"github.com/nastyazhadan/spot-order-grpc/shared/client/grpc/mapper"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
@@ -69,7 +74,7 @@ func (c *SpotClient) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Ma
 		})
 	})
 	if err != nil {
-		return models.Market{}, err
+		return models.Market{}, mapGetMarketByIDError(err, id)
 	}
 
 	market, err := mapper.MarketFromProto(response.GetMarket())
@@ -78,4 +83,36 @@ func (c *SpotClient) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Ma
 	}
 
 	return market, nil
+}
+
+func mapGetMarketByIDError(err error, marketID uuid.UUID) error {
+	if err == nil {
+		return nil
+	}
+
+	switch {
+	case errors.Is(err, context.DeadlineExceeded),
+		errors.Is(err, context.Canceled),
+		errors.Is(err, gobreaker.ErrOpenState),
+		errors.Is(err, gobreaker.ErrTooManyRequests):
+		return serviceErrors.ErrUnavailable{ID: marketID}
+	}
+
+	st, ok := status.FromError(err)
+	if !ok {
+		return fmt.Errorf("spot client get market by id: %w", err)
+	}
+
+	switch st.Code() {
+	case codes.NotFound:
+		return sharedErrors.ErrMarketNotFound{ID: marketID}
+
+	case codes.Unavailable,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted:
+		return serviceErrors.ErrUnavailable{ID: marketID}
+
+	default:
+		return fmt.Errorf("spot client get market by id: %w", err)
+	}
 }

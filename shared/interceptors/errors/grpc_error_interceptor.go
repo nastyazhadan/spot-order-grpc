@@ -44,7 +44,7 @@ func mapError(ctx context.Context, err error, logger *zapLogger.Logger) error {
 
 	case errors.Is(err, serviceErrors.ErrMarketUnavailable):
 		logger.Warn(ctx, "market temporarily unavailable", zap.Error(err))
-		return status.Error(codes.FailedPrecondition, err.Error())
+		return status.Error(codes.Unavailable, "market temporarily unavailable")
 
 	case errors.Is(err, serviceErrors.ErrOrderAlreadyExists):
 		logger.Warn(ctx, "order already exists", zap.Error(err))

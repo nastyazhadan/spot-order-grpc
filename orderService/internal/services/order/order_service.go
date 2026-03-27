@@ -243,14 +243,14 @@ func (s *OrderService) validateMarket(
 	market, err := s.marketViewer.GetMarketByID(ctx, marketID)
 	if err != nil {
 		tracing.RecordError(span, err)
-		if blocked {
+		if blocked && errors.Is(err, serviceErrors.ErrMarketUnavailable) {
 			s.logger.Warn(ctx, "Market is blocked locally and recheck failed, failing closed",
 				zap.String("market_id", marketID.String()),
 				zap.Error(err),
 			)
 		}
 
-		return sharedErrors.ErrMarketNotFound{ID: marketID}
+		return err
 	}
 
 	span.SetAttributes(

@@ -88,11 +88,9 @@ func applyMiddlewares(handler MessageHandler, middlewares ...Middleware) Message
 	return handler
 }
 
-func RetryWithDLQMiddleware(
+func RetryMiddleware(
 	maxRetries int,
 	backoff time.Duration,
-	serviceName string,
-	dlqPublisher DLQPublisher,
 	logger *zapLogger.Logger,
 ) Middleware {
 	if maxRetries < 0 {
@@ -121,11 +119,38 @@ func RetryWithDLQMiddleware(
 							continue
 						}
 					}
-					return sendToDLQ(ctx, msg, serviceName, dlqPublisher, logger, err, maxRetries)
+					return RetryExhaustedError{
+						Err:        err,
+						RetryCount: maxRetries,
+					}
 				}
 				return nil
 			}
 			return nil
+		}
+	}
+}
+
+func DLQMiddleware(
+	serviceName string,
+	dlqPublisher DLQPublisher,
+	logger *zapLogger.Logger,
+) Middleware {
+	return func(next MessageHandler) MessageHandler {
+		return func(ctx context.Context, msg kafka.Message) error {
+			err := next(ctx, msg)
+			if err == nil {
+				return nil
+			}
+
+			retryCount := 0
+			var exhaustedErr RetryExhaustedError
+			if errors.As(err, &exhaustedErr) {
+				retryCount = exhaustedErr.RetryCount
+				err = exhaustedErr.Err
+			}
+
+			return sendToDLQ(ctx, msg, serviceName, dlqPublisher, logger, err, retryCount)
 		}
 	}
 }
@@ -142,7 +167,7 @@ func sendToDLQ(
 	if dlqPublisher == nil {
 		logger.Error(ctx, "Message processing failed (no DLQ configured)",
 			zap.String("topic", msg.Topic),
-			zap.Int("retries", retryCount),
+			zap.Int("retry_count", retryCount),
 			zap.Error(lastErr),
 		)
 		return lastErr
@@ -162,7 +187,7 @@ func sendToDLQ(
 
 	logger.Error(ctx, "Message sent to DLQ after all retries",
 		zap.String("topic", msg.Topic),
-		zap.Int("retries", retryCount),
+		zap.Int("retry_count", retryCount),
 		zap.Error(lastErr),
 	)
 
