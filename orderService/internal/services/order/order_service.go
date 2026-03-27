@@ -277,11 +277,35 @@ func (s *OrderService) ensureMarketNotBlocked(
 
 	span.SetAttributes(attribute.Bool("market_blocked", blocked))
 
-	if blocked {
-		err = sharedErrors.ErrMarketNotFound{ID: marketID}
-		tracing.RecordError(span, err)
+	if !blocked {
+		return nil
+	}
 
+	// Еще раз проверяем доступность рынка, т.к. redis может быть неактуальным
+	market, err := s.marketViewer.GetMarketByID(ctx, marketID)
+	if err != nil {
+		tracing.RecordError(span, err)
 		return err
+	}
+
+	span.SetAttributes(
+		attribute.Bool("market_enabled_recheck", market.Enabled),
+		attribute.Bool("market_deleted_recheck", market.DeletedAt != nil))
+
+	if !market.Enabled || market.DeletedAt != nil {
+		err = sharedErrors.ErrMarketNotFound{ID: market.ID}
+		tracing.RecordError(span, err)
+		return err
+	}
+
+	if err = s.blockStore.SyncState(ctx, marketID, false, market.UpdatedAt); err != nil {
+		s.logger.Warn(ctx, "Failed to remove stale market block after recheck",
+			zap.String("market_id", market.ID.String()),
+			zap.Error(err))
+	} else {
+		s.logger.Warn(ctx, "Removed stale market block after recheck",
+			zap.String("market_id", market.ID.String()),
+		)
 	}
 
 	return nil

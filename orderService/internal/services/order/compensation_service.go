@@ -95,7 +95,14 @@ func (s *CompensationService) ProcessMarketStateChanged(
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: begin transaction: %w", op, err)
 	}
-	defer RollbackTx(ctx, transaction, s.logger, "Market compensation transaction rollback failed", s.config.Timeouts.Service)
+
+	transactionClosed := false
+	defer func() {
+		if transactionClosed {
+			return
+		}
+		RollbackTx(ctx, transaction, s.logger, "Market compensation transaction rollback failed", s.config.Timeouts.Service)
+	}()
 
 	inboxEvent := models.InboxEvent{
 		ID:            uuid.New(),
@@ -109,20 +116,27 @@ func (s *CompensationService) ProcessMarketStateChanged(
 	shouldProcess, currentStatus, err := s.inboxStore.BeginProcessing(ctx, transaction, inboxEvent)
 	if err != nil {
 		tracing.RecordError(span, err)
+		transactionClosed = true
 		return s.failProcessing(ctx, transaction, op, inboxEvent, err)
 	}
 
 	if !shouldProcess {
-		return s.handleSkippedEvent(ctx, span, transaction, event, consumerGroup, currentStatus)
+		transactionClosed, err = s.handleSkippedEvent(ctx, span, transaction, event, consumerGroup, currentStatus)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
 	if err = s.applyCompensationTransaction(ctx, span, transaction, event); err != nil {
 		tracing.RecordError(span, err)
+		transactionClosed = true
 		return s.failProcessing(ctx, transaction, op, inboxEvent, err)
 	}
 
 	if err = s.inboxStore.MarkProcessed(ctx, transaction, event.EventID, consumerGroup); err != nil {
 		tracing.RecordError(span, err)
+		transactionClosed = true
 		return s.failProcessing(ctx, transaction, op, inboxEvent, err)
 	}
 
@@ -130,6 +144,7 @@ func (s *CompensationService) ProcessMarketStateChanged(
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: commit transaction: %w", op, err)
 	}
+	transactionClosed = true
 
 	if err = s.syncMarketBlockState(ctx, event); err != nil {
 		tracing.RecordError(span, err)
@@ -146,22 +161,22 @@ func (s *CompensationService) handleSkippedEvent(
 	event sharedModels.MarketStateChangedEvent,
 	consumerGroup string,
 	currentStatus models.InboxEventStatus,
-) error {
+) (bool, error) {
 	s.logSkippedEvent(ctx, event, consumerGroup, currentStatus)
 
 	if err := transaction.Commit(ctx); err != nil {
 		tracing.RecordError(span, err)
-		return fmt.Errorf("commit skipped transaction: %w", err)
+		return false, fmt.Errorf("commit skipped transaction: %w", err)
 	}
 
 	if currentStatus == models.InboxEventStatusProcessed {
 		if err := s.syncMarketBlockState(ctx, event); err != nil {
 			tracing.RecordError(span, err)
-			return fmt.Errorf("resync market block state for processed event: %w", err)
+			return false, fmt.Errorf("resync market block state for processed event: %w", err)
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 func (s *CompensationService) applyCompensationTransaction(

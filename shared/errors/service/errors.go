@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	shared "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 )
 
@@ -14,6 +15,7 @@ var (
 	ErrMarketNotFound     = shared.ErrMarketNotFound{}
 
 	ErrRateLimitExceeded = ErrLimitExceeded{}
+	ErrMarketUnavailable = ErrUnavailable{}
 
 	ErrMarketsNotFound      = errors.New("markets not found")
 	ErrUserRoleNotSpecified = errors.New("user role not specified")
@@ -36,5 +38,18 @@ func (e ErrLimitExceeded) Error() string {
 
 func (e ErrLimitExceeded) Is(target error) bool {
 	var errorType ErrLimitExceeded
+	return errors.As(target, &errorType)
+}
+
+type ErrUnavailable struct {
+	ID uuid.UUID
+}
+
+func (e ErrUnavailable) Error() string {
+	return fmt.Sprintf("market with id=%s is temporarily unavailable", e.ID)
+}
+
+func (e ErrUnavailable) Is(target error) bool {
+	var errorType ErrUnavailable
 	return errors.As(target, &errorType)
 }
