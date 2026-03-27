@@ -121,11 +121,11 @@ func (s *OrderService) CreateOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err := s.validateMarket(ctx, marketID); err != nil {
+	if err := s.ensureMarketNotBlocked(ctx, marketID); err != nil {
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err := s.ensureMarketNotBlocked(ctx, marketID); err != nil {
+	if err := s.validateMarket(ctx, marketID); err != nil {
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -263,9 +263,7 @@ func (s *OrderService) ensureMarketNotBlocked(
 	marketID uuid.UUID,
 ) error {
 	ctx, span := tracing.StartSpan(ctx, "order.ensure_market_not_blocked",
-		trace.WithAttributes(
-			attributeUUID("market_id", marketID),
-		),
+		trace.WithAttributes(attributeUUID("market_id", marketID)),
 	)
 	defer span.End()
 
@@ -285,7 +283,13 @@ func (s *OrderService) ensureMarketNotBlocked(
 	market, err := s.marketViewer.GetMarketByID(ctx, marketID)
 	if err != nil {
 		tracing.RecordError(span, err)
-		return err
+
+		s.logger.Warn(ctx, "Market is blocked locally and recheck failed, failing closed",
+			zap.String("market_id", marketID.String()),
+			zap.Error(err),
+		)
+
+		return sharedErrors.ErrMarketNotFound{ID: marketID}
 	}
 
 	span.SetAttributes(
@@ -302,14 +306,15 @@ func (s *OrderService) ensureMarketNotBlocked(
 	if err != nil {
 		s.logger.Warn(ctx, "Failed to remove stale market block after recheck",
 			zap.String("market_id", market.ID.String()),
-			zap.Error(err))
-	} else if updated {
+			zap.Error(err),
+		)
+		return nil
+	}
+
+	if updated {
 		s.logger.Warn(ctx, "Removed stale market block after recheck",
 			zap.String("market_id", market.ID.String()),
 		)
-	} else {
-		s.logger.Warn(ctx, "Skipped removing stale market block after recheck because Redis has newer state",
-			zap.String("market_id", market.ID.String()))
 	}
 
 	return nil

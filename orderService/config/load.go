@@ -55,6 +55,9 @@ func validateOrderConfig(cfg config.OrderConfig) error {
 	if err := validateOrderRetry(cfg); err != nil {
 		return err
 	}
+	if err := validateOrderRateLimits(cfg); err != nil {
+		return err
+	}
 	if err := validateOrderKafka(cfg); err != nil {
 		return err
 	}
@@ -359,6 +362,52 @@ func validateOutboxConfig(cfg config.OutboxConfig) error {
 			"kafka.outbox.batch_timeout (%s) must be less than processing_timeout (%s)",
 			cfg.BatchTimeout,
 			cfg.ProcessingTimeout,
+		)
+	}
+
+	return nil
+}
+
+func validateOrderRateLimits(cfg config.OrderConfig) error {
+	if cfg.GRPCRateLimit.CreateOrder <= 0 {
+		return fmt.Errorf(
+			"grpc_rate_limit.create_order must be greater than 0, got %d",
+			cfg.GRPCRateLimit.CreateOrder,
+		)
+	}
+
+	if cfg.GRPCRateLimit.GetOrderStatus <= 0 {
+		return fmt.Errorf(
+			"grpc_rate_limit.get_order_status must be greater than 0, got %d",
+			cfg.GRPCRateLimit.GetOrderStatus,
+		)
+	}
+
+	if cfg.GRPCRateLimit.RefreshToken <= 0 {
+		return fmt.Errorf(
+			"grpc_rate_limit.refresh_token must be greater than 0, got %d",
+			cfg.GRPCRateLimit.RefreshToken,
+		)
+	}
+
+	if cfg.RateLimitByUser.CreateOrder <= 0 {
+		return fmt.Errorf(
+			"rate_limit_by_user.create_order must be greater than 0, got %d",
+			cfg.RateLimitByUser.CreateOrder,
+		)
+	}
+
+	if cfg.RateLimitByUser.GetOrderStatus <= 0 {
+		return fmt.Errorf(
+			"rate_limit_by_user.get_order_status must be greater than 0, got %d",
+			cfg.RateLimitByUser.GetOrderStatus,
+		)
+	}
+
+	if cfg.RateLimitByUser.Window <= 0 {
+		return fmt.Errorf(
+			"rate_limit_by_user.window must be greater than 0, got %s",
+			cfg.RateLimitByUser.Window,
 		)
 	}
 

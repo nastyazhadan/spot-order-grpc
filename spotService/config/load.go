@@ -41,6 +41,9 @@ func validateSpotConfig(cfg config.SpotConfig) error {
 	if err := validateSpotKeepAlive(cfg); err != nil {
 		return err
 	}
+	if err := validateSpotRateLimits(cfg); err != nil {
+		return err
+	}
 	if err := validateSpotMarketPoller(cfg); err != nil {
 		return err
 	}
@@ -223,6 +226,24 @@ func validateSpotKafka(cfg config.SpotConfig) error {
 			"kafka.outbox.batch_timeout (%s) must be less than processing_timeout (%s)",
 			cfg.Kafka.Outbox.BatchTimeout,
 			cfg.Kafka.Outbox.ProcessingTimeout,
+		)
+	}
+
+	return nil
+}
+
+func validateSpotRateLimits(cfg config.SpotConfig) error {
+	if cfg.GRPCRateLimit.ViewMarkets <= 0 {
+		return fmt.Errorf(
+			"grpc_rate_limit.view_markets must be greater than 0, got %d",
+			cfg.GRPCRateLimit.ViewMarkets,
+		)
+	}
+
+	if cfg.GRPCRateLimit.GetMarketByID <= 0 {
+		return fmt.Errorf(
+			"grpc_rate_limit.get_market_by_id must be greater than 0, got %d",
+			cfg.GRPCRateLimit.GetMarketByID,
 		)
 	}
 
