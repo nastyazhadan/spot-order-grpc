@@ -76,7 +76,7 @@ order:
       compression: "snappy"
     consumer:
       group_id: "order-service"
-      session_timeout: 30s
+      session_timeout: 30sF
       heartbeat_interval: 3s
       max_retries: 3
       retry_backoff: 500ms
