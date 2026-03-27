@@ -81,7 +81,6 @@ func isSuccessfulCall(err error) bool {
 		codes.PermissionDenied,
 		codes.Unauthenticated,
 		codes.FailedPrecondition,
-		codes.ResourceExhausted,
 		codes.OutOfRange:
 		return true
 	default:

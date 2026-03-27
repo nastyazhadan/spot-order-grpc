@@ -1,6 +1,7 @@
 package mapper
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,6 +12,9 @@ import (
 )
 
 func MarketFromProto(market *proto.Market) (models.Market, error) {
+	if market == nil {
+		return models.Market{}, errors.New("proto market is nil")
+	}
 	var deletedAt *time.Time
 	if delTime := market.GetDeletedAt(); delTime != nil {
 		t := delTime.AsTime()
@@ -46,6 +50,5 @@ func UserRoleToProto(userRole models.UserRole) proto.UserRole {
 		return proto.UserRole_ROLE_VIEWER
 	default:
 		return proto.UserRole_ROLE_UNSPECIFIED
-
 	}
 }

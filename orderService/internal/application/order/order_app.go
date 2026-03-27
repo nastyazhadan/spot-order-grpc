@@ -163,7 +163,7 @@ func provideClientConnection(
 			retry.UnaryClientInterceptor(
 				retry.WithMax(cfg.Retry.MaxAttempts),
 				retry.WithBackoff(retry.BackoffExponentialWithJitter(cfg.Retry.InitialBackoff, cfg.Retry.Jitter)),
-				retry.WithCodes(codes.DeadlineExceeded, codes.ResourceExhausted, codes.Unavailable),
+				retry.WithCodes(codes.DeadlineExceeded, codes.Unavailable),
 				retry.WithPerRetryTimeout(cfg.Retry.PerRetryTimeout),
 			),
 		),

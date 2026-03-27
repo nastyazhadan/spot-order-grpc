@@ -146,10 +146,7 @@ func (s *CompensationService) ProcessMarketStateChanged(
 	}
 	transactionClosed = true
 
-	if err = s.syncMarketBlockState(ctx, event); err != nil {
-		tracing.RecordError(span, err)
-		return fmt.Errorf("%s: sync market block state after commit: %w", op, err)
-	}
+	s.trySyncMarketBlockState(ctx, span, event, "after_commit")
 
 	return nil
 }
@@ -170,10 +167,7 @@ func (s *CompensationService) handleSkippedEvent(
 	}
 
 	if currentStatus == models.InboxEventStatusProcessed {
-		if err := s.syncMarketBlockState(ctx, event); err != nil {
-			tracing.RecordError(span, err)
-			return false, fmt.Errorf("resync market block state for processed event: %w", err)
-		}
+		s.trySyncMarketBlockState(ctx, span, event, "processed_event_resync")
 	}
 
 	return true, nil
@@ -271,6 +265,30 @@ func (s *CompensationService) publishCancelledOrderEvents(
 	}
 
 	return nil
+}
+
+func (s *CompensationService) trySyncMarketBlockState(
+	ctx context.Context,
+	span trace.Span,
+	event sharedModels.MarketStateChangedEvent,
+	reason string,
+) {
+	syncCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.config.Timeouts.Service)
+	defer cancel()
+
+	if err := s.syncMarketBlockState(syncCtx, event); err != nil {
+		span.SetAttributes(
+			attribute.Bool("market_block_sync_failed", true),
+			attribute.String("market_block_sync_reason", reason),
+		)
+
+		s.logger.Warn(syncCtx, "Market block state sync failed after successful transaction",
+			zap.String("event_id", event.EventID.String()),
+			zap.String("market_id", event.MarketID.String()),
+			zap.String("sync_reason", reason),
+			zap.Error(err),
+		)
+	}
 }
 
 func (s *CompensationService) syncMarketBlockState(

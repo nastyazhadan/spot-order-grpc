@@ -181,6 +181,13 @@ func validateSpotKafka(cfg config.SpotConfig) error {
 		)
 	}
 
+	if cfg.Kafka.Producer.MaxRetries < 0 {
+		return fmt.Errorf(
+			"kafka.producer.max_retries must be greater than or equal to 0, got %d",
+			cfg.Kafka.Producer.MaxRetries,
+		)
+	}
+
 	if cfg.Kafka.Producer.RetryBackoff <= 0 {
 		return fmt.Errorf(
 			"kafka.producer.retry_backoff must be greater than 0, got %s",
