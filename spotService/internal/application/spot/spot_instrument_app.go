@@ -101,13 +101,13 @@ func registerTracing(
 }
 
 func registerMetrics(
-	ctx context.Context,
+	appCtx context.Context,
 	lifeCycle fx.Lifecycle,
 	cfg config.SpotConfig,
 	resource *resource.Resource,
 	logger *zapLogger.Logger,
 ) error {
-	meterProvider, err := metricInterceptor.InitOpenTelemetry(ctx, cfg.Metrics, resource, logger)
+	meterProvider, err := metricInterceptor.InitOpenTelemetry(appCtx, cfg.Metrics, resource, logger)
 	if err != nil {
 		return err
 	}
@@ -124,20 +124,20 @@ func registerMetrics(
 	}
 
 	lifeCycle.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
+		OnStart: func(startCtx context.Context) error {
 			go func() {
 				if startErr := httpServer.ListenAndServe(); startErr != nil && !errors.Is(startErr, http.ErrServerClosed) {
-					logger.Error(ctx, "Failed to start metrics server", zap.Error(startErr))
+					logger.Error(appCtx, "Failed to start metrics server", zap.Error(startErr))
 				}
 			}()
 			return nil
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(stopCtx context.Context) error {
 			metrics.RecordShutdown(cfg.Service.Name)
-			if stopErr := meterProvider.Shutdown(ctx); stopErr != nil {
-				logger.Error(ctx, "Failed to shutdown metrics provider", zap.Error(stopErr))
+			if stopErr := meterProvider.Shutdown(stopCtx); stopErr != nil {
+				logger.Error(stopCtx, "Failed to shutdown metrics provider", zap.Error(stopErr))
 			}
-			return httpServer.Shutdown(ctx)
+			return httpServer.Shutdown(stopCtx)
 		},
 	})
 
@@ -218,6 +218,7 @@ func provideGRPCServer(
 }
 
 func startGRPCServer(
+	appCtx context.Context,
 	lifeCycle fx.Lifecycle,
 	server *grpc.Server,
 	listener net.Listener,
@@ -225,23 +226,23 @@ func startGRPCServer(
 	logger *zapLogger.Logger,
 ) {
 	lifeCycle.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			logger.Info(ctx, "Starting gRPC spot server",
+		OnStart: func(startCtx context.Context) error {
+			logger.Info(startCtx, "Starting gRPC spot server",
 				zap.String("address", listener.Addr().String()))
 			go func() {
 				if err := server.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-					logger.Error(ctx, "gRPC spot server error", zap.Error(err))
+					logger.Error(appCtx, "gRPC spot server error", zap.Error(err))
 				}
 			}()
 
 			return nil
 		},
-		OnStop: func(ctx context.Context) error {
-			stopGRPCServer(ctx, server, logger, "spot")
+		OnStop: func(stopCtx context.Context) error {
+			stopGRPCServer(stopCtx, server, logger, "spot")
 
 			container.PostgresPool.Close()
 			if err := container.RedisClient.Close(); err != nil {
-				logger.Error(ctx, "failed to close redis", zap.Error(err))
+				logger.Error(stopCtx, "failed to close redis", zap.Error(err))
 				return err
 			}
 

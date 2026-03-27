@@ -71,7 +71,7 @@ func mapError(ctx context.Context, err error, logger *zapLogger.Logger) error {
 	case errors.Is(err, serviceErrors.ErrRevokeTokenFailed),
 		errors.Is(err, serviceErrors.ErrSaveTokenFailed):
 		logger.Error(ctx, "token store failure", zap.Error(err))
-		return status.Error(codes.Internal, err.Error())
+		return status.Error(codes.Internal, "internal error")
 
 	default:
 		logger.Error(ctx, "unhandled error", zap.Error(err))

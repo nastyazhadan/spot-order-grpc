@@ -207,10 +207,11 @@ func provideMarketPoller(
 
 func RegisterMarketPoller(
 	lifecycle fx.Lifecycle,
+	appCtx context.Context,
 	poller *spotService.MarketPoller,
 	logger *zapLogger.Logger,
 ) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(appCtx)
 	done := make(chan struct{})
 
 	lifecycle.Append(fx.Hook{
@@ -257,10 +258,11 @@ func provideSpotService(
 
 func RegisterOutboxWorker(
 	lifecycle fx.Lifecycle,
+	appCtx context.Context,
 	worker *outbox.Worker,
 	logger *zapLogger.Logger,
 ) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(appCtx)
 	done := make(chan struct{})
 
 	lifecycle.Append(fx.Hook{

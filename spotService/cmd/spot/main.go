@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/nastyazhadan/spot-order-grpc/spotService/config"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot"
@@ -14,5 +17,8 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	spot.Run(context.Background(), *cfg)
+	appCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	spot.Run(appCtx, *cfg)
 }

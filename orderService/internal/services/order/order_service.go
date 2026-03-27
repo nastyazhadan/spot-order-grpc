@@ -121,10 +121,6 @@ func (s *OrderService) CreateOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err := s.ensureMarketNotBlocked(ctx, marketID); err != nil {
-		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
-	}
-
 	if err := s.validateMarket(ctx, marketID); err != nil {
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
@@ -233,36 +229,7 @@ func (s *OrderService) validateMarket(
 	ctx context.Context,
 	marketID uuid.UUID,
 ) error {
-	ctx, span := tracing.StartSpan(ctx, "order.validate_market",
-		trace.WithAttributes(
-			attributeUUID("market_id", marketID)),
-	)
-	defer span.End()
-
-	market, err := s.marketViewer.GetMarketByID(ctx, marketID)
-	if err != nil {
-		tracing.RecordError(span, err)
-		return err
-	}
-
-	span.SetAttributes(
-		attribute.Bool("market_enabled", market.Enabled),
-		attribute.Bool("market_deleted", market.DeletedAt != nil),
-	)
-	if !market.Enabled || market.DeletedAt != nil {
-		err = sharedErrors.ErrMarketNotFound{ID: marketID}
-		tracing.RecordError(span, err)
-		return err
-	}
-
-	return nil
-}
-
-func (s *OrderService) ensureMarketNotBlocked(
-	ctx context.Context,
-	marketID uuid.UUID,
-) error {
-	ctx, span := tracing.StartSpan(ctx, "order.ensure_market_not_blocked",
+	ctx, span := tracing.StartSpan(ctx, "validate_market",
 		trace.WithAttributes(attributeUUID("market_id", marketID)),
 	)
 	defer span.End()
@@ -272,11 +239,37 @@ func (s *OrderService) ensureMarketNotBlocked(
 		return err
 	}
 
-	if !blocked {
-		return nil
+	// Еще раз проверяем доступность рынка, т.к. redis может быть неактуальным
+	market, err := s.marketViewer.GetMarketByID(ctx, marketID)
+	if err != nil {
+		tracing.RecordError(span, err)
+		if blocked {
+			s.logger.Warn(ctx, "Market is blocked locally and recheck failed, failing closed",
+				zap.String("market_id", marketID.String()),
+				zap.Error(err),
+			)
+		}
+
+		return sharedErrors.ErrMarketNotFound{ID: marketID}
 	}
 
-	return s.recheckBlockedMarket(ctx, span, marketID)
+	span.SetAttributes(
+		attribute.Bool("market_enabled", market.Enabled),
+		attribute.Bool("market_deleted", market.DeletedAt != nil),
+		attribute.Bool("market_was_blocked", blocked),
+	)
+
+	if !market.Enabled || market.DeletedAt != nil {
+		err = sharedErrors.ErrMarketNotFound{ID: marketID}
+		tracing.RecordError(span, err)
+		return err
+	}
+
+	if blocked {
+		s.syncStaleMarketBlock(ctx, market)
+	}
+
+	return nil
 }
 
 func (s *OrderService) getMarketBlockedState(
@@ -311,40 +304,6 @@ func (s *OrderService) getMarketBlockedState(
 	)
 
 	return blocked, nil
-}
-
-// Еще раз проверяем доступность рынка, т.к. redis может быть неактуальным
-func (s *OrderService) recheckBlockedMarket(
-	ctx context.Context,
-	span trace.Span,
-	marketID uuid.UUID,
-) error {
-	market, err := s.marketViewer.GetMarketByID(ctx, marketID)
-	if err != nil {
-		tracing.RecordError(span, err)
-
-		s.logger.Warn(ctx, "Market is blocked locally and recheck failed, failing closed",
-			zap.String("market_id", marketID.String()),
-			zap.Error(err),
-		)
-
-		return sharedErrors.ErrMarketNotFound{ID: marketID}
-	}
-
-	span.SetAttributes(
-		attribute.Bool("market_enabled_recheck", market.Enabled),
-		attribute.Bool("market_deleted_recheck", market.DeletedAt != nil),
-	)
-
-	if !market.Enabled || market.DeletedAt != nil {
-		err = sharedErrors.ErrMarketNotFound{ID: market.ID}
-		tracing.RecordError(span, err)
-		return err
-	}
-
-	s.syncStaleMarketBlock(ctx, market)
-
-	return nil
 }
 
 func (s *OrderService) syncStaleMarketBlock(

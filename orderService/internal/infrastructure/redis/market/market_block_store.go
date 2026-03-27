@@ -83,7 +83,6 @@ func (s *MarketBlockStore) SyncState(
 		return false, nil
 	default:
 		return false, fmt.Errorf("%s: unexpected script result %d", op, result)
-
 	}
 }
 
@@ -108,13 +107,6 @@ func (s *MarketBlockStore) IsBlocked(ctx context.Context, marketID uuid.UUID) (b
 
 func parseBlockedState(raw []byte) (bool, error) {
 	value := string(raw)
-
-	switch value {
-	case blockedState:
-		return true, nil
-	case unblockedState:
-		return false, nil
-	}
 
 	_, state, found := strings.Cut(value, ":")
 	if !found {

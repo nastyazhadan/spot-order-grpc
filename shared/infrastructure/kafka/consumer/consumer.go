@@ -95,16 +95,17 @@ func RetryWithDLQMiddleware(
 	dlqPublisher DLQPublisher,
 	logger *zapLogger.Logger,
 ) Middleware {
+	if maxRetries < 0 {
+		maxRetries = 0
+	}
+
 	return func(next MessageHandler) MessageHandler {
 		return func(ctx context.Context, msg kafka.Message) error {
-			var lastErr error
-
 			for attempt := range maxRetries + 1 {
 				if err := next(ctx, msg); err != nil {
-					lastErr = err
-
 					if attempt < maxRetries {
 						sleep := backoff * time.Duration(attempt+1)
+
 						logger.Warn(ctx, "Kafka message processing failed, retrying",
 							zap.String("topic", msg.Topic),
 							zap.Int("attempt", attempt+1),
@@ -120,11 +121,11 @@ func RetryWithDLQMiddleware(
 							continue
 						}
 					}
-					return sendToDLQ(ctx, msg, serviceName, dlqPublisher, logger, lastErr, maxRetries)
+					return sendToDLQ(ctx, msg, serviceName, dlqPublisher, logger, err, maxRetries)
 				}
 				return nil
 			}
-			return lastErr
+			return nil
 		}
 	}
 }

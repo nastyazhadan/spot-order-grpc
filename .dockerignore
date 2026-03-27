@@ -21,8 +21,14 @@ Thumbs.db
 orderConsumer/.gitignore
 
 # Игнорируем файлы IDE
-.idea
-.vscode
+.idea/
+.vscode/
 
 # Игнорируем файлы логов
 *.log
+
+# Секреты
+.env
+.env.*
+*.env
+*.local

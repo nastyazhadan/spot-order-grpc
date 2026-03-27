@@ -344,10 +344,11 @@ func provideOrderService(
 
 func RegisterOutboxWorker(
 	lifecycle fx.Lifecycle,
+	appCtx context.Context,
 	worker *outbox.Worker,
 	logger *zapLogger.Logger,
 ) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(appCtx)
 	done := make(chan struct{})
 
 	lifecycle.Append(fx.Hook{
@@ -379,11 +380,12 @@ func RegisterOutboxWorker(
 
 func RegisterKafkaConsumer(
 	lifecycle fx.Lifecycle,
+	appCtx context.Context,
 	consumer *consumer.MarketConsumer,
 	group sarama.ConsumerGroup,
 	logger *zapLogger.Logger,
 ) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(appCtx)
 	done := make(chan struct{})
 
 	lifecycle.Append(fx.Hook{
@@ -394,10 +396,10 @@ func RegisterKafkaConsumer(
 
 				if err := consumer.Run(ctx); err != nil {
 					if ctx.Err() != nil {
-						logger.Info(context.Background(), "Kafka consumer stopped")
+						logger.Info(appCtx, "Kafka consumer stopped")
 						return
 					}
-					logger.Error(context.Background(), "Kafka consumer exited with error", zap.Error(err))
+					logger.Error(appCtx, "Kafka consumer exited with error", zap.Error(err))
 				}
 			}()
 
