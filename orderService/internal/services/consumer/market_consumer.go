@@ -4,16 +4,23 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound/kafka"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka/consumer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
+
+const messagingSystem = "kafka"
+
+type Consumer interface {
+	Consume(ctx context.Context, handler consumer.MessageHandler) error
+}
 
 type MarketEventProcessor interface {
 	ProcessMarketStateChanged(

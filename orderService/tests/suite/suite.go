@@ -255,7 +255,6 @@ func (s *Suite) OrderExistsInDB(ctx context.Context, orderID string) bool {
 	err := s.Pool.QueryRow(ctx,
 		"SELECT EXISTS(SELECT 1 FROM orders WHERE id = $1)", orderID,
 	).Scan(&exists)
-
 	if err != nil {
 		s.Test.Fatalf("failed to check order existence: %v", err)
 	}

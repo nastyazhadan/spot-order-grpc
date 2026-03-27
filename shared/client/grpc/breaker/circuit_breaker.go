@@ -40,7 +40,7 @@ func New[T any](
 
 			return shouldTrip
 		},
-		OnStateChange: func(breakerName string, from gobreaker.State, to gobreaker.State) {
+		OnStateChange: func(breakerName string, from, to gobreaker.State) {
 			metrics.CircuitBreakerStateChangesTotal.WithLabelValues(
 				breakerName,
 				from.String(),

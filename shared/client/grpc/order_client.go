@@ -34,7 +34,6 @@ func (c *OrderClient) CreateOrder(
 	ctx context.Context,
 	request *proto.CreateOrderRequest,
 ) (*proto.CreateOrderResponse, error) {
-
 	result, err := c.createOrderBreaker.Execute(func() (*proto.CreateOrderResponse, error) {
 		return c.api.CreateOrder(ctx, request)
 	})
@@ -49,7 +48,6 @@ func (c *OrderClient) GetOrderStatus(
 	ctx context.Context,
 	request *proto.GetOrderStatusRequest,
 ) (*proto.GetOrderStatusResponse, error) {
-
 	result, err := c.getOrderStatusBreaker.Execute(func() (*proto.GetOrderStatusResponse, error) {
 		return c.api.GetOrderStatus(ctx, request)
 	})

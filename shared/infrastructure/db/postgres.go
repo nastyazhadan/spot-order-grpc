@@ -25,7 +25,6 @@ func SetupDBWithPoolConfig(
 	migrationsFS fs.FS,
 	config PoolConfig,
 ) (*pgxpool.Pool, error) {
-
 	pool, err := newPgxPool(ctx, dbURI, config)
 	if err != nil {
 		return nil, fmt.Errorf("NewPgxPool: %w", err)

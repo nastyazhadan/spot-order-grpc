@@ -81,6 +81,9 @@ func (w *Worker) Run(ctx context.Context) {
 		zap.Duration("processing_timeout", processingTimeout),
 	)
 
+	w.releaseStuck(ctx)
+	w.processBatch(ctx)
+
 	pollTicker := time.NewTicker(w.pollInterval)
 	defer pollTicker.Stop()
 

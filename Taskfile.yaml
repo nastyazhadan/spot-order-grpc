@@ -1,5 +1,12 @@
 version: '3'
 
+vars:
+  GO_MODULES:
+    - shared
+    - orderService
+    - spotService
+    - protos
+
 tasks:
   test:
     desc: Запустить все юнит тесты
@@ -81,8 +88,29 @@ tasks:
 
       - echo "{{.GREEN}}Все тесты (race) завершены{{.NC}}"
 
+  fmt:
+    desc: Отформатировать Go-код через gofumpt
+    cmds:
+      - echo "{{.BLUE}}Форматирование Go-кода...{{.NC}}"
+      - golangci-lint fmt
+      - echo "{{.GREEN}}Форматирование завершено{{.NC}}"
+
   lint:
-    # TODO: добавить линтер
+    desc: Проверить Go-код линтерами и форматированием
+    cmds:
+      - for:
+          var: GO_MODULES
+        task: lint:module
+        vars:
+          MODULE: "{{.ITEM}}"
+
+      - echo "{{.GREEN}}Lint завершен{{.NC}}"
+
+  lint:module:
+    dir: "./{{.MODULE}}"
+    cmds:
+      - echo "{{.BLUE}}Проверка {{.MODULE}}...{{.NC}}"
+      - golangci-lint run -c ../.golangci.yml ./...
 
   mocks:gen:
     desc: Сгенерировать моки с помощью mockery

@@ -377,7 +377,6 @@ func TestCreateOrder(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-
 			mockOrder := new(mocks.Order)
 			test.setupMocks(mockOrder)
 
@@ -562,7 +561,6 @@ func TestGetOrderStatus(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-
 			mockOrder := new(mocks.Order)
 			test.setupMocks(mockOrder)
 

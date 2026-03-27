@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
+	models "github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	mock "github.com/stretchr/testify/mock"
 
 	uuid "github.com/google/uuid"
@@ -16,27 +16,27 @@ type Getter struct {
 	mock.Mock
 }
 
-// GetOrder provides a mock function with given fields: ctx, id
-func (_m *Getter) GetOrder(ctx context.Context, id uuid.UUID) (shared.Order, error) {
-	ret := _m.Called(ctx, id)
+// GetOrder provides a mock function with given fields: ctx, id, userID
+func (_m *Getter) GetOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID) (models.Order, error) {
+	ret := _m.Called(ctx, id, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetOrder")
 	}
 
-	var r0 shared.Order
+	var r0 models.Order
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) (shared.Order, error)); ok {
-		return rf(ctx, id)
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) (models.Order, error)); ok {
+		return rf(ctx, id, userID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) shared.Order); ok {
-		r0 = rf(ctx, id)
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, uuid.UUID) models.Order); ok {
+		r0 = rf(ctx, id, userID)
 	} else {
-		r0 = ret.Get(0).(shared.Order)
+		r0 = ret.Get(0).(models.Order)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
-		r1 = rf(ctx, id)
+	if rf, ok := ret.Get(1).(func(context.Context, uuid.UUID, uuid.UUID) error); ok {
+		r1 = rf(ctx, id, userID)
 	} else {
 		r1 = ret.Error(1)
 	}

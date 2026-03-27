@@ -296,7 +296,6 @@ func (s *OutboxStore) SaveOutboxEventTransaction(ctx context.Context, transactio
 		INSERT INTO outbox (id, event_id, event_type, aggregate_id, payload, status, retry_count, available_at)
 		VALUES ($1, $2, $3, $4, $5, 'pending', 0, NOW())
 	`, event.ID, event.EventID, event.EventType, event.AggregateID, event.Payload)
-
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

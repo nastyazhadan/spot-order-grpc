@@ -51,7 +51,7 @@ func TestCreateOrder(t *testing.T) {
 			orderType: shared.OrderTypeTakeProfit,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
 				markets := []models.Market{
 					{
@@ -80,7 +80,7 @@ func TestCreateOrder(t *testing.T) {
 			orderType: shared.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(_ *mocks.Saver, _ *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+			setupMocks: func(_ *mocks.Saver, _ *mocks.MarketViewer, createLimiter, _ *mocks.RateLimiter) {
 				createLimiter.On("Allow", mock.Anything, randomUUID).Return(false, nil)
 			},
 			expectedStatus: shared.OrderStatusCancelled,
@@ -97,7 +97,7 @@ func TestCreateOrder(t *testing.T) {
 			orderType: shared.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(_ *mocks.Saver, _ *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+			setupMocks: func(_ *mocks.Saver, _ *mocks.MarketViewer, createLimiter, _ *mocks.RateLimiter) {
 				createLimiter.On("Allow", mock.Anything, randomUUID).Return(false, errors.New("cache down"))
 			},
 			expectedStatus: shared.OrderStatusCancelled,
@@ -110,7 +110,7 @@ func TestCreateOrder(t *testing.T) {
 			orderType: shared.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(_ *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+			setupMocks: func(_ *mocks.Saver, viewer *mocks.MarketViewer, createLimiter, _ *mocks.RateLimiter) {
 				createLimiter.On("Allow", mock.Anything, mock.Anything).Return(true, nil)
 				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
 					Return([]models.Market{}, nil)
@@ -125,7 +125,7 @@ func TestCreateOrder(t *testing.T) {
 			orderType: shared.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
 				markets := []models.Market{{
 					ID:      marketID,
@@ -150,11 +150,10 @@ func TestCreateOrder(t *testing.T) {
 			orderType: shared.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(_ *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+			setupMocks: func(_ *mocks.Saver, viewer *mocks.MarketViewer, createLimiter, _ *mocks.RateLimiter) {
 				createLimiter.On("Allow", mock.Anything, randomUUID).Return(true, nil)
 				viewer.On("ViewMarkets", mock.Anything, []sharedModels.UserRole{sharedModels.UserRoleUser}).
 					Return(nil, errors.New("internal error"))
-
 			},
 			expectedStatus: shared.OrderStatusCancelled,
 			expectedErrMsg: "OrderService.CreateOrder: internal error",
@@ -170,7 +169,7 @@ func TestCreateOrder(t *testing.T) {
 			orderType: shared.OrderTypeMarket,
 			price:     randomPrice,
 			quantity:  randomQuantity,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
 				markets := []models.Market{{
 					ID:      marketID,
@@ -197,7 +196,7 @@ func TestCreateOrder(t *testing.T) {
 			orderType: shared.OrderTypeTakeProfit,
 			price:     randomPrice,
 			quantity:  1,
-			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter *mocks.RateLimiter, _ *mocks.RateLimiter) {
+			setupMocks: func(saver *mocks.Saver, viewer *mocks.MarketViewer, createLimiter, _ *mocks.RateLimiter) {
 				marketID := randomUUID
 				markets := []models.Market{{
 					ID:      marketID,

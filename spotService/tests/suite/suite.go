@@ -206,7 +206,6 @@ func (s *Suite) InsertMarket(ctx context.Context, id, name string, enabled bool,
 		`INSERT INTO market_store (id, name, enabled, deleted_at) VALUES ($1, $2, $3, $4)`,
 		id, name, enabled, deletedAt,
 	)
-
 	if err != nil {
 		s.Test.Fatalf("failed to insert market: %v", err)
 	}

@@ -30,7 +30,6 @@ func (s *Store) Get(ctx context.Context, pollerName string) (models.PollerCursor
 		FROM market_poller_cursor
 		WHERE poller_name = $1
 	`, pollerName).Scan(&cursor.PollerName, &cursor.LastSeenAt, &cursor.LastSeenID)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.PollerCursor{}, pgx.ErrNoRows
@@ -55,7 +54,6 @@ func (s *Store) SaveCursorTransaction(ctx context.Context, transaction pgx.Tx, c
 			last_seen_id = EXCLUDED.last_seen_id,
 			updated_at = NOW()
 	`, dtoCursor.PollerName, dtoCursor.LastSeenAt.UTC(), dtoCursor.LastSeenID)
-
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

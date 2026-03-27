@@ -23,7 +23,8 @@ func (s *Server) Check(
 
 func (s *Server) Watch(
 	request *grpc_health_v1.HealthCheckRequest,
-	stream grpc_health_v1.Health_WatchServer) error {
+	stream grpc_health_v1.Health_WatchServer,
+) error {
 	return stream.Send(&grpc_health_v1.HealthCheckResponse{
 		Status: grpc_health_v1.HealthCheckResponse_SERVING,
 	})
