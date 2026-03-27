@@ -2,12 +2,12 @@
 
 Два gRPC-сервиса для работы со спотовыми торговыми инструментами и ордерами.
 
-- **SpotInstrumentService** — справочник рынков (`markets`) с фильтрацией по ролям пользователя, Redis-кэшем и `singleflight`
-- **OrderService** — создание ордеров и получение статуса, с проверкой рынка через SpotService, JWT-аутентификацией, circuit breaker и per-user rate limiting
+- **SpotInstrumentService** — справочник рынков (`markets`) с фильтрацией по ролям пользователя, Redis-кэшем и `singleflight`. Поллер отслеживает изменения рынков и публикует события через Transactional Outbox. При публикации батча кэш автоматически инвалидируется.
+- **OrderService** — создание ордеров и получение статуса, с проверкой рынка через SpotService, JWT-аутентификацией, circuit breaker и per-user rate limiting. При получении события `market.state.changed` компенсирует активные ордера заблокированного рынка.
 
 ## Технологический стек
 
-Go 1.25 · gRPC / Protobuf / Protovalidate · PostgreSQL 17 · Redis 7 · OpenTelemetry · Prometheus · Grafana · Tempo · Circuit Breaker (`gobreaker`) · JWT · Zap · Goose · Taskfile
+Go 1.25 · gRPC / Protobuf / Protovalidate · PostgreSQL 17 · Redis 7 · Kafka · OpenTelemetry · Prometheus · Grafana · Tempo · Circuit Breaker (`gobreaker`) · JWT · Zap · Goose · Taskfile
 
 ---
 
@@ -48,8 +48,6 @@ Docker Compose поднимает весь стек целиком:
 | `prometheus` | Prometheus | `9090` |
 | `grafana` | Grafana | `3000` |
 | `tempo` | Tempo | `3200` |
-| `pushgateway` | Prometheus Pushgateway | `9093` |
-
 PostgreSQL при старте создаёт базы `order_db` и `spot_db`, а сами сервисы затем автоматически применяют SQL-миграции через Goose. Seed-данные рынков загружаются миграцией `spotService`.
 
 Полезные адреса после запуска:
@@ -63,7 +61,6 @@ PostgreSQL при старте создаёт базы `order_db` и `spot_db`, 
 | OTel Collector health | `http://localhost:13133/health` |
 | Prometheus | `http://localhost:9090` |
 | Grafana | `http://localhost:3000` |
-| Pushgateway | `http://localhost:9093` |
 
 ---
 
@@ -148,13 +145,16 @@ PostgreSQL при старте создаёт базы `order_db` и `spot_db`, 
 
 #### `spot` — SpotInstrumentService
 
-Аналогичные секции `address`, `log_level`, `log_format`, `max_recv_msg_size`, `grpc_rate_limit`, `postgres_pool`, `redis`, `tracing`, `metrics`, `keep_alive`. 
+Аналогичные секции `address`, `log_level`, `log_format`, `max_recv_msg_size`, `grpc_rate_limit`, `postgres_pool`, `redis`, `tracing`, `metrics`, `keep_alive`.
 Дополнительно:
 
 | Параметр | Значение по умолчанию | Описание |
 |---|---|---|
 | `load_markets_timeout` | `5s` | таймаут загрузки рынков |
-| `redis.spot_cache_ttl` | `24h` | TTL кэша рынков в Redis |
+| `redis.spot_cache_ttl` | `24h` | TTL кэша рынков в Redis (инвалидируется досрочно при изменении рынка) |
+| `market_poller.poll_interval` | `10s` | интервал опроса изменений рынков |
+| `market_poller.processing_timeout` | `30s` | таймаут одной итерации поллера |
+| `market_poller.batch_size` | `100` | размер батча при чтении обновлений рынков |
 
 ---
 
@@ -166,7 +166,6 @@ PostgreSQL при старте создаёт базы `order_db` и `spot_db`, 
 - метрики сервисов доступны по HTTP на `:9091/metrics` и `:9092/metrics`
 - OTel metrics также экспортируются через collector в Prometheus Remote Write
 - Grafana подключена к `Prometheus` и `Tempo` через provisioning
-- при shutdown сервисы отправляют служебную метрику в Pushgateway
 
 **Архитектура:**
 ```
@@ -180,7 +179,6 @@ Prometheus ← scrape:
   - order-service:9091
   - spot-service:9092
   - otel-collector:8888
-  - pushgateway:9093
 
 Grafana → Prometheus + Tempo
 ```
@@ -191,8 +189,10 @@ Grafana → Prometheus + Tempo
 - `UnaryServerInterceptor` / `UnaryClientInterceptor` — каждый gRPC-вызов
 - `order.check_rate_limit`, `order.validate_market`, `order.save_order`, `order.fetch_order`
 - `spot.view_markets`, `spot.load_and_warm_cache`, `spot.get_markets_from_repo`
-- `postgres.save_order`, `postgres.get_order`, `postgres.list_all_markets`
+- `postgres.save_order`, `postgres.get_order`, `postgres.list_all_markets`, `postgres.list_updated_since`
 - `redis.get_markets`, `redis.set_markets`
+- `market_compensation.process` — обработка события `market.state.changed` в OrderService
+- `producer.produce_market_state_changed_batch` — публикация батча событий рынков в SpotService
 
 **Интерфейсы:**
 - Grafana UI: `http://localhost:3000`
@@ -275,7 +275,7 @@ task token:generate
 
 #### `OrderService / CreateOrder`
 
-Создаёт ордер. Перед сохранением проверяет, что `market_id` существует и активен в SpotService.
+Создаёт ордер. Перед сохранением проверяет, что `market_id` существует, активен в SpotService и не заблокирован (не получен сигнал об отключении рынка).
 
 ```json
 {
@@ -286,12 +286,12 @@ task token:generate
 }
 ```
 
-| Поле | Тип | Требования                                                        |
-|---|---|-------------------------------------------------------------------|
-| `market_id` | UUID | обязательно, должен существовать в SpotService                    |
+| Поле | Тип | Требования |
+|---|---|---|
+| `market_id` | UUID | обязательно, должен существовать в SpotService |
 | `order_type` | enum | `TYPE_LIMIT`, `TYPE_MARKET`, `TYPE_STOP_LOSS`, `TYPE_TAKE_PROFIT` |
-| `price.value` | string | число > 0                                                         |
-| `quantity` | int64 | число > 0                                                         |
+| `price.value` | string | число > 0, не более 18 знаков, до 8 знаков после запятой (NUMERIC(18,8)) |
+| `quantity` | int64 | число > 0 |
 
 > `user_id` больше не передаётся в request — он извлекается из JWT токена unary interceptor-ом.
 
@@ -338,6 +338,7 @@ task token:generate
 | `UNAUTHENTICATED` | отсутствует или невалиден JWT для `OrderService` |
 | `NOT_FOUND` | Рынок или ордер не найден |
 | `ALREADY_EXISTS` | Ордер с таким ID уже существует |
+| `FAILED_PRECONDITION` | Рынок временно недоступен (заблокирован из-за события `market.state.changed`) |
 | `RESOURCE_EXHAUSTED` | Сработал per-user Rate Limiter или глобальный RPS-лимит |
 | `UNAVAILABLE` | Сработал Circuit Breaker или недоступен зависимый сервис |
 | `INTERNAL` | Внутренняя ошибка сервера |
@@ -374,7 +375,7 @@ task clean:cache
 
 ```
 spotOrder/
-├── orderConsumer/
+├── orderService/
 │   ├── cmd/order/main.go                   # точка входа
 │   ├── config/load.go                      # загрузка конфига (viper + env)
 │   ├── internal/
@@ -386,8 +387,15 @@ spotOrder/
 │   │   ├── grpc/order/order_handler.go     # gRPC-хэндлеры + извлечение user_id из JWT context
 │   │   ├── infrastructure/
 │   │   │   ├── postgres/order_store.go     # хранение ордеров
-│   │   │   └── redis/order_rate_limiter.go # per-user rate limiter (Lua-скрипт)
-│   │   └── services/order/order_service.go # бизнес-логика
+│   │   │   ├── postgres/outbox_store.go    # Transactional Outbox
+│   │   │   ├── postgres/inbox_store.go     # Inbox (дедупликация входящих событий)
+│   │   │   ├── kafka/outbox_worker.go      # воркер публикации событий из outbox
+│   │   │   ├── redis/order_rate_limiter.go # per-user rate limiter (Lua-скрипт)
+│   │   │   └── redis/market_block_store.go # хранение блокировок рынков
+│   │   └── services/
+│   │       ├── order/order_service.go      # бизнес-логика создания ордеров
+│   │       ├── order/compensation_service.go # компенсация ордеров при отключении рынка
+│   │       └── consumer/market_consumer.go # Kafka-потребитель market.state.changed
 │   ├── migrations/                         # SQL-миграции (Goose)
 │   └── tests/                              # интеграционные тесты
 │
@@ -402,25 +410,39 @@ spotOrder/
 │   │   ├── grpc/spot/                      # gRPC-хэндлеры
 │   │   ├── infrastructure/
 │   │   │   ├── postgres/market_store.go    # чтение рынков из БД
-│   │   │   └── redis/market_cache.go       # кэш рынков (TTL, по ролям)
-│   │   └── services/spot/market_viewer.go  # бизнес-логика + singleflight
+│   │   │   ├── postgres/cursor_store.go    # курсор поллера (позиция чтения)
+│   │   │   ├── postgres/outbox_store.go    # Transactional Outbox
+│   │   │   ├── kafka/outbox_worker.go      # воркер публикации событий из outbox
+│   │   │   └── redis/market_cache.go       # кэш рынков (TTL, по ролям, инвалидация)
+│   │   └── services/
+│   │       ├── spot/market_viewer.go       # бизнес-логика + singleflight
+│   │       ├── spot/market_poller.go       # поллер изменений рынков (cursor-based)
+│   │       └── producer/market_producer.go # outbox-продюсер + инвалидация кэша
 │   ├── migrations/                         # SQL-миграции + init DB scripts
 │   └── tests/                              # интеграционные тесты
 │
 ├── shared/
 │   ├── client/grpc/                        # gRPC-клиенты между сервисами
+│   │   ├── breaker/circuit_breaker.go      # gobreaker-обёртка
 │   │   ├── mapper/                         # маппинг ролей и markets
 │   │   ├── order_client.go                 # клиент OrderService
 │   │   └── spot_client.go                  # клиент SpotService + circuit breaker
 │   ├── config/
 │   │   ├── load.go                         # godotenv + viper
 │   │   └── services.go                     # структуры OrderConfig, SpotConfig
+│   ├── errors/
+│   │   ├── shared_errors.go                # базовые типы ошибок
+│   │   ├── service/errors.go               # сервисные ошибки (включая ErrMarketUnavailable)
+│   │   └── repository/errors.go            # ошибки репозитория
 │   ├── infrastructure/
 │   │   ├── cache/redis_cache_client.go     # обёртка над go-redis
 │   │   ├── db/
 │   │   │   ├── postgres.go                 # pgxpool + миграции
 │   │   │   └── migrator/                   # Goose-мигратор
 │   │   ├── health/health_checker.go        # gRPC Health Check
+│   │   ├── kafka/
+│   │   │   ├── consumer/                   # Kafka consumer group + middleware
+│   │   │   └── producer/                   # Kafka sync producer
 │   │   └── otel/otel_collector_config.yaml # конфиг OTel Collector
 │   │   ├── prometheus/prometheus_config.yml
 │   │   └── tempo/tempo.yaml
@@ -439,7 +461,7 @@ spotOrder/
 ├── protos/
 │   ├── proto/                              # .proto исходники
 │   ├── gen/go/                             # сгенерированный Go-код
-│   └── lib/                                # зависимости (buf/validate, google/type)
+│   └── lib/                               # зависимости (buf/validate, google/type)
 │
 ├── grafana/                                # provisioning и dashboards
 ├── config.yaml                             # основная конфигурация обоих сервисов
@@ -454,37 +476,63 @@ spotOrder/
 ## Архитектура
 
 ```
-  [SpotClient / grpcurl / Postman]
+  [grpcurl / Postman / клиент]
               │ gRPC
               ▼
-┌────────────────────────────────────┐
-│           OrderService             │  :50051
-│  interceptors (chain):             │
-│   rateLimiter → tracer → meter →   │
-│   logger → recoverer → auth →      │
-│   errorMapper → validator          │
-│────────────────────────────────────│
-│  OrderHandler                      │
-│  OrderService (business)           │
+┌────────────────────────────────────────┐
+│            OrderService                │  :50051
+│  interceptors (chain):                 │
+│   recoverer → tracer → meter →         │
+│   logger → auth → rateLimiter →        │
+│   errorMapper → validator              │
+│────────────────────────────────────────│
+│  OrderHandler                          │
+│  OrderService (business)               │
 │    ├── RateLimitByUser (Redis)         │
-│    ├── SpotClient ─────────────────┼──── gRPC ──→ SpotService
-│    │      (circuit breaker)        │
-│    └── OrderStore (PostgreSQL)     │
-└────────────────────────────────────┘
+│    ├── MarketBlockStore (Redis)        │  ← блокировка рынков
+│    ├── SpotClient ─────────────────────┼──── gRPC ──→ SpotService
+│    │      (circuit breaker + retry)    │
+│    └── OrderStore (PostgreSQL)         │
+│                                        │
+│  CompensationService                   │
+│    ├── InboxStore (PostgreSQL)         │  ← дедупликация событий
+│    ├── OrderStore (PostgreSQL)         │  ← отмена активных ордеров
+│    ├── MarketBlockStore (Redis)        │  ← синхронизация блокировки
+│    └── EventProducer → Outbox          │
+│                                        │
+│  Kafka Consumer ← market.state.changed │
+│  Outbox Worker  → order.created        │
+│                   order.status.updated │
+└────────────────────────────────────────┘
 
-┌────────────────────────────────────┐
-│       SpotInstrumentService        │  :50052
-│  interceptors (chain):             │
-│   rateLimiter → tracer → meter →   │
-│   logger → recoverer →             │
-│   errorMapper → validator          │
-│────────────────────────────────────│
-│  SpotInstrumentHandler             │
-│  MarketViewer (business)           │
-│    ├── MarketCache (Redis)         │
-│    │   └── singleflight            │
-│    └── MarketStore (PostgreSQL)    │
-└────────────────────────────────────┘
+┌────────────────────────────────────────┐
+│        SpotInstrumentService           │  :50052
+│  interceptors (chain):                 │
+│   recoverer → tracer → meter →         │
+│   logger → rateLimiter →               │
+│   errorMapper → validator              │
+│────────────────────────────────────────│
+│  SpotInstrumentHandler                 │
+│  MarketViewer (business)               │
+│    ├── MarketCache (Redis)             │  ← TTL-кэш, инвалидируется при изменениях
+│    │   └── singleflight               │
+│    └── MarketStore (PostgreSQL)        │
+│                                        │
+│  MarketPoller (cursor-based)           │
+│    └── MarketProducer                  │
+│          ├── OutboxStore (PostgreSQL)  │  ← атомарно с курсором
+│          └── MarketCache.InvalidateAll │  ← сброс кэша после коммита
+│                                        │
+│  Outbox Worker → market.state.changed  │
+└────────────────────────────────────────┘
+
+Поток события при изменении рынка:
+  SpotService DB → MarketPoller → Outbox → Kafka
+  → OrderService Consumer → CompensationService
+    ├── InboxStore (дедупликация)
+    ├── CancelActiveOrdersByMarket
+    ├── OrderStatusUpdated → Outbox → Kafka
+    └── MarketBlockStore.Block/Unblock (Redis)
 
 Оба сервиса:
   - экспортируют traces и metrics через OTel

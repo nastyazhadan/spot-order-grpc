@@ -3,7 +3,6 @@ package order
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
@@ -16,7 +15,7 @@ import (
 var rateLimitScript = redisGo.NewScript(`
 	local count = redis.call('INCR', KEYS[1])
 	if count == 1 then
-		redis.call('EXPIRE', KEYS[1], ARGV[1])
+		redis.call('PEXPIRE', KEYS[1], ARGV[1])
 	end
 	return count
 `)
@@ -47,11 +46,16 @@ func (r *OrderRateLimiter) Allow(ctx context.Context, userID uuid.UUID) (bool, e
 
 	key := r.prefix + userID.String()
 
+	windowMs := r.window.Milliseconds()
+	if windowMs <= 0 {
+		return false, fmt.Errorf("%s: window must be greater than 0, got %s", op, r.window)
+	}
+
 	raw, err := rateLimitScript.Run(
 		ctx,
 		r.store.ScriptRunner(),
 		[]string{key},
-		int64(math.Ceil(r.window.Seconds())),
+		windowMs,
 	).Result()
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)

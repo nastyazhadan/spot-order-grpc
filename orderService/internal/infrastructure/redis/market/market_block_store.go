@@ -30,7 +30,7 @@ var syncMarketBlockStateScript = redisGo.NewScript(`
 		local sep = string.find(current, ":")
 		if sep then
 			local oldTs = tonumber(string.sub(current, 1, sep - 1))
-			if oldTs and oldTs > newTs then
+			if oldTs and oldTs >= newTs then
 				return 0
 			end
 		end
@@ -79,7 +79,7 @@ func (s *MarketBlockStore) SyncState(
 	switch result {
 	case 1:
 		return true, nil
-	case 2:
+	case 0:
 		return false, nil
 	default:
 		return false, fmt.Errorf("%s: unexpected script result %d", op, result)
