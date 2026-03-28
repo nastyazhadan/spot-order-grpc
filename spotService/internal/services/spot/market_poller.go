@@ -28,10 +28,15 @@ type MarketEventProducer interface {
 	ProduceMarketStateChangedBatch(ctx context.Context, events []sharedModels.MarketStateChangedEvent, cursor models.PollerCursor) error
 }
 
+type MarketCacheRefresher interface {
+	RefreshAll(ctx context.Context) error
+}
+
 type MarketPoller struct {
 	reader            MarketReader
 	producer          MarketEventProducer
 	cursorStore       CursorStore
+	cacheRefresher    MarketCacheRefresher
 	pollInterval      time.Duration
 	processingTimeout time.Duration
 	batchSize         int
@@ -45,6 +50,7 @@ func NewMarketPoller(
 	reader MarketReader,
 	producer MarketEventProducer,
 	store CursorStore,
+	cacheRefresher MarketCacheRefresher,
 	interval time.Duration,
 	timeout time.Duration,
 	size int,
@@ -54,6 +60,7 @@ func NewMarketPoller(
 		reader:            reader,
 		producer:          producer,
 		cursorStore:       store,
+		cacheRefresher:    cacheRefresher,
 		pollInterval:      interval,
 		processingTimeout: timeout,
 		batchSize:         size,
@@ -112,64 +119,110 @@ func (p *MarketPoller) poll(ctx context.Context) {
 	pollCtx, cancel := context.WithTimeout(ctx, p.processingTimeout)
 	defer cancel()
 
+	needCacheRefresh := false
+	defer func() {
+		p.refreshCache(ctx, needCacheRefresh)
+	}()
+
 	for {
 		if pollCtx.Err() != nil {
 			return
 		}
 
-		markets, err := p.reader.ListUpdatedSince(pollCtx, p.lastSeenAt, p.lastSeenID, p.batchSize)
+		updated, hasMore, err := p.processNextBatch(pollCtx)
+		if updated {
+			needCacheRefresh = true
+		}
 		if err != nil {
-			p.logger.Error(pollCtx, "Failed to load updated markets", zap.Error(err))
 			return
 		}
 
-		if len(markets) == 0 {
-			return
-		}
-
-		events := make([]sharedModels.MarketStateChangedEvent, 0, len(markets))
-		for _, market := range markets {
-			if pollCtx.Err() != nil {
-				return
-			}
-
-			events = append(events, p.buildMarketStateChangedEvent(market))
-		}
-
-		last := markets[len(markets)-1]
-		nextCursor := models.PollerCursor{
-			PollerName: p.pollerName,
-			LastSeenAt: last.UpdatedAt.UTC(),
-			LastSeenID: last.ID,
-		}
-
-		if err = p.producer.ProduceMarketStateChangedBatch(pollCtx, events, nextCursor); err != nil {
-			p.logger.Error(pollCtx, "Failed to enqueue market state changed batch",
-				zap.Int("markets_count", len(markets)),
-				zap.Time("last_seen_at", nextCursor.LastSeenAt),
-				zap.String("last_seen_id", nextCursor.LastSeenID.String()),
-				zap.Error(err),
-			)
-			return
-		}
-
-		p.lastSeenAt = nextCursor.LastSeenAt
-		p.lastSeenID = nextCursor.LastSeenID
-
-		if len(markets) < p.batchSize {
+		if !hasMore {
 			return
 		}
 	}
 }
 
-func (p *MarketPoller) buildMarketStateChangedEvent(market sharedModels.Market) sharedModels.MarketStateChangedEvent {
-	return sharedModels.MarketStateChangedEvent{
-		EventID:       uuid.New(),
-		MarketID:      market.ID,
-		Enabled:       market.Enabled,
-		DeletedAt:     market.DeletedAt,
-		CorrelationID: uuid.New(),
-		CausationID:   nil,
-		UpdatedAt:     market.UpdatedAt.UTC(),
+func (p *MarketPoller) processNextBatch(ctx context.Context) (updated bool, hasMore bool, err error) {
+	markets, err := p.reader.ListUpdatedSince(ctx, p.lastSeenAt, p.lastSeenID, p.batchSize)
+	if err != nil {
+		p.logger.Error(ctx, "Failed to load updated markets", zap.Error(err))
+		return false, false, err
+	}
+
+	if len(markets) == 0 {
+		return false, false, nil
+	}
+
+	events, err := p.buildMarketStateChangedEvents(ctx, markets)
+	if err != nil {
+		return true, false, err
+	}
+
+	nextCursor := p.buildNextCursor(markets)
+
+	if err = p.producer.ProduceMarketStateChangedBatch(ctx, events, nextCursor); err != nil {
+		p.logger.Error(ctx, "Failed to enqueue market state changed batch",
+			zap.Int("markets_count", len(markets)),
+			zap.Time("last_seen_at", nextCursor.LastSeenAt),
+			zap.String("last_seen_id", nextCursor.LastSeenID.String()),
+			zap.Error(err),
+		)
+		return true, false, err
+	}
+
+	p.lastSeenAt = nextCursor.LastSeenAt
+	p.lastSeenID = nextCursor.LastSeenID
+
+	return true, len(markets) == p.batchSize, nil
+}
+
+func (p *MarketPoller) refreshCache(ctx context.Context, needRefresh bool) {
+	if !needRefresh || p.cacheRefresher == nil {
+		return
+	}
+
+	refreshCtx, refreshCancel := context.WithTimeout(context.WithoutCancel(ctx), p.processingTimeout)
+	defer refreshCancel()
+
+	if err := p.cacheRefresher.RefreshAll(refreshCtx); err != nil {
+		p.logger.Warn(refreshCtx, "Failed to refresh market cache after updates", zap.Error(err))
+	}
+}
+
+func (p *MarketPoller) buildMarketStateChangedEvents(
+	ctx context.Context,
+	markets []sharedModels.Market,
+) ([]sharedModels.MarketStateChangedEvent, error) {
+	events := make([]sharedModels.MarketStateChangedEvent, 0, len(markets))
+
+	for _, market := range markets {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		event := sharedModels.MarketStateChangedEvent{
+			EventID:       uuid.New(),
+			MarketID:      market.ID,
+			Enabled:       market.Enabled,
+			DeletedAt:     market.DeletedAt,
+			CorrelationID: uuid.New(),
+			CausationID:   nil,
+			UpdatedAt:     market.UpdatedAt.UTC(),
+		}
+
+		events = append(events, event)
+	}
+
+	return events, nil
+}
+
+func (p *MarketPoller) buildNextCursor(markets []sharedModels.Market) models.PollerCursor {
+	last := markets[len(markets)-1]
+
+	return models.PollerCursor{
+		PollerName: p.pollerName,
+		LastSeenAt: last.UpdatedAt.UTC(),
+		LastSeenID: last.ID,
 	}
 }

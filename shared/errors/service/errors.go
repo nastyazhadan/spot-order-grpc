@@ -18,6 +18,7 @@ var (
 	ErrMarketUnavailable = ErrUnavailable{}
 
 	ErrMarketsNotFound      = errors.New("markets not found")
+	ErrMarketsUnavailable   = errors.New("markets are temporarily unavailable")
 	ErrUserRoleNotSpecified = errors.New("user role not specified")
 
 	ErrInvalidSubject    = errors.New("invalid subject in token")

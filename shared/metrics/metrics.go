@@ -42,12 +42,20 @@ var (
 		[]string{"service", "market_id"},
 	)
 
-	RateLimitRejectedTotal = promauto.NewCounterVec(
+	RateLimitRejectedGRPCTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "grpc_server_rate_limit_rejected_total",
-			Help: "Total number of requests rejected by the rate limiter",
+			Name: "grpc_server_rate_limit_rejected_grpc_total",
+			Help: "Total number of requests rejected by gRPC transport rate limiter",
 		},
 		[]string{"service", "method"},
+	)
+
+	RateLimitRejectedBusinessTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "grpc_server_rate_limit_rejected_business_total",
+			Help: "Total number of requests rejected by business rate limiter",
+		},
+		[]string{"service", "operation"},
 	)
 
 	CacheHitsTotal = promauto.NewCounterVec(

@@ -189,6 +189,7 @@ func provideMarketEventProducer(
 
 func provideMarketPoller(
 	store *spotStore.MarketStore,
+	marketViewer *spotService.MarketViewer,
 	marketProducer *producer.MarketProducer,
 	cursorStore *cursor.Store,
 	cfg config.SpotConfig,
@@ -198,6 +199,7 @@ func provideMarketPoller(
 		store,
 		marketProducer,
 		cursorStore,
+		marketViewer,
 		cfg.MarketPoller.PollInterval,
 		cfg.MarketPoller.ProcessingTimeout,
 		cfg.MarketPoller.BatchSize,

@@ -193,7 +193,7 @@ func (s *OrderService) checkRateLimit(
 	ctx context.Context,
 	userID uuid.UUID,
 	limiter RateLimiter,
-	method string,
+	operation string,
 ) error {
 	limit := limiter.Limit()
 	window := limiter.Window()
@@ -218,7 +218,7 @@ func (s *OrderService) checkRateLimit(
 			Window: window,
 		}
 		tracing.RecordError(span, err)
-		metrics.RateLimitRejectedTotal.WithLabelValues(s.config.ServiceName, method).Inc()
+		metrics.RateLimitRejectedBusinessTotal.WithLabelValues(s.config.ServiceName, operation).Inc()
 		return err
 	}
 

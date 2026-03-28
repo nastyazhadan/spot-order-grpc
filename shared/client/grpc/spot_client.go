@@ -36,6 +36,10 @@ func NewSpotClient(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig,
 }
 
 func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models.Market, error) {
+	if len(roles) == 0 {
+		return nil, serviceErrors.ErrUserRoleNotSpecified
+	}
+
 	userRoles := make([]proto.UserRole, 0, len(roles))
 	for _, role := range roles {
 		userRoles = append(userRoles, mapper.UserRoleToProto(role))
@@ -51,7 +55,7 @@ func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) (
 		return resp, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, mapViewMarketsError(err)
 	}
 
 	out := make([]models.Market, 0, len(response.GetMarkets()))
@@ -85,6 +89,36 @@ func (c *SpotClient) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Ma
 	return market, nil
 }
 
+func mapViewMarketsError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	switch {
+	case errors.Is(err, context.DeadlineExceeded),
+		errors.Is(err, context.Canceled),
+		errors.Is(err, gobreaker.ErrOpenState),
+		errors.Is(err, gobreaker.ErrTooManyRequests):
+		return serviceErrors.ErrMarketsUnavailable
+	}
+
+	stat, ok := status.FromError(err)
+	if !ok {
+		return fmt.Errorf("spot client view markets: %w", err)
+	}
+
+	switch stat.Code() {
+	case codes.NotFound:
+		return serviceErrors.ErrMarketsNotFound
+	case codes.Unavailable,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted:
+		return serviceErrors.ErrMarketsUnavailable
+	default:
+		return fmt.Errorf("spot client view markets: %w", err)
+	}
+}
+
 func mapGetMarketByIDError(err error, marketID uuid.UUID) error {
 	if err == nil {
 		return nil
@@ -98,20 +132,18 @@ func mapGetMarketByIDError(err error, marketID uuid.UUID) error {
 		return serviceErrors.ErrUnavailable{ID: marketID}
 	}
 
-	st, ok := status.FromError(err)
+	stat, ok := status.FromError(err)
 	if !ok {
 		return fmt.Errorf("spot client get market by id: %w", err)
 	}
 
-	switch st.Code() {
+	switch stat.Code() {
 	case codes.NotFound:
 		return sharedErrors.ErrMarketNotFound{ID: marketID}
-
 	case codes.Unavailable,
 		codes.DeadlineExceeded,
 		codes.ResourceExhausted:
 		return serviceErrors.ErrUnavailable{ID: marketID}
-
 	default:
 		return fmt.Errorf("spot client get market by id: %w", err)
 	}

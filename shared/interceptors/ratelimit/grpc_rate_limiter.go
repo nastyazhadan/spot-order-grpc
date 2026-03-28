@@ -63,7 +63,7 @@ func newUnaryServerInterceptor(
 				zap.String("method", serverInfo.FullMethod),
 			)
 
-			metrics.RateLimitRejectedTotal.
+			metrics.RateLimitRejectedGRPCTotal.
 				WithLabelValues(serviceName, serverInfo.FullMethod).Inc()
 
 			return nil, status.Error(codes.ResourceExhausted, "too many requests")

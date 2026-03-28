@@ -37,6 +37,7 @@ type MarketRepository interface {
 type MarketCacheRepository interface {
 	GetAll(ctx context.Context, roleKey string) ([]models.Market, error)
 	SetAll(ctx context.Context, market []models.Market, roleKey string, ttl time.Duration) error
+	Delete(ctx context.Context, roleKey string) error
 }
 
 type MarketViewer struct {
@@ -278,4 +279,45 @@ func filterByRole(markets []models.Market, roleKey string) []models.Market {
 	}
 
 	return out
+}
+
+func (s *MarketViewer) RefreshAll(ctx context.Context) error {
+	const op = "MarketViewer.RefreshAll"
+
+	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.serviceTimeout)
+	defer cancel()
+
+	allMarkets, err := s.marketRepository.ListAll(refreshCtx)
+	if err != nil {
+		if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
+			return s.invalidateAll(refreshCtx)
+		}
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	slices.SortFunc(allMarkets, func(a, b models.Market) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+
+	for _, roleKey := range []string{roleAdminKey, roleViewerKey, roleUserKey} {
+		filtered := filterByRole(allMarkets, roleKey)
+
+		if err = s.marketCacheRepository.SetAll(refreshCtx, filtered, roleKey, s.cacheTTL); err != nil {
+			return fmt.Errorf("%s: set cache for role %s: %w", op, roleKey, err)
+		}
+	}
+
+	return nil
+}
+
+func (s *MarketViewer) invalidateAll(ctx context.Context) error {
+	const op = "MarketViewer.invalidateAll"
+
+	for _, roleKey := range []string{roleAdminKey, roleViewerKey, roleUserKey} {
+		if err := s.marketCacheRepository.Delete(ctx, roleKey); err != nil {
+			return fmt.Errorf("%s: delete cache for role %s: %w", op, roleKey, err)
+		}
+	}
+
+	return nil
 }

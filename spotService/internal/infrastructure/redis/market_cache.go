@@ -132,6 +132,22 @@ func (m *MarketCacheRepository) SetAll(
 	return nil
 }
 
+func (m *MarketCacheRepository) Delete(ctx context.Context, roleKey string) error {
+	const op = "redis.MarketCacheRepository.Delete"
+
+	start := time.Now()
+	err := m.cacheStore.Delete(ctx, cacheKey(roleKey))
+	metrics.ObserveWithTrace(ctx,
+		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "delete"),
+		time.Since(start).Seconds(),
+	)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
 func cacheKey(roleKey string) string {
 	return fmt.Sprintf("%s:%s", cacheKeyPrefix, roleKey)
 }
