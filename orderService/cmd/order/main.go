@@ -8,7 +8,7 @@ import (
 	"syscall"
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/config"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/order"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/application"
 )
 
 func main() {
@@ -20,5 +20,5 @@ func main() {
 	appCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	order.Run(appCtx, *cfg)
+	application.Run(appCtx, *cfg)
 }

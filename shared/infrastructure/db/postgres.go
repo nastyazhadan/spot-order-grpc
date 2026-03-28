@@ -19,31 +19,28 @@ type PoolConfig struct {
 	MaxConnIdleTime time.Duration
 }
 
-func SetupDBWithPoolConfig(
+func BootstrapPostgres(
 	ctx context.Context,
-	dbURI string,
+	pool *pgxpool.Pool,
 	migrationsFS fs.FS,
-	config PoolConfig,
-) (*pgxpool.Pool, error) {
-	pool, err := newPgxPool(ctx, dbURI, config)
-	if err != nil {
-		return nil, fmt.Errorf("NewPgxPool: %w", err)
+) error {
+	if err := pool.Ping(ctx); err != nil {
+		return fmt.Errorf("pool.Ping: %w", err)
 	}
 
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	defer sqlDB.Close()
 
 	dbMigrator := migrator.NewMigrator(sqlDB, migrationsFS)
-	if err = dbMigrator.Up(ctx); err != nil {
+	if err := dbMigrator.Up(ctx); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("migrator.Up: %w", err)
+		return fmt.Errorf("migrator.Up: %w", err)
 	}
 
-	return pool, nil
+	return nil
 }
 
-func newPgxPool(
-	ctx context.Context,
+func NewPgxPool(
 	dbURI string,
 	config PoolConfig,
 ) (*pgxpool.Pool, error) {
@@ -69,14 +66,9 @@ func newPgxPool(
 		cfg.MaxConnIdleTime = config.MaxConnIdleTime
 	}
 
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool.NewWithConfig: %w", err)
-	}
-
-	if err = pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("pool.Ping: %w", err)
 	}
 
 	return pool, nil

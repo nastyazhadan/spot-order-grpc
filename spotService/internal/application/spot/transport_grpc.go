@@ -5,11 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel/sdk/resource"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -26,136 +22,18 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
-	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
-	wireGen "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/spot/gen"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 )
 
-func Run(ctx context.Context, cfg config.SpotConfig) {
-	app := fx.New(
-		fx.Provide(
-			func() context.Context {
-				return ctx
-			},
-			func() config.SpotConfig {
-				return cfg
-			}),
-		fx.Provide(
-			provideLogger,
-			provideTracingResource,
-			provideContainer,
-			provideListener,
-			provideGRPCServer,
-		),
-		wireGen.KafkaProviders,
-		fx.Invoke(
-			registerTracing,
-			registerMetrics,
-			startGRPCServer,
-			wireGen.RegisterKafkaProducer,
-			wireGen.RegisterOutboxWorker,
-			wireGen.RegisterMarketPoller,
-		),
-	)
-
-	app.Run()
-}
-
-func provideLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (*zapLogger.Logger, error) {
-	logger := zapLogger.New(cfg.Log.Level, cfg.Log.Format == "json")
-
-	lifeCycle.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			return logger.Sync()
-		},
-	})
-
-	return logger, nil
-}
-
-func provideTracingResource(ctx context.Context, cfg config.SpotConfig) (*resource.Resource, error) {
-	return tracing.NewResource(ctx, cfg.Service.Name, cfg.Tracing)
-}
-
-func registerTracing(
-	ctx context.Context,
-	lifeCycle fx.Lifecycle,
-	cfg config.SpotConfig,
-	resource *resource.Resource,
-	logger *zapLogger.Logger,
-) error {
-	if err := tracing.InitTracer(ctx, cfg.Tracing, resource); err != nil {
-		return err
-	}
-
-	lifeCycle.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			if err := tracing.ShutdownTracer(ctx); err != nil {
-				logger.Error(ctx, "Failed to shutdown tracer", zap.Error(err))
-			}
-			return nil
-		},
-	})
-
-	return nil
-}
-
-func registerMetrics(
-	appCtx context.Context,
-	lifeCycle fx.Lifecycle,
-	cfg config.SpotConfig,
-	resource *resource.Resource,
-	logger *zapLogger.Logger,
-) error {
-	meterProvider, err := metricInterceptor.InitOpenTelemetry(appCtx, cfg.Metrics, resource, logger)
-	if err != nil {
-		return err
-	}
-
-	httpServer := &http.Server{
-		Addr: cfg.Metrics.HTTPAddress,
-		Handler: promhttp.HandlerFor(
-			prometheus.DefaultGatherer,
-			promhttp.HandlerOpts{EnableOpenMetrics: true},
-		),
-		ReadTimeout:  cfg.Metrics.ReadTimeout,
-		WriteTimeout: cfg.Metrics.WriteTimeout,
-		IdleTimeout:  cfg.Metrics.IdleTimeout,
-	}
-
-	lifeCycle.Append(fx.Hook{
-		OnStart: func(startCtx context.Context) error {
-			go func() {
-				if startErr := httpServer.ListenAndServe(); startErr != nil && !errors.Is(startErr, http.ErrServerClosed) {
-					logger.Error(appCtx, "Failed to start metrics server", zap.Error(startErr))
-				}
-			}()
-			return nil
-		},
-		OnStop: func(stopCtx context.Context) error {
-			metrics.RecordShutdown(cfg.Service.Name)
-			if stopErr := meterProvider.Shutdown(stopCtx); stopErr != nil {
-				logger.Error(stopCtx, "Failed to shutdown metrics provider", zap.Error(stopErr))
-			}
-			return httpServer.Shutdown(stopCtx)
-		},
-	})
-
-	return nil
-}
-
-func provideContainer(
-	ctx context.Context,
-	cfg config.SpotConfig,
-	logger *zapLogger.Logger,
-) (*wireGen.Container, error) {
-	container, err := wireGen.NewContainer(ctx, cfg, logger)
-	if err != nil {
-		return nil, err
-	}
-
-	return container, nil
-}
+var TransportProviders = fx.Options(
+	fx.Provide(
+		provideListener,
+		provideGRPCServer,
+	),
+	fx.Invoke(
+		startGRPCServer,
+	),
+)
 
 func provideListener(
 	lifeCycle fx.Lifecycle,
@@ -180,7 +58,7 @@ func provideListener(
 }
 
 func provideGRPCServer(
-	container *wireGen.Container,
+	container *container,
 	cfg config.SpotConfig,
 	appLogger *zapLogger.Logger,
 ) (*grpc.Server, error) {
@@ -188,6 +66,7 @@ func provideGRPCServer(
 	if err != nil {
 		return nil, err
 	}
+
 	recoverer := recovery.UnaryServerInterceptor(appLogger)
 	tracer := tracing.UnaryServerInterceptor()
 	logger := logInterceptor.UnaryServerInterceptor(appLogger)
@@ -218,17 +97,19 @@ func provideGRPCServer(
 }
 
 func startGRPCServer(
-	appCtx context.Context,
+	in appCtxIn,
 	lifeCycle fx.Lifecycle,
 	server *grpc.Server,
 	listener net.Listener,
-	container *wireGen.Container,
 	logger *zapLogger.Logger,
 ) {
+	appCtx := in.AppCtx
+
 	lifeCycle.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
 			logger.Info(startCtx, "Starting gRPC spot server",
 				zap.String("address", listener.Addr().String()))
+
 			go func() {
 				if err := server.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 					logger.Error(appCtx, "gRPC spot server error", zap.Error(err))
@@ -239,13 +120,6 @@ func startGRPCServer(
 		},
 		OnStop: func(stopCtx context.Context) error {
 			stopGRPCServer(stopCtx, server, logger, "spot")
-
-			container.PostgresPool.Close()
-			if err := container.RedisClient.Close(); err != nil {
-				logger.Error(stopCtx, "failed to close redis", zap.Error(err))
-				return err
-			}
-
 			return nil
 		},
 	})

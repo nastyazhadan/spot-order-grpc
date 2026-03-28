@@ -111,8 +111,7 @@ func mapViewMarketsError(err error) error {
 	case codes.NotFound:
 		return serviceErrors.ErrMarketsNotFound
 	case codes.Unavailable,
-		codes.DeadlineExceeded,
-		codes.ResourceExhausted:
+		codes.DeadlineExceeded:
 		return serviceErrors.ErrMarketsUnavailable
 	default:
 		return fmt.Errorf("spot client view markets: %w", err)
@@ -141,8 +140,7 @@ func mapGetMarketByIDError(err error, marketID uuid.UUID) error {
 	case codes.NotFound:
 		return sharedErrors.ErrMarketNotFound{ID: marketID}
 	case codes.Unavailable,
-		codes.DeadlineExceeded,
-		codes.ResourceExhausted:
+		codes.DeadlineExceeded:
 		return serviceErrors.ErrUnavailable{ID: marketID}
 	default:
 		return fmt.Errorf("spot client get market by id: %w", err)
