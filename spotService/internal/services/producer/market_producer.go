@@ -7,10 +7,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
@@ -47,43 +47,16 @@ func New(writer OutboxWriter, store CursorStore, logger *zapLogger.Logger, cfg c
 // ProduceMarketStateChanged не публикует напрямую в Kafka - это делает outbox.Worker асинхронно.
 func (p *MarketProducer) ProduceMarketStateChanged(
 	ctx context.Context,
-	event sharedModels.MarketStateChangedEvent,
-) error {
-	const op = "MarketProducer.ProduceMarketStateChanged"
-
-	ctx, span := tracing.StartSpan(ctx, "producer.produce_market_state_changed")
-	defer span.End()
-
-	outboxEvent, err := p.buildOutboxEvent(ctx, span, event)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	if err = p.saveOutboxEvent(ctx, span, event, outboxEvent); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	p.logger.Info(ctx, "MarketStateChangedEvent saved to outbox",
-		zap.String("market_id", event.MarketID.String()),
-		zap.String("event_id", event.EventID.String()),
-		zap.String("outbox_event_id", outboxEvent.ID.String()),
-	)
-
-	return nil
-}
-
-func (p *MarketProducer) ProduceMarketStateChangedBatch(
-	ctx context.Context,
 	events []sharedModels.MarketStateChangedEvent,
 	cursor models.PollerCursor,
 ) error {
-	const op = "MarketProducer.ProduceMarketStateChangedBatch"
+	const op = "MarketProducer.ProduceMarketStateChanged"
 
 	if len(events) == 0 {
 		return nil
 	}
 
-	ctx, span := tracing.StartSpan(ctx, "producer.produce_market_state_changed_batch")
+	ctx, span := tracing.StartSpan(ctx, "producer.produce_market_state_changed")
 	defer span.End()
 
 	transaction, err := p.outboxWriter.BeginTransaction(ctx)
@@ -115,7 +88,7 @@ func (p *MarketProducer) ProduceMarketStateChangedBatch(
 		return fmt.Errorf("%s: commit: %w", op, err)
 	}
 
-	p.logger.Info(ctx, "MarketStateChangedEvent batch saved to outbox with cursor",
+	p.logger.Info(ctx, "MarketStateChangedEvent saved to outbox with cursor",
 		zap.Int("events_count", len(events)),
 		zap.Time("last_seen_at", cursor.LastSeenAt),
 		zap.String("last_seen_id", cursor.LastSeenID.String()),
@@ -150,25 +123,6 @@ func (p *MarketProducer) buildOutboxEvent(
 		Payload:     payload,
 		Status:      models.OutboxEventStatusPending,
 	}, nil
-}
-
-func (p *MarketProducer) saveOutboxEvent(
-	ctx context.Context,
-	span trace.Span,
-	event sharedModels.MarketStateChangedEvent,
-	outboxEvent models.OutboxEvent,
-) error {
-	if err := p.outboxWriter.SaveOutboxEvent(ctx, outboxEvent); err != nil {
-		tracing.RecordError(span, err)
-		p.logger.Error(ctx, "Failed to save market event to outbox",
-			zap.String("market_id", event.MarketID.String()),
-			zap.String("event_id", event.EventID.String()),
-			zap.Error(err))
-
-		return err
-	}
-
-	return nil
 }
 
 func (p *MarketProducer) rollbackTransaction(

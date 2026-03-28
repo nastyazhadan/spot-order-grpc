@@ -125,10 +125,10 @@ func (w *Worker) processBatch(ctx context.Context) {
 	span.SetAttributes(attribute.Int("batch.fetched", len(events)))
 
 	for _, event := range events {
-		w.processEvent(ctx, event)
+		w.processEvent(claimCtx, event)
 	}
 
-	metrics.ObserveWithTrace(ctx,
+	metrics.ObserveWithTrace(claimCtx,
 		metrics.OutboxWorkerDuration.WithLabelValues(w.cfg.Service.Name),
 		time.Since(start).Seconds(),
 	)
@@ -175,11 +175,11 @@ func (w *Worker) processEvent(ctx context.Context, event models.OutboxEvent) {
 
 	if err := w.publisher.Send(sendCtx, w.messageKey(event), event.Payload); err != nil {
 		tracing.RecordError(span, err)
-		w.handleSendError(ctx, event, err)
+		w.handleSendError(sendCtx, event, err)
 		return
 	}
 
-	stateCtx, stateCancel := w.newOperationContext(ctx)
+	stateCtx, stateCancel := w.newOperationContext(sendCtx)
 	defer stateCancel()
 
 	if err := w.store.MarkPublished(stateCtx, event); err != nil {

@@ -101,7 +101,7 @@ func (s *CompensationService) ProcessMarketStateChanged(
 		if transactionClosed {
 			return
 		}
-		RollbackTx(ctx, transaction, s.logger, "Market compensation transaction rollback failed", s.config.Timeouts.Service)
+		rollbackTx(ctx, transaction, s.logger, "Market compensation transaction rollback failed", s.config.Timeouts.Service)
 	}()
 
 	inboxEvent := models.InboxEvent{
@@ -204,7 +204,7 @@ func (s *CompensationService) failProcessing(
 	inboxEvent models.InboxEvent,
 	processErr error,
 ) error {
-	RollbackTx(ctx, transaction, s.logger, "Market compensation transaction failed", s.config.Timeouts.Service)
+	rollbackTx(ctx, transaction, s.logger, "Market compensation transaction failed", s.config.Timeouts.Service)
 
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.config.Timeouts.Service)
 	defer cancel()

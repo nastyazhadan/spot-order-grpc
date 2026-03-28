@@ -78,8 +78,8 @@ func provideGRPCClient(
 	connection *grpc.ClientConn,
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
-) (*grpcClient.SpotClient, error) {
-	return grpcClient.NewSpotClient(connection, cfg.CircuitBreaker, logger), nil
+) *grpcClient.SpotClient {
+	return grpcClient.NewSpotClient(connection, cfg.CircuitBreaker, logger)
 }
 
 func provideMarketViewer(client *grpcClient.SpotClient) orderService.MarketViewer {

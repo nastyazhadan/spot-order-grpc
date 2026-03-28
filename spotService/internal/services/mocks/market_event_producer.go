@@ -21,7 +21,7 @@ func (_m *MarketEventProducer) ProduceMarketStateChangedBatch(ctx context.Contex
 	ret := _m.Called(ctx, events, cursor)
 
 	if len(ret) == 0 {
-		panic("no return value specified for ProduceMarketStateChangedBatch")
+		panic("no return value specified for ProduceMarketStateChanged")
 	}
 
 	var r0 error

@@ -130,8 +130,6 @@ func (s *OrderService) CreateOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
-	metrics.OrdersCreatedTotal.WithLabelValues(s.config.ServiceName, marketID.String()).Inc()
-
 	return orderID, orderStatus, nil
 }
 
@@ -352,7 +350,7 @@ func (s *OrderService) saveOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: begin transaction: %w", op, err)
 	}
 
-	defer RollbackTx(ctx, transaction, s.logger, "saveOrder: transaction rollback failed", s.config.Timeout)
+	defer rollbackTx(ctx, transaction, s.logger, "saveOrder: transaction rollback failed", s.config.Timeout)
 
 	if err = s.saver.SaveOrder(ctx, transaction, order); err != nil {
 		tracing.RecordError(span, err)
@@ -373,10 +371,12 @@ func (s *OrderService) saveOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: commit transaction: %w", op, err)
 	}
 
+	metrics.OrdersCreatedTotal.WithLabelValues(s.config.ServiceName, marketID.String()).Inc()
+
 	return order.ID, order.Status, nil
 }
 
-func RollbackTx(ctx context.Context,
+func rollbackTx(ctx context.Context,
 	transaction pgx.Tx,
 	logger *zapLogger.Logger,
 	message string,

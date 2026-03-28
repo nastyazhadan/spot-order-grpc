@@ -67,11 +67,10 @@ func (m *MarketCacheRepository) GetAll(
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	metrics.CacheHitsTotal.WithLabelValues(m.serviceName, "get_all").Inc()
-
 	var redisViews []dto.MarketRedisView
 	if err = json.Unmarshal(data, &redisViews); err != nil {
-		tracing.RecordError(span, err)
+		m.invalidateCorruptedCache(ctx, span, roleKey, "json_unmarshal", err)
+
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -79,12 +78,14 @@ func (m *MarketCacheRepository) GetAll(
 	for _, redisView := range redisViews {
 		market, mapError := redisView.ToDomain()
 		if mapError != nil {
-			tracing.RecordError(span, mapError)
+			m.invalidateCorruptedCache(ctx, span, roleKey, "dto_to_domain", mapError)
+
 			return nil, fmt.Errorf("%s: %w", op, mapError)
 		}
 		markets = append(markets, market)
 	}
 
+	metrics.CacheHitsTotal.WithLabelValues(m.serviceName, "get_all").Inc()
 	return markets, nil
 }
 
@@ -146,6 +147,25 @@ func (m *MarketCacheRepository) Delete(ctx context.Context, roleKey string) erro
 	}
 
 	return nil
+}
+
+func (m *MarketCacheRepository) invalidateCorruptedCache(
+	ctx context.Context,
+	span trace.Span,
+	roleKey string,
+	reason string,
+	cause error,
+) {
+	span.SetAttributes(
+		attribute.Bool("cache_corrupted", true),
+		attribute.String("cache_corruption_reason", reason),
+	)
+	tracing.RecordError(span, cause)
+
+	if err := m.Delete(ctx, roleKey); err != nil {
+		span.SetAttributes(attribute.Bool("cache_invalidation_failed", true))
+		tracing.RecordError(span, err)
+	}
 }
 
 func cacheKey(roleKey string) string {

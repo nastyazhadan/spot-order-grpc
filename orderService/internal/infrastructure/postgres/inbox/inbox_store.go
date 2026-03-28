@@ -188,6 +188,10 @@ func (s *InboxStore) SaveFailed(
 	defer span.End()
 
 	start := time.Now()
+	// SaveFailed намеренно выполняется вне откатываемой бизнес-транзакции.
+	// При ошибке мы сначала откатываем все изменения в рамках текущей транзакции,
+	// а затем отдельным запросом сохраняем статус failed, чтобы эта запись
+	// не откатилась вместе с транзакцией
 	result, err := s.pool.Exec(ctx, `
 		INSERT INTO inbox (id, event_id, topic, consumer_group, payload, status, failed_at, error_message)
 		VALUES ($1, $2, $3, $4, $5, 'failed', NOW(), $6)
@@ -199,6 +203,7 @@ func (s *InboxStore) SaveFailed(
 			failed_at = NOW(),
 			processed_at = NULL,
 			error_message = EXCLUDED.error_message
+		WHERE inbox.status == 'failed' OR inbox.status == 'processing'
 	`, event.ID, event.EventID, event.Topic, event.ConsumerGroup, event.Payload, errText)
 
 	metrics.ObserveWithTrace(ctx,

@@ -11,7 +11,6 @@ require (
 	github.com/IBM/sarama v1.47.0
 	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/google/uuid v1.6.0
-	github.com/google/wire v0.7.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/nastyazhadan/spot-order-grpc/protos v0.0.0-20260323211033-a7216e999bcb
 	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260323211033-a7216e999bcb
