@@ -44,19 +44,19 @@ func New(writer OutboxWriter, store CursorStore, logger *zapLogger.Logger, cfg c
 	}
 }
 
-// ProduceMarketStateChanged не публикует напрямую в Kafka - это делает outbox.Worker асинхронно.
-func (p *MarketProducer) ProduceMarketStateChanged(
+// PublishMarketStateChanged не публикует напрямую в Kafka - это делает outbox.Worker асинхронно.
+func (p *MarketProducer) PublishMarketStateChanged(
 	ctx context.Context,
 	events []sharedModels.MarketStateChangedEvent,
 	cursor models.PollerCursor,
 ) error {
-	const op = "MarketProducer.ProduceMarketStateChanged"
+	const op = "MarketProducer.PublishMarketStateChanged"
 
 	if len(events) == 0 {
 		return nil
 	}
 
-	ctx, span := tracing.StartSpan(ctx, "producer.produce_market_state_changed")
+	ctx, span := tracing.StartSpan(ctx, "producer.publish_market_state_changed")
 	defer span.End()
 
 	transaction, err := p.outboxWriter.BeginTransaction(ctx)
@@ -64,11 +64,18 @@ func (p *MarketProducer) ProduceMarketStateChanged(
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: begin tx: %w", op, err)
 	}
-	defer p.rollbackTransaction(ctx, transaction, p.logger, "Failed to rollback market producer transaction")
+
+	committed := false
+	defer func() {
+		if !committed {
+			p.rollbackTransaction(ctx, transaction, p.logger, op)
+		}
+	}()
 
 	for _, event := range events {
 		outboxEvent, buildError := p.buildOutboxEvent(ctx, span, event)
 		if buildError != nil {
+			tracing.RecordError(span, buildError)
 			return fmt.Errorf("%s: build outbox event: %w", op, buildError)
 		}
 
@@ -88,6 +95,7 @@ func (p *MarketProducer) ProduceMarketStateChanged(
 		return fmt.Errorf("%s: commit: %w", op, err)
 	}
 
+	committed = true
 	p.logger.Info(ctx, "MarketStateChangedEvent saved to outbox with cursor",
 		zap.Int("events_count", len(events)),
 		zap.Time("last_seen_at", cursor.LastSeenAt),

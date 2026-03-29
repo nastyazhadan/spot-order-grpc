@@ -113,6 +113,13 @@ func (w *Worker) processBatch(ctx context.Context) {
 	defer span.End()
 
 	start := time.Now()
+	defer func() {
+		metrics.ObserveWithTrace(ctx,
+			metrics.OutboxWorkerDuration.WithLabelValues(w.cfg.Service.Name),
+			time.Since(start).Seconds(),
+		)
+	}()
+
 	events, err := w.store.ClaimPendingEvents(claimCtx, w.batchSize)
 	if err != nil {
 		tracing.RecordError(span, err)
@@ -127,13 +134,13 @@ func (w *Worker) processBatch(ctx context.Context) {
 	span.SetAttributes(attribute.Int("batch.fetched", len(events)))
 
 	for _, event := range events {
-		w.processEvent(claimCtx, event)
-	}
+		if ctxError := ctx.Err(); ctxError != nil {
+			tracing.RecordError(span, ctxError)
+			return
+		}
 
-	metrics.ObserveWithTrace(claimCtx,
-		metrics.OutboxWorkerDuration.WithLabelValues(w.cfg.Service.Name),
-		time.Since(start).Seconds(),
-	)
+		w.processEvent(ctx, event)
+	}
 }
 
 func (w *Worker) releaseStuck(ctx context.Context) {

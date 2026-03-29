@@ -49,7 +49,12 @@ func (p *producer) SendMessage(ctx context.Context, msg kafka.Message) error {
 	return p.sendMessage(ctx, msg)
 }
 
+// sendMessage проверяет контекст перед публикацией и использует его для трейсинга/логгирования
 func (p *producer) sendMessage(ctx context.Context, msg kafka.Message) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	topic := p.topic
 	if msg.Topic != "" {
 		topic = msg.Topic

@@ -25,7 +25,7 @@ type MarketReader interface {
 }
 
 type MarketEventProducer interface {
-	ProduceMarketStateChanged(ctx context.Context, events []sharedModels.MarketStateChangedEvent, cursor models.PollerCursor) error
+	PublishMarketStateChanged(ctx context.Context, events []sharedModels.MarketStateChangedEvent, cursor models.PollerCursor) error
 }
 
 type MarketCacheRefresher interface {
@@ -161,7 +161,7 @@ func (p *MarketPoller) processNextBatch(ctx context.Context) (updated, hasMore b
 
 	nextCursor := p.buildNextCursor(markets)
 
-	if err = p.producer.ProduceMarketStateChanged(ctx, events, nextCursor); err != nil {
+	if err = p.producer.PublishMarketStateChanged(ctx, events, nextCursor); err != nil {
 		p.logger.Error(ctx, "Failed to enqueue market state changed batch",
 			zap.Int("markets_count", len(markets)),
 			zap.Time("last_seen_at", nextCursor.LastSeenAt),

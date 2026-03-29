@@ -24,7 +24,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_outbox_event_id
 
 CREATE INDEX IF NOT EXISTS idx_outbox_pending_available_at
     ON outbox (status, available_at, created_at)
-    WHERE status IN ('pending', 'processing');
+    WHERE status = 'pending';
+
+CREATE INDEX IF NOT EXISTS idx_outbox_processing_locked_at
+    ON outbox (locked_at)
+    WHERE status = 'processing' AND locked_at IS NOT NULL;
 
 -- +goose Down
 DROP TABLE IF EXISTS outbox;

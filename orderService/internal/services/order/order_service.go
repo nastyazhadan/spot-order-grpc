@@ -251,20 +251,25 @@ func (s *OrderService) validateMarket(
 		return err
 	}
 
+	actualBlocked := !market.Enabled || market.DeletedAt != nil
+
 	span.SetAttributes(
 		attribute.Bool("market_enabled", market.Enabled),
 		attribute.Bool("market_deleted", market.DeletedAt != nil),
 		attribute.Bool("market_was_blocked", blocked),
+		attribute.Bool("market_is_blocked_after_recheck", actualBlocked),
 	)
 
-	if !market.Enabled || market.DeletedAt != nil {
+	if actualBlocked {
+		s.syncMarketBlock(ctx, market, true, "warm_block_after_unavailable_recheck")
+
 		err = sharedErrors.ErrMarketNotFound{ID: marketID}
 		tracing.RecordError(span, err)
 		return err
 	}
 
 	if blocked {
-		s.syncStaleMarketBlock(ctx, market)
+		s.syncMarketBlock(ctx, market, false, "remove_stale_block_after_recheck")
 	}
 
 	return nil
@@ -304,22 +309,28 @@ func (s *OrderService) getMarketBlockedState(
 	return blocked, nil
 }
 
-func (s *OrderService) syncStaleMarketBlock(
+func (s *OrderService) syncMarketBlock(
 	ctx context.Context,
 	market sharedModels.Market,
+	blocked bool,
+	reason string,
 ) {
-	updated, err := s.blockStore.SyncState(ctx, market.ID, false, market.UpdatedAt)
+	updated, err := s.blockStore.SyncState(ctx, market.ID, blocked, market.UpdatedAt)
 	if err != nil {
-		s.logger.Warn(ctx, "Failed to remove stale market block after recheck",
+		s.logger.Warn(ctx, "Failed to sync market block state after recheck",
 			zap.String("market_id", market.ID.String()),
+			zap.Bool("blocked", blocked),
+			zap.String("reason", reason),
 			zap.Error(err),
 		)
 		return
 	}
 
 	if updated {
-		s.logger.Warn(ctx, "Removed stale market block after recheck",
+		s.logger.Warn(ctx, "Synced market block state after recheck",
 			zap.String("market_id", market.ID.String()),
+			zap.Bool("blocked", blocked),
+			zap.String("reason", reason),
 		)
 	}
 }
@@ -335,7 +346,7 @@ func (s *OrderService) saveOrder(
 ) (uuid.UUID, orderModel.OrderStatus, error) {
 	const op = "OrderService.saveOrder"
 
-	ctx, span := tracing.StartSpan(ctx, "order.save_order_transaction")
+	ctx, span := tracing.StartSpan(ctx, "order.save_order")
 	defer span.End()
 
 	now := time.Now().UTC()
@@ -350,7 +361,12 @@ func (s *OrderService) saveOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: begin transaction: %w", op, err)
 	}
 
-	defer rollbackTx(ctx, transaction, s.logger, "saveOrder: transaction rollback failed", s.config.Timeout)
+	committed := false
+	defer func() {
+		if !committed {
+			rollbackTx(ctx, transaction, s.logger, op, s.config.Timeout)
+		}
+	}()
 
 	if err = s.saver.SaveOrder(ctx, transaction, order); err != nil {
 		tracing.RecordError(span, err)
@@ -371,6 +387,7 @@ func (s *OrderService) saveOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: commit transaction: %w", op, err)
 	}
 
+	committed = true
 	metrics.OrdersCreatedTotal.WithLabelValues(s.config.ServiceName, marketID.String()).Inc()
 
 	return order.ID, order.Status, nil
