@@ -12,7 +12,11 @@ import (
 func Run(ctx context.Context, cfg config.SpotConfig) {
 	app := fx.New(
 		fx.Supply(
-			fx.Annotate(ctx, fx.ResultTags(`name:"app_ctx"`)),
+			fx.Annotate(
+				ctx,
+				fx.As(new(context.Context)),
+				fx.ResultTags(`name:"app_ctx"`),
+			),
 			cfg,
 		),
 

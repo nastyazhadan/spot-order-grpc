@@ -11,7 +11,7 @@ WORKDIR /build/orderService
 RUN --mount=type=cache,target=/go/pkg/mod \
     GOWORK=off go mod download
 
-CWORKDIR /build
+WORKDIR /build
  COPY orderService ./orderService
  COPY shared ./shared
  COPY protos ./protos
@@ -34,7 +34,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 COPY --from=builder /out/server ./server
 COPY --from=builder /build/config.yaml ./config.yaml
-COPY --from=grpc_health_probe /ko-app/grpc_health_probe /usr/local/bin/grpc_health_probe
+COPY --from=grpc_health_probe /ko-app/grpc-health-probe /usr/local/bin/grpc_health_probe
 
 RUN chmod +x /usr/local/bin/grpc_health_probe && \
     chown -R appuser:appgroup /app

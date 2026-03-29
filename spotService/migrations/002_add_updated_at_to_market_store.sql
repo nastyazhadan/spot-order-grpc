@@ -5,6 +5,7 @@ ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 CREATE INDEX IF NOT EXISTS idx_market_store_updated_at_id
     ON market_store (updated_at, id);
 
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION set_market_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -12,6 +13,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 DROP TRIGGER IF EXISTS trg_set_market_updated_at ON market_store;
 

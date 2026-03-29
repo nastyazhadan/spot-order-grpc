@@ -9,7 +9,7 @@ services:
       SPOT_DB_URI: ${SPOT_DB_URI}
     ports:
       - "${SPOT_GRPC_PORT}:50052"
-      - "${SPOT_METRICS_PORT}:9092"
+      - "${SPOT_METRICS_PORT}:9093"
     depends_on:
       postgres:
         condition: service_healthy
@@ -138,6 +138,7 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
       - '--web.enable-remote-write-receiver'
+      - '--enable-feature=exemplar-storage'
     healthcheck:
       test: [ "CMD", "wget", "--quiet", "--spider", "http://localhost:9090/-/healthy"]
       interval: 10s

@@ -77,7 +77,10 @@ func registerInfrastructure(
 			defer cancel()
 
 			if err := health.CheckHealth(checkCtx, connection); err != nil {
-				return fmt.Errorf("spot connection at %s health check: %w", cfg.SpotAddress, err)
+				logger.Warn(checkCtx, "Spot startup health check failed, continuing startup",
+					zap.String("spot_address", cfg.SpotAddress),
+					zap.Error(err),
+				)
 			}
 
 			return nil
