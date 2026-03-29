@@ -203,7 +203,7 @@ func (s *InboxStore) SaveFailed(
 			failed_at = NOW(),
 			processed_at = NULL,
 			error_message = EXCLUDED.error_message
-		WHERE inbox.status == 'failed' OR inbox.status == 'processing'
+		WHERE inbox.status = 'failed' OR inbox.status = 'processing'
 	`, event.ID, event.EventID, event.Topic, event.ConsumerGroup, event.Payload, errText)
 
 	metrics.ObserveWithTrace(ctx,

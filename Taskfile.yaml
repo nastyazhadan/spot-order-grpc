@@ -89,7 +89,7 @@ tasks:
       - echo "{{.GREEN}}Все тесты (race) завершены{{.NC}}"
 
   fmt:
-    desc: Отформатировать Go-код через gofumpt
+    desc: Отформатировать Go-код через golangci-lint
     cmds:
       - echo "{{.BLUE}}Форматирование Go-кода...{{.NC}}"
       - golangci-lint fmt

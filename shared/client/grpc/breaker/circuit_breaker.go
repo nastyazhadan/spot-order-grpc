@@ -6,9 +6,9 @@ import (
 	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
@@ -72,7 +72,8 @@ func isSuccessfulCall(err error) bool {
 		return true
 	}
 
-	statusCode := status.Code(err)
+	statusCode := errors.CodeFromError(err)
+
 	switch statusCode {
 	case codes.Canceled,
 		codes.InvalidArgument,

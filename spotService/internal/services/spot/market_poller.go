@@ -143,7 +143,7 @@ func (p *MarketPoller) poll(ctx context.Context) {
 	}
 }
 
-func (p *MarketPoller) processNextBatch(ctx context.Context) (updated bool, hasMore bool, err error) {
+func (p *MarketPoller) processNextBatch(ctx context.Context) (updated, hasMore bool, err error) {
 	markets, err := p.reader.ListUpdatedSince(ctx, p.lastSeenAt, p.lastSeenID, p.batchSize)
 	if err != nil {
 		p.logger.Error(ctx, "Failed to load updated markets", zap.Error(err))

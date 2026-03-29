@@ -56,7 +56,6 @@ func providePostgresPool(cfg config.OrderConfig) (*pgxpool.Pool, error) {
 		MaxConnLifetime: cfg.PostgresPool.MaxConnLifetime,
 		MaxConnIdleTime: cfg.PostgresPool.MaxConnIdleTime,
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("db.NewPgxPool: %w", err)
 	}

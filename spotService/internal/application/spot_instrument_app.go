@@ -18,7 +18,7 @@ func Run(ctx context.Context, cfg config.SpotConfig) {
 
 		spot.InfraProviders,
 		spot.ServiceProviders,
-		spot.TransportProviders,
+		spot.GRPCProviders,
 		spot.Lifecycle,
 	)
 

@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-
 	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
 func UnaryServerInterceptor(logger *zapLogger.Logger) grpc.UnaryServerInterceptor {
@@ -30,7 +30,16 @@ func UnaryServerInterceptor(logger *zapLogger.Logger) grpc.UnaryServerIntercepto
 }
 
 func mapError(ctx context.Context, err error, logger *zapLogger.Logger) error {
-	if _, ok := status.FromError(err); ok && status.Code(err) != codes.Unknown {
+	if err == nil {
+		return nil
+	}
+
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return status.FromContextError(err).Err()
+	}
+
+	stat, ok := status.FromError(err)
+	if ok && stat.Code() != codes.Unknown {
 		return err
 	}
 
@@ -77,4 +86,16 @@ func mapError(ctx context.Context, err error, logger *zapLogger.Logger) error {
 		logger.Error(ctx, "unhandled error", zap.Error(err))
 		return status.Error(codes.Internal, "internal error")
 	}
+}
+
+func CodeFromError(err error) codes.Code {
+	if err == nil {
+		return codes.OK
+	}
+
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return status.FromContextError(err).Code()
+	}
+
+	return status.Code(err)
 }

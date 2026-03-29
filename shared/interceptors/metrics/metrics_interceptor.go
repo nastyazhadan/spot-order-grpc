@@ -6,8 +6,8 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
 
@@ -26,7 +26,7 @@ func UnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor {
 		defer func() {
 			inFlight.Dec()
 
-			code := status.Code(err).String()
+			code := errors.CodeFromError(err).String()
 
 			// Ловим panic для того, чтобы не потерять метрики.
 			// После записи метрик обязательно re-panic, чтобы внешний recovery interceptor

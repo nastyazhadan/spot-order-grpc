@@ -25,7 +25,7 @@ import (
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 )
 
-var TransportProviders = fx.Options(
+var GRPCProviders = fx.Options(
 	fx.Provide(
 		provideListener,
 		provideGRPCServer,

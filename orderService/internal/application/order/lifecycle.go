@@ -155,14 +155,23 @@ func registerMetrics(
 			return nil
 		},
 		OnStop: func(stopCtx context.Context) error {
-			metrics.RecordShutdown(cfg.Service.Name)
+			var shutdownErr error
 
 			if meterProvider != nil {
-				if stopErr := meterProvider.Shutdown(stopCtx); stopErr != nil {
-					logger.Error(stopCtx, "Failed to shutdown metrics provider", zap.Error(stopErr))
+				if err := meterProvider.Shutdown(stopCtx); err != nil {
+					logger.Error(stopCtx, "Failed to shutdown metrics provider", zap.Error(err))
+					shutdownErr = errors.Join(shutdownErr, err)
 				}
 			}
-			return httpServer.Shutdown(stopCtx)
+
+			if err := httpServer.Shutdown(stopCtx); err != nil {
+				logger.Error(stopCtx, "Failed to shutdown metrics server", zap.Error(err))
+				shutdownErr = errors.Join(shutdownErr, err)
+			}
+
+			metrics.RecordShutdown(cfg.Service.Name, metrics.ShutdownReasonFromError(shutdownErr))
+
+			return shutdownErr
 		},
 	})
 }

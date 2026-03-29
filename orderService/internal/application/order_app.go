@@ -18,7 +18,7 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 
 		order.InfraProviders,
 		order.ServiceProviders,
-		order.TransportProviders,
+		order.GRPCProviders,
 		order.Lifecycle,
 	)
 

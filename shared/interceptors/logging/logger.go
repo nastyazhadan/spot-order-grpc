@@ -5,12 +5,12 @@ import (
 	"path"
 	"time"
 
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
 func UnaryServerInterceptor(logger *zapLogger.Logger) grpc.UnaryServerInterceptor {
@@ -32,8 +32,7 @@ func UnaryServerInterceptor(logger *zapLogger.Logger) grpc.UnaryServerIntercepto
 		duration := time.Since(startTime)
 
 		if err != nil {
-			stat, _ := status.FromError(err)
-			code := stat.Code()
+			code := errors.CodeFromError(err)
 
 			fields := []zap.Field{
 				zap.String("method", method),
@@ -48,7 +47,9 @@ func UnaryServerInterceptor(logger *zapLogger.Logger) grpc.UnaryServerIntercepto
 				codes.ResourceExhausted,
 				codes.InvalidArgument,
 				codes.Unauthenticated,
-				codes.FailedPrecondition:
+				codes.FailedPrecondition,
+				codes.Canceled,
+				codes.DeadlineExceeded:
 				logger.Warn(ctx, "gRPC request failed", fields...)
 			default:
 				logger.Error(ctx, "gRPC request failed", fields...)

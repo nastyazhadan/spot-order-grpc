@@ -32,7 +32,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
 )
 
-var TransportProviders = fx.Options(
+var GRPCProviders = fx.Options(
 	fx.Provide(
 		provideClientConnection,
 		provideGRPCClient,
