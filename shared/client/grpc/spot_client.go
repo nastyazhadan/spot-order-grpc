@@ -142,6 +142,8 @@ func mapGetMarketByIDError(err error, marketID uuid.UUID) error {
 	case codes.Unavailable,
 		codes.DeadlineExceeded:
 		return serviceErrors.ErrUnavailable{ID: marketID}
+	case codes.FailedPrecondition:
+		return serviceErrors.ErrDisabled{ID: marketID}
 	default:
 		return fmt.Errorf("spot client get market by id: %w", err)
 	}

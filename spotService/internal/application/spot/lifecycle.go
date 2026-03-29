@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -113,7 +115,10 @@ func registerMetrics(
 	logger *zapLogger.Logger,
 ) {
 	appCtx := in.AppCtx
-	var meterProvider *sdkmetric.MeterProvider
+	var (
+		meterProvider *sdkmetric.MeterProvider
+		listener      net.Listener
+	)
 
 	httpServer := &http.Server{
 		Addr: cfg.Metrics.HTTPAddress,
@@ -134,12 +139,16 @@ func registerMetrics(
 				return err
 			}
 
+			listener, err = net.Listen("tcp", cfg.Metrics.HTTPAddress)
+			if err != nil {
+				return fmt.Errorf("listen metrics http on %s: %w", cfg.Metrics.HTTPAddress, err)
+			}
+
 			go func() {
-				if startErr := httpServer.ListenAndServe(); startErr != nil && !errors.Is(startErr, http.ErrServerClosed) {
-					logger.Error(appCtx, "Failed to start metrics server", zap.Error(startErr))
+				if serveErr := httpServer.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+					logger.Error(appCtx, "Failed to serve metrics server", zap.Error(serveErr))
 				}
 			}()
-
 			return nil
 		},
 		OnStop: func(stopCtx context.Context) error {
@@ -206,6 +215,7 @@ func registerMarketPoller(
 	in appCtxIn,
 	poller *spotService.MarketPoller,
 	logger *zapLogger.Logger,
+	config config.SpotConfig,
 ) {
 	appCtx := in.AppCtx
 	ctx, cancel := context.WithCancel(appCtx)
@@ -215,9 +225,37 @@ func registerMarketPoller(
 		OnStart: func(startCtx context.Context) error {
 			logger.Info(startCtx, "Market poller: starting")
 
+			if err := poller.Init(startCtx); err != nil {
+				logger.Error(startCtx, "Market poller: failed to initialize", zap.Error(err))
+				return err
+			}
+
 			go func() {
 				defer close(done)
-				poller.Run(ctx)
+
+				for {
+					if ctx.Err() != nil {
+						logger.Info(ctx, "Market poller stopped")
+						return
+					}
+
+					err := poller.Run(ctx)
+					if err == nil || ctx.Err() != nil {
+						logger.Info(ctx, "Market poller stopped")
+						return
+					}
+
+					logger.Error(ctx, "Market poller exited with error, restarting",
+						zap.Error(err),
+						zap.Duration("restart_after", config.MarketPoller.RestartBackoff),
+					)
+
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(config.MarketPoller.RestartBackoff):
+					}
+				}
 			}()
 
 			return nil

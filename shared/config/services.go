@@ -79,6 +79,7 @@ type RedisConfig struct {
 	IdleTimeout       time.Duration `mapstructure:"idle_timeout"`
 	ConnMaxLifetime   time.Duration `mapstructure:"max_conn_lifetime"`
 	CacheTTL          time.Duration `mapstructure:"spot_cache_ttl"`
+	MarketBlockTTL    time.Duration `mapstructure:"market_block_ttl"`
 }
 
 type KafkaConfig struct {
@@ -103,6 +104,7 @@ type ConsumerConfig struct {
 	MaxRetries        int           `mapstructure:"max_retries"`
 	RetryBackoff      time.Duration `mapstructure:"retry_backoff"`
 	DLQEnabled        bool          `mapstructure:"dlq_enabled"`
+	RestartBackoff    time.Duration `mapstructure:"restart_backoff"`
 }
 
 type TopicsConfig struct {
@@ -124,6 +126,7 @@ type MarketPollerConfig struct {
 	PollInterval      time.Duration `mapstructure:"poll_interval"`
 	ProcessingTimeout time.Duration `mapstructure:"processing_timeout"`
 	BatchSize         int           `mapstructure:"batch_size"`
+	RestartBackoff    time.Duration `mapstructure:"restart_backoff"`
 }
 
 type RateLimiterByUserConfig struct {

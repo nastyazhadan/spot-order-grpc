@@ -37,6 +37,13 @@ var InfraProviders = fx.Options(
 	),
 )
 
+type postgresPoolIn struct {
+	fx.In
+
+	Cfg    config.OrderConfig
+	AppCtx context.Context `name:"app_ctx"`
+}
+
 func provideLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*zapLogger.Logger, error) {
 	logger := zapLogger.New(cfg.Log.Level, cfg.Log.Format == "json")
 
@@ -49,12 +56,12 @@ func provideLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*zapLogger.L
 	return logger, nil
 }
 
-func providePostgresPool(cfg config.OrderConfig) (*pgxpool.Pool, error) {
-	pool, err := db.NewPgxPool(cfg.Service.DBURI, db.PoolConfig{
-		MaxConnections:  cfg.PostgresPool.MaxConnections,
-		MinConnections:  cfg.PostgresPool.MinConnections,
-		MaxConnLifetime: cfg.PostgresPool.MaxConnLifetime,
-		MaxConnIdleTime: cfg.PostgresPool.MaxConnIdleTime,
+func providePostgresPool(in postgresPoolIn) (*pgxpool.Pool, error) {
+	pool, err := db.NewPgxPool(in.AppCtx, in.Cfg.Service.DBURI, db.PoolConfig{
+		MaxConnections:  in.Cfg.PostgresPool.MaxConnections,
+		MinConnections:  in.Cfg.PostgresPool.MinConnections,
+		MaxConnLifetime: in.Cfg.PostgresPool.MaxConnLifetime,
+		MaxConnIdleTime: in.Cfg.PostgresPool.MaxConnIdleTime,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db.NewPgxPool: %w", err)
@@ -95,8 +102,8 @@ func provideOutboxStore(pool *pgxpool.Pool, logger *zapLogger.Logger, cfg config
 	return outboxStore.New(pool, logger, cfg)
 }
 
-func provideBlockStore(store *cache.Store) *blockStore.MarketBlockStore {
-	return blockStore.New(store)
+func provideBlockStore(store *cache.Store, cfg config.OrderConfig) *blockStore.MarketBlockStore {
+	return blockStore.New(store, cfg.Redis.MarketBlockTTL)
 }
 
 func provideInboxStore(pool *pgxpool.Pool, cfg config.OrderConfig) *inboxStore.InboxStore {

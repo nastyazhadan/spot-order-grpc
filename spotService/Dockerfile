@@ -1,22 +1,29 @@
 # ======= Этап 1: Сборка =======
 FROM golang:1.25.0 AS builder
 
-WORKDIR /build/spotOrder
+WORKDIR /build
 
-COPY go.work go.work.sum* ./
-COPY orderService/go.mod orderService/go.sum ./orderService/
+COPY spotService/go.mod spotService/go.sum ./spotService/
 COPY protos/go.mod protos/go.sum ./protos/
 COPY shared/go.mod shared/go.sum ./shared/
-COPY spotService/go.mod spotService/go.sum ./spotService/
 
-RUN cd orderService && go mod download && \
-    cd ../protos && go mod download && \
-    cd ../shared && go mod download && \
-    cd ../spotService && go mod download
+WORKDIR /build/spotService
+RUN --mount=type=cache,target=/go/pkg/mod \
+    GOWORK=off go mod download
 
-COPY . .
+WORKDIR /build
+COPY spotService ./spotService
+COPY protos ./protos
+COPY shared ./shared
+COPY config.yaml ./config.yaml
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o server ./spotService/cmd/spot/main.go
+WORKDIR /build/spotService
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOWORK=off \
+    go build -o /out/server ./cmd/spot/main.go
+
+FROM ghcr.io/grpc-ecosystem/grpc-health-probe:v0.4.28 AS grpc_health_probe
 
 # ======= Этап 2: Запуск =======
 FROM alpine:3.20
@@ -25,14 +32,12 @@ WORKDIR /app
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-COPY --from=builder /build/spotOrder/server .
-COPY --from=builder /build/spotOrder/config.yaml .
+COPY --from=builder /out/server ./server
+COPY --from=builder /build/config.yaml ./config.yaml
+COPY --from=grpc_health_probe /ko-app/grpc_health_probe /usr/local/bin/grpc_health_probe
 
-RUN chown -R appuser:appgroup /app
-
-RUN wget -qO /usr/local/bin/grpc_health_probe \
-    https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/v0.4.28/grpc_health_probe-linux-amd64 \
-    && chmod +x /usr/local/bin/grpc_health_probe
+RUN chmod +x /usr/local/bin/grpc_health_probe && \
+    chown -R appuser:appgroup /app
 
 USER appuser
 

@@ -49,15 +49,19 @@ func mapError(ctx context.Context, err error, logger *zapLogger.Logger) error {
 		errors.Is(err, serviceErrors.ErrMarketNotFound),
 		errors.Is(err, serviceErrors.ErrOrderNotFound):
 		logger.Warn(ctx, "resource not found", zap.Error(err))
-		return status.Error(codes.NotFound, err.Error())
+		return status.Error(codes.NotFound, "resource not found")
 
 	case errors.Is(err, serviceErrors.ErrMarketUnavailable):
 		logger.Warn(ctx, "market temporarily unavailable", zap.Error(err))
 		return status.Error(codes.Unavailable, "market temporarily unavailable")
 
+	case errors.Is(err, serviceErrors.ErrMarketsUnavailable):
+		logger.Warn(ctx, "markets are temporarily unavailable", zap.Error(err))
+		return status.Error(codes.Unavailable, err.Error())
+
 	case errors.Is(err, serviceErrors.ErrOrderAlreadyExists):
 		logger.Warn(ctx, "order already exists", zap.Error(err))
-		return status.Error(codes.AlreadyExists, err.Error())
+		return status.Error(codes.AlreadyExists, "order already exists")
 
 	case errors.Is(err, serviceErrors.ErrRateLimitExceeded):
 		logger.Warn(ctx, "rate limit exceeded", zap.Error(err))
@@ -71,11 +75,15 @@ func mapError(ctx context.Context, err error, logger *zapLogger.Logger) error {
 		errors.Is(err, serviceErrors.ErrInvalidJTI),
 		errors.Is(err, serviceErrors.ErrTokenRevoked):
 		logger.Warn(ctx, "refresh token error", zap.Error(err))
-		return status.Error(codes.Unauthenticated, err.Error())
+		return status.Error(codes.Unauthenticated, "refresh token error")
 
 	case errors.Is(err, gobreaker.ErrOpenState),
 		errors.Is(err, gobreaker.ErrTooManyRequests):
 		return status.Error(codes.Unavailable, "service temporarily unavailable")
+
+	case errors.Is(err, serviceErrors.ErrMarketDisabled):
+		logger.Warn(ctx, "market is disabled", zap.Error(err))
+		return status.Error(codes.FailedPrecondition, "market is disabled")
 
 	case errors.Is(err, serviceErrors.ErrRevokeTokenFailed),
 		errors.Is(err, serviceErrors.ErrSaveTokenFailed):

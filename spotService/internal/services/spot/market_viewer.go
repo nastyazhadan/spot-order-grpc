@@ -111,19 +111,44 @@ func (s *MarketViewer) GetMarketByID(
 	)
 	defer span.End()
 
+	roleKey, ok := effectiveUserRole(userRoles)
+	if !ok {
+		err := serviceErrors.ErrUserRoleNotSpecified
+		tracing.RecordError(span, err)
+		return models.Market{}, fmt.Errorf("%s: %w", op, err)
+	}
+
 	market, err := s.getMarketActual(ctx, id)
 	if err != nil {
 		tracing.RecordError(span, err)
 		return models.Market{}, err
 	}
 
-	if !canViewMarket(market, userRoles) {
-		err = sharedErrors.ErrMarketNotFound{ID: id}
-		tracing.RecordError(span, err)
-		return models.Market{}, fmt.Errorf("%s: %w", op, err)
-	}
+	switch roleKey {
+	case roleAdminKey:
+		return market, nil
 
-	return market, nil
+	case roleViewerKey:
+		if market.DeletedAt != nil {
+			err = sharedErrors.ErrMarketNotFound{ID: id}
+			tracing.RecordError(span, err)
+			return models.Market{}, fmt.Errorf("%s: %w", op, err)
+		}
+		return market, nil
+
+	default:
+		if market.DeletedAt != nil {
+			err = sharedErrors.ErrMarketNotFound{ID: id}
+			tracing.RecordError(span, err)
+			return models.Market{}, fmt.Errorf("%s: %w", op, err)
+		}
+		if !market.Enabled {
+			err = serviceErrors.ErrDisabled{ID: id}
+			tracing.RecordError(span, err)
+			return models.Market{}, fmt.Errorf("%s: %w", op, err)
+		}
+		return market, nil
+	}
 }
 
 func (s *MarketViewer) getMarketActual(ctx context.Context, id uuid.UUID) (models.Market, error) {
@@ -158,15 +183,6 @@ func effectiveUserRole(roles []models.UserRole) (string, bool) {
 		}
 	}
 	return resultRole, resultRole != ""
-}
-
-func canViewMarket(market models.Market, roles []models.UserRole) bool {
-	roleKey, ok := effectiveUserRole(roles)
-	if !ok {
-		return false
-	}
-
-	return canViewMarketByRoleKey(market, roleKey)
 }
 
 func canViewMarketByRoleKey(market models.Market, roleKey string) bool {

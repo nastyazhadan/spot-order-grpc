@@ -41,6 +41,7 @@ func BootstrapPostgres(
 }
 
 func NewPgxPool(
+	ctx context.Context,
 	dbURI string,
 	config PoolConfig,
 ) (*pgxpool.Pool, error) {
@@ -66,7 +67,7 @@ func NewPgxPool(
 		cfg.MaxConnIdleTime = config.MaxConnIdleTime
 	}
 
-	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("pgxpool.NewWithConfig: %w", err)
 	}

@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
@@ -60,6 +61,14 @@ func validateSpotService(cfg config.SpotConfig) error {
 			"timeouts.service must be greater than 0, got %s",
 			cfg.Timeouts.Service,
 		)
+	}
+
+	if err := validateTCPAddress("service.address", cfg.Service.Address, true); err != nil {
+		return err
+	}
+
+	if err := validateTCPAddress("metrics.http_address", cfg.Metrics.HTTPAddress, true); err != nil {
+		return err
 	}
 
 	return nil
@@ -252,6 +261,27 @@ func validateSpotRateLimits(cfg config.SpotConfig) error {
 			"grpc_rate_limit.get_market_by_id must be greater than 0, got %d",
 			cfg.GRPCRateLimit.GetMarketByID,
 		)
+	}
+
+	return nil
+}
+
+func validateTCPAddress(fieldName, value string, allowEmptyHost bool) error {
+	if value == "" {
+		return fmt.Errorf("%s is required", fieldName)
+	}
+
+	host, port, err := net.SplitHostPort(value)
+	if err != nil {
+		return fmt.Errorf("%s must be a valid host:port, got %q: %w", fieldName, value, err)
+	}
+
+	if !allowEmptyHost && host == "" {
+		return fmt.Errorf("%s must include host, got %q", fieldName, value)
+	}
+
+	if port == "" {
+		return fmt.Errorf("%s must include port, got %q", fieldName, value)
 	}
 
 	return nil

@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
@@ -83,8 +84,16 @@ func validateOrderService(cfg config.OrderConfig) error {
 		)
 	}
 
-	if cfg.SpotAddress == "" {
-		return errors.New("spot_address is required")
+	if err := validateTCPAddress("service.address", cfg.Service.Address, true); err != nil {
+		return err
+	}
+
+	if err := validateTCPAddress("metrics.http_address", cfg.Metrics.HTTPAddress, true); err != nil {
+		return err
+	}
+
+	if err := validateTCPAddress("spot_address", cfg.SpotAddress, false); err != nil {
+		return err
 	}
 
 	return nil
@@ -103,6 +112,13 @@ func validateOrderRedis(cfg config.OrderConfig) error {
 			"redis.connection_timeout (%s) must be less than service_timeout (%s)",
 			cfg.Redis.ConnectionTimeout,
 			cfg.Timeouts.Service,
+		)
+	}
+
+	if cfg.Redis.MarketBlockTTL <= 0 {
+		return fmt.Errorf(
+			"redis.market_block_ttl must be greater than 0, got %s",
+			cfg.Redis.MarketBlockTTL,
 		)
 	}
 
@@ -215,6 +231,13 @@ func validateOrderRetry(cfg config.OrderConfig) error {
 		return fmt.Errorf(
 			"retry.initial_backoff must be greater than 0, got %s",
 			cfg.Retry.InitialBackoff,
+		)
+	}
+
+	if cfg.Retry.Jitter < 0 || cfg.Retry.Jitter > 1 {
+		return fmt.Errorf(
+			"retry.jitter must be between 0 and 1 inclusive, got %v",
+			cfg.Retry.Jitter,
 		)
 	}
 
@@ -409,6 +432,27 @@ func validateOrderRateLimits(cfg config.OrderConfig) error {
 			"rate_limit_by_user.window must be greater than 0, got %s",
 			cfg.RateLimitByUser.Window,
 		)
+	}
+
+	return nil
+}
+
+func validateTCPAddress(fieldName, value string, allowEmptyHost bool) error {
+	if value == "" {
+		return fmt.Errorf("%s is required", fieldName)
+	}
+
+	host, port, err := net.SplitHostPort(value)
+	if err != nil {
+		return fmt.Errorf("%s must be a valid host:port, got %q: %w", fieldName, value, err)
+	}
+
+	if !allowEmptyHost && host == "" {
+		return fmt.Errorf("%s must include host, got %q", fieldName, value)
+	}
+
+	if port == "" {
+		return fmt.Errorf("%s must include port, got %q", fieldName, value)
 	}
 
 	return nil

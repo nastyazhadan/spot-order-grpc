@@ -16,6 +16,7 @@ var (
 
 	ErrRateLimitExceeded = ErrLimitExceeded{}
 	ErrMarketUnavailable = ErrUnavailable{}
+	ErrMarketDisabled    = ErrDisabled{}
 
 	ErrMarketsNotFound      = errors.New("markets not found")
 	ErrMarketsUnavailable   = errors.New("markets are temporarily unavailable")
@@ -52,5 +53,18 @@ func (e ErrUnavailable) Error() string {
 
 func (e ErrUnavailable) Is(target error) bool {
 	var errorType ErrUnavailable
+	return errors.As(target, &errorType)
+}
+
+type ErrDisabled struct {
+	ID uuid.UUID
+}
+
+func (e ErrDisabled) Error() string {
+	return fmt.Sprintf("market with id=%s is disabled", e.ID)
+}
+
+func (e ErrDisabled) Is(target error) bool {
+	var errorType ErrDisabled
 	return errors.As(target, &errorType)
 }

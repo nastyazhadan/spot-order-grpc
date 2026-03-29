@@ -227,7 +227,7 @@ func (s *OrderService) validateMarket(
 	ctx context.Context,
 	marketID uuid.UUID,
 ) error {
-	ctx, span := tracing.StartSpan(ctx, "validate_market",
+	ctx, span := tracing.StartSpan(ctx, "order.validate_market",
 		trace.WithAttributes(attributeUUID("market_id", marketID)),
 	)
 	defer span.End()
@@ -251,19 +251,24 @@ func (s *OrderService) validateMarket(
 		return err
 	}
 
-	actualBlocked := !market.Enabled || market.DeletedAt != nil
-
 	span.SetAttributes(
 		attribute.Bool("market_enabled", market.Enabled),
 		attribute.Bool("market_deleted", market.DeletedAt != nil),
 		attribute.Bool("market_was_blocked", blocked),
-		attribute.Bool("market_is_blocked_after_recheck", actualBlocked),
 	)
 
-	if actualBlocked {
-		s.syncMarketBlock(ctx, market, true, "warm_block_after_unavailable_recheck")
+	if market.DeletedAt != nil {
+		s.syncMarketBlock(ctx, market, true, "warm_block_after_deleted_recheck")
 
 		err = sharedErrors.ErrMarketNotFound{ID: marketID}
+		tracing.RecordError(span, err)
+		return err
+	}
+
+	if !market.Enabled {
+		s.syncMarketBlock(ctx, market, true, "warm_block_after_disabled_recheck")
+
+		err = serviceErrors.ErrDisabled{ID: marketID}
 		tracing.RecordError(span, err)
 		return err
 	}

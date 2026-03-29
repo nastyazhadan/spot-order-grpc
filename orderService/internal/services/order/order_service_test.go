@@ -12,7 +12,6 @@ import (
 	storageErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
-	"github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 
 	fakeValue "github.com/brianvoe/gofakeit/v6"
 	"github.com/google/uuid"

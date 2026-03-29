@@ -3,6 +3,7 @@ package spot
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -69,13 +70,29 @@ func NewMarketPoller(
 	}
 }
 
-func (p *MarketPoller) Run(ctx context.Context) {
-	if err := p.loadCursor(ctx); err != nil {
-		p.logger.Error(ctx, "Failed to load market poller cursor", zap.Error(err))
-		return
+func (p *MarketPoller) Init(ctx context.Context) error {
+	initCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.processingTimeout)
+	defer cancel()
+
+	if err := p.loadCursor(initCtx); err != nil {
+		return fmt.Errorf("load market poller cursor: %w", err)
 	}
 
-	p.poll(ctx)
+	p.logger.Info(ctx, "Market poller cursor loaded",
+		zap.Time("last_seen_at", p.lastSeenAt),
+		zap.String("last_seen_id", p.lastSeenID.String()),
+	)
+
+	return nil
+}
+
+func (p *MarketPoller) Run(ctx context.Context) error {
+	if err := p.poll(ctx); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("initial poll: %w", err)
+	}
 
 	ticker := time.NewTicker(p.pollInterval)
 	defer ticker.Stop()
@@ -92,9 +109,14 @@ func (p *MarketPoller) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			p.logger.Info(ctx, "Market poller stopped")
-			return
+			return nil
 		case <-ticker.C:
-			p.poll(ctx)
+			if err := p.poll(ctx); err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				return fmt.Errorf("scheduled poll: %w", err)
+			}
 		}
 	}
 }
@@ -115,7 +137,7 @@ func (p *MarketPoller) loadCursor(ctx context.Context) error {
 	return nil
 }
 
-func (p *MarketPoller) poll(ctx context.Context) {
+func (p *MarketPoller) poll(ctx context.Context) error {
 	pollCtx, cancel := context.WithTimeout(ctx, p.processingTimeout)
 	defer cancel()
 
@@ -126,7 +148,10 @@ func (p *MarketPoller) poll(ctx context.Context) {
 
 	for {
 		if pollCtx.Err() != nil {
-			return
+			if errors.Is(pollCtx.Err(), context.Canceled) || errors.Is(pollCtx.Err(), context.DeadlineExceeded) {
+				return pollCtx.Err()
+			}
+			return nil
 		}
 
 		updated, hasMore, err := p.processNextBatch(pollCtx)
@@ -134,11 +159,11 @@ func (p *MarketPoller) poll(ctx context.Context) {
 			needCacheRefresh = true
 		}
 		if err != nil {
-			return
+			return err
 		}
 
 		if !hasMore {
-			return
+			return err
 		}
 	}
 }

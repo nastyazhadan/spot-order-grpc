@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -126,7 +128,10 @@ func registerMetrics(
 	logger *zapLogger.Logger,
 ) {
 	appCtx := in.AppCtx
-	var meterProvider *sdkmetric.MeterProvider
+	var (
+		meterProvider *sdkmetric.MeterProvider
+		listener      net.Listener
+	)
 
 	httpServer := &http.Server{
 		Addr: cfg.Metrics.HTTPAddress,
@@ -147,9 +152,14 @@ func registerMetrics(
 				return err
 			}
 
+			listener, err = net.Listen("tcp", cfg.Metrics.HTTPAddress)
+			if err != nil {
+				return fmt.Errorf("listen metrics http on %s: %w", cfg.Metrics.HTTPAddress, err)
+			}
+
 			go func() {
-				if startErr := httpServer.ListenAndServe(); startErr != nil && !errors.Is(startErr, http.ErrServerClosed) {
-					logger.Error(appCtx, "Failed to start metrics server", zap.Error(startErr))
+				if serveErr := httpServer.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+					logger.Error(appCtx, "Failed to serve metrics server", zap.Error(serveErr))
 				}
 			}()
 			return nil
@@ -238,6 +248,7 @@ func registerKafkaConsumer(
 	consumer *consumer.MarketConsumer,
 	group sarama.ConsumerGroup,
 	logger *zapLogger.Logger,
+	config config.OrderConfig,
 ) {
 	appCtx := in.AppCtx
 	ctx, cancel := context.WithCancel(appCtx)
@@ -246,15 +257,32 @@ func registerKafkaConsumer(
 	lifecycle.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
 			logger.Info(startCtx, "Kafka consumer: starting")
+
 			go func() {
 				defer close(done)
 
-				if err := consumer.Run(ctx); err != nil {
+				for {
 					if ctx.Err() != nil {
-						logger.Info(appCtx, "Kafka consumer stopped")
+						logger.Info(ctx, "Kafka consumer stopped")
 						return
 					}
-					logger.Error(appCtx, "Kafka consumer exited with error", zap.Error(err))
+
+					err := consumer.Run(ctx)
+					if err == nil || ctx.Err() != nil {
+						logger.Info(ctx, "Kafka consumer stopped")
+						return
+					}
+
+					logger.Error(ctx, "Kafka consumer exited with error, restarting",
+						zap.Error(err),
+						zap.Duration("restart_after", config.Kafka.Consumer.RestartBackoff),
+					)
+
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(config.Kafka.Consumer.RestartBackoff):
+					}
 				}
 			}()
 

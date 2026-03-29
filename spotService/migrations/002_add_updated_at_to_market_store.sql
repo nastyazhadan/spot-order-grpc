@@ -2,6 +2,9 @@
 ALTER TABLE market_store
 ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
+CREATE INDEX IF NOT EXISTS idx_market_store_updated_at_id
+    ON market_store (updated_at, id);
+
 CREATE OR REPLACE FUNCTION set_market_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN

@@ -119,6 +119,10 @@ func (s *OutboxStore) ClaimPendingEvents(ctx context.Context, limit int) ([]mode
 
 	span.SetAttributes(attribute.Int("batch.claimed", len(events)))
 
+	if len(events) == 0 {
+		return events, nil
+	}
+
 	pendingCount, countErr := s.countPendingEvents(ctx)
 	if countErr != nil {
 		tracing.RecordError(span, countErr)

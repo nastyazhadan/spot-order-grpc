@@ -35,6 +35,13 @@ var InfraProviders = fx.Options(
 	),
 )
 
+type postgresPoolIn struct {
+	fx.In
+
+	Cfg    config.SpotConfig
+	AppCtx context.Context `name:"app_ctx"`
+}
+
 func provideLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (*zapLogger.Logger, error) {
 	logger := zapLogger.New(cfg.Log.Level, cfg.Log.Format == "json")
 
@@ -47,12 +54,12 @@ func provideLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (*zapLogger.Lo
 	return logger, nil
 }
 
-func providePostgresPool(cfg config.SpotConfig) (*pgxpool.Pool, error) {
-	pool, err := db.NewPgxPool(cfg.Service.DBURI, db.PoolConfig{
-		MaxConnections:  cfg.PostgresPool.MaxConnections,
-		MinConnections:  cfg.PostgresPool.MinConnections,
-		MaxConnLifetime: cfg.PostgresPool.MaxConnLifetime,
-		MaxConnIdleTime: cfg.PostgresPool.MaxConnIdleTime,
+func providePostgresPool(in postgresPoolIn) (*pgxpool.Pool, error) {
+	pool, err := db.NewPgxPool(in.AppCtx, in.Cfg.Service.DBURI, db.PoolConfig{
+		MaxConnections:  in.Cfg.PostgresPool.MaxConnections,
+		MinConnections:  in.Cfg.PostgresPool.MinConnections,
+		MaxConnLifetime: in.Cfg.PostgresPool.MaxConnLifetime,
+		MaxConnIdleTime: in.Cfg.PostgresPool.MaxConnIdleTime,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db.NewPgxPool: %w", err)

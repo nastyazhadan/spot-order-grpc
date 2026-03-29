@@ -6,9 +6,6 @@ CREATE TABLE IF NOT EXISTS market_poller_cursor (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_market_store_updated_at_id
-    ON market_store (updated_at, id);
-
 -- +goose Down
 DROP TABLE IF EXISTS market_poller_cursor;
 DROP INDEX IF EXISTS idx_market_store_updated_at_id;

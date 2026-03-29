@@ -37,6 +37,7 @@ order:
     max_active_conns: 15
     idle_timeout: 1m
     max_conn_lifetime: 30m
+    market_block_ttl: 168h
   grpc_rate_limit:
     create_order: 1000
     get_order_status: 2000
@@ -81,6 +82,7 @@ order:
       max_retries: 3
       retry_backoff: 500ms
       dlq_enabled: true
+      restart_backoff: 3s
     topics:
       order_created: "order.created"
       order_status_updated: "order.status.updated"
@@ -159,3 +161,4 @@ spot:
     poll_interval: 1s
     processing_timeout: 5s
     batch_size: 100
+    restart_backoff: 3s

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,33 +21,45 @@ const (
 	unblockedState = "0"
 )
 
-var syncMarketBlockStateScript = redisGo.NewScript(`
+var syncStateScript = redisGo.NewScript(`
 	local key = KEYS[1]
 	local newTs = tonumber(ARGV[1])
 	local newState = ARGV[2]
+	local ttlMs = tonumber(ARGV[3])
 
 	local current = redis.call("GET", key)
-	if current then
-		local sep = string.find(current, ":")
-		if sep then
-			local oldTs = tonumber(string.sub(current, 1, sep - 1))
-			if oldTs and oldTs >= newTs then
-				return 0
-			end
-		end
+	if not current then
+		redis.call("SET", key, tostring(newTs) .. ":" .. newState, "PX", ttlMs)
+		return 1
 	end
 
-	redis.call("SET", key, tostring(newTs) .. ":" .. newState)
+	local sep = string.find(current, ":")
+	if not sep then
+		return redis.error_reply("invalid market block state")
+	end
+
+	local currentTs = tonumber(string.sub(current, 1, sep - 1))
+	if not currentTs then
+		return redis.error_reply("invalid market block timestamp")
+	end
+
+	if newTs < currentTs then
+		return 0
+	end
+
+	redis.call("SET", key, tostring(newTs) .. ":" .. newState, "PX", ttlMs)
 	return 1
 `)
 
 type MarketBlockStore struct {
 	store *cache.Store
+	ttl   time.Duration
 }
 
-func New(store *cache.Store) *MarketBlockStore {
+func New(store *cache.Store, ttl time.Duration) *MarketBlockStore {
 	return &MarketBlockStore{
 		store: store,
+		ttl:   ttl,
 	}
 }
 
@@ -62,27 +75,31 @@ func (s *MarketBlockStore) SyncState(
 	if blocked {
 		state = blockedState
 	}
+	ttlMs := s.ttl.Milliseconds()
 
-	timestamp := updatedAt.UTC().UnixMicro()
-
-	result, err := syncMarketBlockStateScript.Run(
+	result, err := syncStateScript.Run(
 		ctx,
 		s.store.ScriptRunner(),
 		[]string{blockKey(marketID)},
-		timestamp,
+		updatedAt.UTC().UnixMilli(),
 		state,
-	).Int()
+		ttlMs,
+	).Result()
 	if err != nil {
-		return false, fmt.Errorf("%s: %w", op, err)
+		return false, fmt.Errorf("%s: run sync state script: %w", op, err)
 	}
 
-	switch result {
-	case 1:
-		return true, nil
-	case 0:
-		return false, nil
+	switch value := result.(type) {
+	case int64:
+		return value == 1, nil
+	case string:
+		parsed, parseErr := strconv.ParseInt(value, 10, 64)
+		if parseErr != nil {
+			return false, fmt.Errorf("%s: unexpected script result: %q", op, value)
+		}
+		return parsed == 1, nil
 	default:
-		return false, fmt.Errorf("%s: unexpected script result %d", op, result)
+		return false, fmt.Errorf("%s: unexpected script result type %T", op, result)
 	}
 }
 
@@ -90,37 +107,43 @@ func (s *MarketBlockStore) IsBlocked(ctx context.Context, marketID uuid.UUID) (b
 	const op = "redis.MarketBlockStore.IsBlocked"
 
 	raw, err := s.store.Get(ctx, blockKey(marketID))
-	if errors.Is(err, sharedErrors.ErrCacheNotFound) {
-		return false, nil
-	}
 	if err != nil {
-		return false, fmt.Errorf("%s: %w", op, err)
+		if errors.Is(err, sharedErrors.ErrCacheNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("%s: get blocked state: %w", op, err)
 	}
 
-	blocked, parseErr := parseBlockedState(raw)
+	blocked, _, parseErr := parseBlockedState(string(raw))
 	if parseErr != nil {
-		return false, fmt.Errorf("%s: %w", op, parseErr)
+		return false, fmt.Errorf("%s: parse blocked state: %w", op, parseErr)
 	}
 
 	return blocked, nil
 }
 
-func parseBlockedState(raw []byte) (bool, error) {
-	value := string(raw)
-
-	_, state, found := strings.Cut(value, ":")
-	if !found {
-		return false, fmt.Errorf("unexpected market block value %q", value)
+func parseBlockedState(raw string) (bool, time.Time, error) {
+	parts := strings.Split(raw, ":")
+	if len(parts) != 2 {
+		return false, time.Time{}, fmt.Errorf("invalid blocked state format: %q", raw)
 	}
 
-	switch state {
+	tsMs, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return false, time.Time{}, fmt.Errorf("parse blocked state timestamp: %w", err)
+	}
+
+	var blocked bool
+	switch parts[1] {
 	case blockedState:
-		return true, nil
+		blocked = true
 	case unblockedState:
-		return false, nil
+		blocked = false
 	default:
-		return false, fmt.Errorf("unexpected market block state %q", state)
+		return false, time.Time{}, fmt.Errorf("invalid blocked state flag: %q", parts[1])
 	}
+
+	return blocked, time.UnixMilli(tsMs).UTC(), nil
 }
 
 func blockKey(marketID uuid.UUID) string {
