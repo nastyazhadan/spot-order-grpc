@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package common.v1;
+
+option go_package = "zhadan.common.v1;commonv1";
+
+enum OrderStatus {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_CREATED = 1;
+  STATUS_PENDING = 2;
+  STATUS_FILLED = 3;
+  STATUS_CANCELLED = 4;
+}
+
+enum OrderType {
+  TYPE_UNSPECIFIED = 0;
+  TYPE_LIMIT = 1;
+  TYPE_MARKET = 2;
+  TYPE_STOP_LOSS = 3;
+  TYPE_TAKE_PROFIT = 4;
+}

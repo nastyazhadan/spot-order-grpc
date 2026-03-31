@@ -21,69 +21,104 @@ type PoolConfig struct {
 
 func BootstrapPostgres(
 	ctx context.Context,
-	pool *pgxpool.Pool,
-	migrationsFS fs.FS,
-) error {
-	if err := pool.Ping(ctx); err != nil {
-		return fmt.Errorf("pool.Ping: %w", err)
-	}
-
-	sqlDB := stdlib.OpenDBFromPool(pool)
-	defer sqlDB.Close()
-
-	dbMigrator := migrator.NewMigrator(sqlDB, migrationsFS)
-	if err := dbMigrator.Up(ctx); err != nil {
-		pool.Close()
-		return fmt.Errorf("migrator.Up: %w", err)
-	}
-
-	return nil
-}
-
-func NewPgxPool(
-	ctx context.Context,
 	dbURI string,
+	migrationsFS fs.FS,
 	config PoolConfig,
 ) (*pgxpool.Pool, error) {
-	if err := config.validate(); err != nil {
-		return nil, err
-	}
+	const op = "db.BootstrapPostgres"
 
-	cfg, err := pgxpool.ParseConfig(dbURI)
+	pool, err := newPostgresPool(ctx, dbURI, config)
 	if err != nil {
-		return nil, fmt.Errorf("pgxpool.ParseConfig: %w", err)
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if config.MaxConnections > 0 {
-		cfg.MaxConns = config.MaxConnections
-	}
-	if config.MinConnections > 0 {
-		cfg.MinConns = config.MinConnections
-	}
-	if config.MaxConnLifetime > 0 {
-		cfg.MaxConnLifetime = config.MaxConnLifetime
-	}
-	if config.MaxConnIdleTime > 0 {
-		cfg.MaxConnIdleTime = config.MaxConnIdleTime
-	}
-
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("pgxpool.NewWithConfig: %w", err)
+	if err = runPostgresMigrations(ctx, pool, migrationsFS); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return pool, nil
 }
 
-func (c PoolConfig) validate() error {
-	if c.MaxConnections > 0 && c.MinConnections > c.MaxConnections {
-		return fmt.Errorf("invalid pool config: MinConns (%d) > MaxConns (%d)",
-			c.MinConnections, c.MaxConnections)
+func newPostgresPool(
+	ctx context.Context,
+	dbURI string,
+	config PoolConfig,
+) (*pgxpool.Pool, error) {
+	const op = "db.newPostgresPool"
+
+	cfg, err := pgxpool.ParseConfig(dbURI)
+	if err != nil {
+		return nil, fmt.Errorf("%s: parse config: %w", op, err)
 	}
 
-	if c.MaxConnections == 0 && c.MinConnections > 0 {
-		return fmt.Errorf("invalid pool config: MinConns (%d) set but MaxConns is not",
-			c.MinConnections)
+	if err = applyPoolConfig(cfg, config); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	// При нормальном завершении программы закрывается в lifecycle.go, при ошибке - в postgres.go
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("%s: create pool: %w", op, err)
+	}
+
+	ok := false
+	defer func() {
+		if !ok {
+			pool.Close()
+		}
+	}()
+
+	if err = pool.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("%s: ping db: %w", op, err)
+	}
+
+	ok = true
+	return pool, nil
+}
+
+func applyPoolConfig(
+	cfg *pgxpool.Config,
+	poolConfig PoolConfig,
+) error {
+	if poolConfig.MaxConnections > 0 {
+		cfg.MaxConns = poolConfig.MaxConnections
+	}
+
+	if poolConfig.MinConnections > 0 {
+		cfg.MinConns = poolConfig.MinConnections
+	}
+
+	if poolConfig.MaxConnLifetime > 0 {
+		cfg.MaxConnLifetime = poolConfig.MaxConnLifetime
+	}
+
+	if poolConfig.MaxConnIdleTime > 0 {
+		cfg.MaxConnIdleTime = poolConfig.MaxConnIdleTime
+	}
+
+	if cfg.MaxConns > 0 && cfg.MinConns > cfg.MaxConns {
+		return fmt.Errorf("invalid pool config: MinConns (%d) > MaxConns (%d)",
+			cfg.MinConns, cfg.MaxConns)
+	}
+
+	return nil
+}
+
+func runPostgresMigrations(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	migrationsFS fs.FS,
+) error {
+	const op = "db.runPostgresMigrations"
+
+	sqlDB := stdlib.OpenDBFromPool(pool)
+	defer sqlDB.Close()
+
+	dbMigrator := migrator.NewMigrator(sqlDB, migrationsFS)
+
+	if err := dbMigrator.Up(ctx); err != nil {
+		return fmt.Errorf("%s: run migrations: %w", op, err)
 	}
 
 	return nil

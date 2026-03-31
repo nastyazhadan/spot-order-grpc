@@ -6,6 +6,7 @@ tasks:
       - gen
     desc: "Generate code from proto files"
     cmds:
+      - protoc -I proto -I lib proto/common/v1/*.proto --go_out=./gen/go --go_opt=paths=source_relative --go-grpc_out=./gen/go --go-grpc_opt=paths=source_relative
       - protoc -I proto -I lib proto/order/v1/*.proto --go_out=./gen/go --go_opt=paths=source_relative --go-grpc_out=./gen/go --go-grpc_opt=paths=source_relative
       - protoc -I proto -I lib proto/spot/v1/*.proto --go_out=./gen/go --go_opt=paths=source_relative --go-grpc_out=./gen/go --go-grpc_opt=paths=source_relative
       - protoc -I proto -I lib proto/auth/v1/*.proto --go_out=./gen/go --go_opt=paths=source_relative --go-grpc_out=./gen/go --go-grpc_opt=paths=source_relative

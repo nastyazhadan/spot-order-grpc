@@ -256,10 +256,35 @@ func (s *OutboxStore) ReleaseStuckEvents(ctx context.Context, stuckBefore time.T
 	return released, nil
 }
 
-func (s *OutboxStore) SaveOutboxEvent(ctx context.Context, event models.OutboxEvent) error {
-	const op = "OutboxStore.SaveOutboxEvent"
+func (s *OutboxStore) BeginTransaction(ctx context.Context) (pgx.Tx, error) {
+	const op = "OutboxStore.BeginTransaction"
 
-	ctx, span := tracing.StartSpan(ctx, "spot.outbox.save_event_direct",
+	ctx, span := tracing.StartSpan(ctx, "spot.outbox.begin_tranasaction")
+	defer span.End()
+
+	start := time.Now()
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	metrics.ObserveWithTrace(ctx,
+		metrics.DBQueryDuration.WithLabelValues(s.config.Service.Name, "spot.outbox.begin_transaction"),
+		time.Since(start).Seconds(),
+	)
+
+	if err != nil {
+		tracing.RecordError(span, err)
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return tx, nil
+}
+
+func (s *OutboxStore) SaveOutboxEvent(
+	ctx context.Context,
+	transaction pgx.Tx,
+	event models.OutboxEvent,
+) error {
+	const op = "OutboxStore.SaveOutboxEventTransaction"
+
+	ctx, span := tracing.StartSpan(ctx, "spot.outbox.save_event",
 		trace.WithAttributes(
 			attribute.String("event_id", event.EventID.String()),
 			attribute.String("event_type", event.EventType),
@@ -269,19 +294,19 @@ func (s *OutboxStore) SaveOutboxEvent(ctx context.Context, event models.OutboxEv
 	defer span.End()
 
 	start := time.Now()
-	_, err := s.pool.Exec(ctx, `
+	_, err := transaction.Exec(ctx, `
 		INSERT INTO outbox (id, event_id, event_type, aggregate_id, payload, status, retry_count, available_at)
 		VALUES ($1, $2, $3, $4, $5, 'pending', 0, NOW())
 	`, event.ID, event.EventID, event.EventType, event.AggregateID, event.Payload)
 
 	metrics.ObserveWithTrace(ctx,
-		metrics.DBQueryDuration.WithLabelValues(s.config.Service.Name, "spot.outbox.save_direct"),
+		metrics.DBQueryDuration.WithLabelValues(s.config.Service.Name, "spot.outbox.save"),
 		time.Since(start).Seconds(),
 	)
 
 	if err != nil {
 		tracing.RecordError(span, err)
-		s.logger.Error(ctx, "Failed to save outbox event directly",
+		s.logger.Error(ctx, "Failed to save outbox event",
 			zap.String("event_id", event.EventID.String()),
 			zap.String("event_type", event.EventType),
 			zap.String("aggregate_id", event.AggregateID.String()),
@@ -291,24 +316,6 @@ func (s *OutboxStore) SaveOutboxEvent(ctx context.Context, event models.OutboxEv
 	}
 
 	return nil
-}
-
-func (s *OutboxStore) SaveOutboxEventTransaction(ctx context.Context, transaction pgx.Tx, event models.OutboxEvent) error {
-	const op = "OutboxStore.SaveOutboxEventTx"
-
-	_, err := transaction.Exec(ctx, `
-		INSERT INTO outbox (id, event_id, event_type, aggregate_id, payload, status, retry_count, available_at)
-		VALUES ($1, $2, $3, $4, $5, 'pending', 0, NOW())
-	`, event.ID, event.EventID, event.EventType, event.AggregateID, event.Payload)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	return nil
-}
-
-func (s *OutboxStore) BeginTransaction(ctx context.Context) (pgx.Tx, error) {
-	return s.pool.BeginTx(ctx, pgx.TxOptions{})
 }
 
 func (s *OutboxStore) countPendingEvents(ctx context.Context) (int64, error) {

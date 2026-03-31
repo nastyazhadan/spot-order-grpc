@@ -1,36 +1,34 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
-func LoadAll() error {
-	for _, path := range []string{".env", "../.env", "../../.env"} {
-		if err := godotenv.Load(path); err == nil {
-			break
-		}
+func LoadAll(configDir string) error {
+	if configDir == "" {
+		return fmt.Errorf("configDir is empty")
 	}
 
-	configFound := false
-	for _, path := range []string{"config.yaml", "../config.yaml", "../../config.yaml"} {
-		if _, err := os.Stat(path); err == nil {
-			viper.SetConfigFile(path)
-			configFound = true
-			break
-		}
-	}
-	if !configFound {
-		return fmt.Errorf("config.yaml not found")
+	envPath := filepath.Join(configDir, ".env")
+	if err := godotenv.Load(envPath); err != nil {
+		return fmt.Errorf("load .env file %q: %w", envPath, err)
 	}
 
-	var notFound viper.ConfigFileNotFoundError
-	if err := viper.ReadInConfig(); err != nil && !errors.As(err, &notFound) {
-		return fmt.Errorf("read config.yaml file: %w", err)
+	configPath := filepath.Join(configDir, "config.yaml")
+	if _, err := os.Stat(configPath); err != nil {
+		return fmt.Errorf("load config.yaml file %q: %w", configPath, err)
+	}
+
+	viper.Reset()
+	viper.SetConfigFile(configPath)
+
+	if err := viper.ReadInConfig(); err != nil {
+		return fmt.Errorf("read config file %q: %w", configPath, err)
 	}
 
 	return nil

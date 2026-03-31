@@ -19,14 +19,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	metricInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/metrics"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	outbox "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/kafka"
 	spotService "github.com/nastyazhadan/spot-order-grpc/spotService/internal/services/spot"
-	"github.com/nastyazhadan/spot-order-grpc/spotService/migrations"
 )
 
 var Lifecycle = fx.Options(
@@ -59,10 +57,6 @@ func registerInfrastructure(
 ) {
 	lifecycle.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
-			if err := db.BootstrapPostgres(startCtx, pool, migrations.Migrations); err != nil {
-				return fmt.Errorf("bootstrap postgres: %w", err)
-			}
-
 			redisPingCtx, cancel := context.WithTimeout(startCtx, cfg.Redis.ConnectionTimeout)
 			defer cancel()
 

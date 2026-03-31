@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
 func InitOpenTelemetry(

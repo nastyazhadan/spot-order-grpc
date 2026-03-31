@@ -2,7 +2,7 @@ package inbound
 
 import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
-	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
+	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/common/v1"
 )
 
 func TypeFromProto(orderType proto.OrderType) shared.OrderType {

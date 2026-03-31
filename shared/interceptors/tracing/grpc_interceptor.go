@@ -3,12 +3,12 @@ package tracing
 import (
 	"context"
 
-	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
-
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+
+	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 )
 
 func UnaryServerInterceptor() grpc.UnaryServerInterceptor {

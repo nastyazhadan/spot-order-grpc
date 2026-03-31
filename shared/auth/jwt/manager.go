@@ -72,19 +72,20 @@ func (m *Manager) GenerateRefreshToken(userID uuid.UUID, jti string) (string, er
 func (m *Manager) ParseToken(tokenString string, expectedType TokenType) (*Claims, error) {
 	claims := &Claims{}
 
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
-		if token.Method != jwt.SigningMethodHS256 {
-			return nil, status.Error(codes.Unauthenticated, "unexpected signing method")
-		}
-		return m.secret, nil
-	},
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		claims,
+		func(token *jwt.Token) (any, error) {
+			return m.secret, nil
+		},
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 	)
 
 	if errors.Is(err, jwt.ErrTokenExpired) {
 		return nil, status.Error(codes.Unauthenticated, "token expired")
 	}
-	if err != nil || !token.Valid {
+
+	if err != nil || token == nil || !token.Valid {
 		return nil, status.Error(codes.Unauthenticated, "invalid token")
 	}
 

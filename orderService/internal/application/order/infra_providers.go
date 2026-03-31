@@ -3,6 +3,7 @@ package order
 import (
 	"context"
 	"fmt"
+	"io/fs"
 
 	"github.com/IBM/sarama"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -40,8 +41,9 @@ var InfraProviders = fx.Options(
 type postgresPoolIn struct {
 	fx.In
 
-	Cfg    config.OrderConfig
-	AppCtx context.Context `name:"app_ctx"`
+	AppCtx       context.Context `name:"app_ctx"`
+	Cfg          config.OrderConfig
+	MigrationsFS fs.FS
 }
 
 func provideLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*zapLogger.Logger, error) {
@@ -57,17 +59,17 @@ func provideLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*zapLogger.L
 }
 
 func providePostgresPool(in postgresPoolIn) (*pgxpool.Pool, error) {
-	pool, err := db.NewPgxPool(in.AppCtx, in.Cfg.Service.DBURI, db.PoolConfig{
-		MaxConnections:  in.Cfg.PostgresPool.MaxConnections,
-		MinConnections:  in.Cfg.PostgresPool.MinConnections,
-		MaxConnLifetime: in.Cfg.PostgresPool.MaxConnLifetime,
-		MaxConnIdleTime: in.Cfg.PostgresPool.MaxConnIdleTime,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("db.NewPgxPool: %w", err)
-	}
-
-	return pool, nil
+	return db.BootstrapPostgres(
+		in.AppCtx,
+		in.Cfg.Service.DBURI,
+		in.MigrationsFS,
+		db.PoolConfig{
+			MaxConnections:  in.Cfg.PostgresPool.MaxConnections,
+			MinConnections:  in.Cfg.PostgresPool.MinConnections,
+			MaxConnLifetime: in.Cfg.PostgresPool.MaxConnLifetime,
+			MaxConnIdleTime: in.Cfg.PostgresPool.MaxConnIdleTime,
+		},
+	)
 }
 
 func provideRedisClient(cfg config.OrderConfig) (*redis.Client, error) {

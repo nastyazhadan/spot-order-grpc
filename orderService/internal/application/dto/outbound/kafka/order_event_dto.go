@@ -10,6 +10,7 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
+	protoCommon "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/common/v1"
 	protoEvent "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/events/v1"
 )
 
@@ -37,17 +38,15 @@ func MarshalOrderStatusUpdated(event models.OrderStatusUpdatedEvent) ([]byte, er
 
 func ToProtoOrderCreated(event models.OrderCreatedEvent) *protoEvent.OrderCreatedEvent {
 	return &protoEvent.OrderCreatedEvent{
-		EventId:       event.EventID.String(),
-		OrderId:       event.OrderID.String(),
-		UserId:        event.UserID.String(),
-		MarketId:      event.MarketID.String(),
-		OrderType:     toProtoOrderType(event.Type),
-		Price:         toProtoDecimal(event.Price),
-		Quantity:      event.Quantity,
-		Status:        toProtoOrderStatus(event.Status),
-		CorrelationId: event.CorrelationID.String(),
-		CausationId:   uuidPtrToString(event.CausationID),
-		CreatedAt:     timestamppb.New(event.CreatedAt.UTC()),
+		EventId:   event.EventID.String(),
+		OrderId:   event.OrderID.String(),
+		UserId:    event.UserID.String(),
+		MarketId:  event.MarketID.String(),
+		OrderType: toProtoOrderType(event.Type),
+		Price:     toProtoDecimal(event.Price),
+		Quantity:  event.Quantity,
+		Status:    toProtoOrderStatus(event.Status),
+		CreatedAt: timestamppb.New(event.CreatedAt.UTC()),
 	}
 }
 
@@ -58,7 +57,6 @@ func ToProtoOrderStatusUpdated(event models.OrderStatusUpdatedEvent) *protoEvent
 		NewStatus:     toProtoOrderStatus(event.NewStatus),
 		Reason:        event.Reason,
 		CorrelationId: event.CorrelationID.String(),
-		CausationId:   uuidPtrToString(event.CausationID),
 		UpdatedAt:     timestamppb.New(event.UpdatedAt),
 	}
 }
@@ -69,33 +67,33 @@ func OrderCreatedKey(orderID uuid.UUID) []byte {
 	return []byte(orderID.String())
 }
 
-func toProtoOrderStatus(status shared.OrderStatus) protoEvent.OrderStatus {
+func toProtoOrderStatus(status shared.OrderStatus) protoCommon.OrderStatus {
 	switch status {
 	case shared.OrderStatusCreated:
-		return protoEvent.OrderStatus_STATUS_CREATED
+		return protoCommon.OrderStatus_STATUS_CREATED
 	case shared.OrderStatusPending:
-		return protoEvent.OrderStatus_STATUS_PENDING
+		return protoCommon.OrderStatus_STATUS_PENDING
 	case shared.OrderStatusFilled:
-		return protoEvent.OrderStatus_STATUS_FILLED
+		return protoCommon.OrderStatus_STATUS_FILLED
 	case shared.OrderStatusCancelled:
-		return protoEvent.OrderStatus_STATUS_CANCELLED
+		return protoCommon.OrderStatus_STATUS_CANCELLED
 	default:
-		return protoEvent.OrderStatus_STATUS_UNSPECIFIED
+		return protoCommon.OrderStatus_STATUS_UNSPECIFIED
 	}
 }
 
-func toProtoOrderType(orderType shared.OrderType) protoEvent.OrderType {
+func toProtoOrderType(orderType shared.OrderType) protoCommon.OrderType {
 	switch orderType {
 	case shared.OrderTypeLimit:
-		return protoEvent.OrderType_TYPE_LIMIT
+		return protoCommon.OrderType_TYPE_LIMIT
 	case shared.OrderTypeMarket:
-		return protoEvent.OrderType_TYPE_MARKET
+		return protoCommon.OrderType_TYPE_MARKET
 	case shared.OrderTypeStopLoss:
-		return protoEvent.OrderType_TYPE_STOP_LOSS
+		return protoCommon.OrderType_TYPE_STOP_LOSS
 	case shared.OrderTypeTakeProfit:
-		return protoEvent.OrderType_TYPE_TAKE_PROFIT
+		return protoCommon.OrderType_TYPE_TAKE_PROFIT
 	default:
-		return protoEvent.OrderType_TYPE_UNSPECIFIED
+		return protoCommon.OrderType_TYPE_UNSPECIFIED
 	}
 }
 
@@ -103,11 +101,4 @@ func toProtoDecimal(value shared.Decimal) *decimal.Decimal {
 	return &decimal.Decimal{
 		Value: value.String(),
 	}
-}
-
-func uuidPtrToString(id *uuid.UUID) string {
-	if id == nil {
-		return ""
-	}
-	return id.String()
 }

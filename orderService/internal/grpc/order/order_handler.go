@@ -3,18 +3,19 @@ package order
 import (
 	"context"
 
-	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
-	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
-	"github.com/nastyazhadan/spot-order-grpc/shared/errors"
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
-
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
+	protoCommon "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/common/v1"
+	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/errors"
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 )
 
 const minQuantity = 0
@@ -129,7 +130,7 @@ func validateCreateRequest(request *proto.CreateOrderRequest) error {
 		return status.Error(codes.InvalidArgument, "market_id is required")
 	}
 
-	if request.GetOrderType() == proto.OrderType_TYPE_UNSPECIFIED {
+	if request.GetOrderType() == protoCommon.OrderType_TYPE_UNSPECIFIED {
 		return status.Error(codes.InvalidArgument, "order_type is required")
 	}
 

@@ -3,12 +3,12 @@ package auth
 import (
 	"context"
 
-	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/auth/v1"
-	"github.com/nastyazhadan/spot-order-grpc/shared/errors"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/auth/v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/errors"
 )
 
 type AuthService interface {

@@ -136,7 +136,7 @@ func (m *MarketStore) ListUpdatedSince(
 	rows, err := m.pool.Query(ctx, `
 		SELECT id, name, enabled, deleted_at, updated_at FROM market_store
 		WHERE (updated_at > $1) OR (updated_at = $1 AND id > $2)
-		ORDER BY updated_at ASC, id ASC
+		ORDER BY updated_at, id
 		LIMIT $3
 	`, since.UTC(), afterID, limit)
 	if err != nil {

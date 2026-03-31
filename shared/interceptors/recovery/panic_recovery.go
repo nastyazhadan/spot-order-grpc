@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
 func UnaryServerInterceptor(logger *zapLogger.Logger) grpc.UnaryServerInterceptor {

@@ -103,6 +103,7 @@ Docker Compose поднимает весь стек целиком:
 | `prometheus` | Prometheus | `9090` |
 | `grafana` | Grafana | `3000` |
 | `tempo` | Tempo | `3200` |
+
 PostgreSQL при старте создаёт базы `order_db` и `spot_db`, а сами сервисы затем автоматически применяют SQL-миграции через Goose. Seed-данные рынков загружаются миграцией `spotService`.
 
 Полезные адреса после запуска:

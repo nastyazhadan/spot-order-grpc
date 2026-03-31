@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	ErrMessageHandledByDLQ = errors.New("message handled by dlq")
-	ErrStopConsumerSession = errors.New("stop consumer session")
+	ErrMessageHandledByDLQ    = errors.New("message handled by dlq")
+	ErrRestartConsumerSession = errors.New("restart consumer session")
+	ErrSkipMessage            = errors.New("skip message")
 )
 
 type DLQPublisher interface {
@@ -55,28 +56,31 @@ func New(
 
 func (c *consumer) Consume(ctx context.Context, handler MessageHandler) error {
 	wrappedHandler := applyMiddlewares(handler, c.middlewares...)
-	newHandler := NewGroupHandler(wrappedHandler, c.serviceName, c.logger)
+	newGroupHandler := newHandler(wrappedHandler, c.serviceName, c.logger)
 
+	// Здесь цикл для перезапуска consumer group session (например, после rebalance
+	// или запроса на restart session). В lifecycle.go находится внешний цикл для
+	// рестарта всего consumer при фатальных ошибках
 	for {
-		if err := c.group.Consume(ctx, c.topics, newHandler); err != nil {
-			if errors.Is(err, sarama.ErrClosedConsumerGroup) {
+		err := c.group.Consume(ctx, c.topics, newGroupHandler)
+		if err != nil {
+			switch {
+			case errors.Is(err, sarama.ErrClosedConsumerGroup):
 				return nil
-			}
-
-			if errors.Is(err, ErrStopConsumerSession) {
+			case errors.Is(err, ErrRestartConsumerSession):
 				c.logger.Warn(ctx, "Kafka consumer session stopped, restarting session")
 				continue
+			default:
+				c.logger.Error(ctx, "Kafka consume error", zap.Error(err))
+				return err
 			}
-
-			c.logger.Error(ctx, "Kafka consume error", zap.Error(err))
-			return err
 		}
 
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return nil
 		}
 
-		c.logger.Info(ctx, "Kafka consumer group rebalancing...")
+		c.logger.Info(ctx, "Kafka consumer session ended, restarting")
 	}
 }
 

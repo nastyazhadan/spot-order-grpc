@@ -36,16 +36,6 @@ func FromProtoMarketStateChanged(msg *protoEvent.MarketStateChangedEvent) (model
 		return models.MarketStateChangedEvent{}, err
 	}
 
-	correlationID, err := parseUUIDRequired("correlation_id", msg.GetCorrelationId())
-	if err != nil {
-		return models.MarketStateChangedEvent{}, err
-	}
-
-	causationID, err := parseUUIDOptional(msg.GetCausationId())
-	if err != nil {
-		return models.MarketStateChangedEvent{}, fmt.Errorf("invalid causation_id: %w", err)
-	}
-
 	updatedAt, err := fromProtoTimestamp("updated_at", msg.GetUpdatedAt())
 	if err != nil {
 		return models.MarketStateChangedEvent{}, err
@@ -57,13 +47,11 @@ func FromProtoMarketStateChanged(msg *protoEvent.MarketStateChangedEvent) (model
 	}
 
 	return models.MarketStateChangedEvent{
-		EventID:       eventID,
-		MarketID:      marketID,
-		Enabled:       msg.GetEnabled(),
-		DeletedAt:     deletedAt,
-		CorrelationID: correlationID,
-		CausationID:   causationID,
-		UpdatedAt:     updatedAt,
+		EventID:   eventID,
+		MarketID:  marketID,
+		Enabled:   msg.GetEnabled(),
+		DeletedAt: deletedAt,
+		UpdatedAt: updatedAt,
 	}, nil
 }
 
@@ -91,19 +79,6 @@ func parseUUIDRequired(fieldName, raw string) (uuid.UUID, error) {
 	}
 
 	return id, nil
-}
-
-func parseUUIDOptional(raw string) (*uuid.UUID, error) {
-	if raw == "" {
-		return nil, nil
-	}
-
-	id, err := uuid.Parse(raw)
-	if err != nil {
-		return nil, err
-	}
-
-	return &id, nil
 }
 
 func fromProtoTimestamp(fieldName string, timestamp *timestamppb.Timestamp) (time.Time, error) {

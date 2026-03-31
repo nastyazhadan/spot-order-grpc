@@ -4,11 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"go.opentelemetry.io/otel/codes"
-
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -16,6 +14,8 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 )
 
 const (

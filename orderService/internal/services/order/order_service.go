@@ -355,10 +355,9 @@ func (s *OrderService) saveOrder(
 	defer span.End()
 
 	now := time.Now().UTC()
-	correlationID := uuid.New()
 
 	order := buildOrder(userID, marketID, orderType, price, quantity, now)
-	event := buildOrderCreatedEvent(order, correlationID, now)
+	event := buildOrderCreatedEvent(order, now)
 
 	transaction, err := s.transactionManager.Begin(ctx)
 	if err != nil {
@@ -369,7 +368,7 @@ func (s *OrderService) saveOrder(
 	committed := false
 	defer func() {
 		if !committed {
-			rollbackTx(ctx, transaction, s.logger, op, s.config.Timeout)
+			rollbackTransaction(ctx, transaction, s.logger, op, s.config.Timeout)
 		}
 	}()
 
@@ -398,7 +397,7 @@ func (s *OrderService) saveOrder(
 	return order.ID, order.Status, nil
 }
 
-func rollbackTx(ctx context.Context,
+func rollbackTransaction(ctx context.Context,
 	transaction pgx.Tx,
 	logger *zapLogger.Logger,
 	message string,
@@ -434,21 +433,18 @@ func buildOrder(
 
 func buildOrderCreatedEvent(
 	order models.Order,
-	correlationID uuid.UUID,
 	now time.Time,
 ) models.OrderCreatedEvent {
 	return models.OrderCreatedEvent{
-		EventID:       uuid.New(),
-		OrderID:       order.ID,
-		UserID:        order.UserID,
-		MarketID:      order.MarketID,
-		Type:          order.Type,
-		Price:         order.Price,
-		Quantity:      order.Quantity,
-		Status:        order.Status,
-		CorrelationID: correlationID,
-		CausationID:   nil,
-		CreatedAt:     now,
+		EventID:   uuid.New(),
+		OrderID:   order.ID,
+		UserID:    order.UserID,
+		MarketID:  order.MarketID,
+		Type:      order.Type,
+		Price:     order.Price,
+		Quantity:  order.Quantity,
+		Status:    order.Status,
+		CreatedAt: now,
 	}
 }
 

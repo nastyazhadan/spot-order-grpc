@@ -6,45 +6,27 @@ option go_package = "zhadan.events.v1;eventsv1";
 
 import "google/protobuf/timestamp.proto";
 import "google/type/decimal.proto";
-
-enum OrderStatus {
-  STATUS_UNSPECIFIED = 0;
-  STATUS_CREATED = 1;
-  STATUS_PENDING = 2;
-  STATUS_FILLED = 3;
-  STATUS_CANCELLED = 4;
-}
-
-enum OrderType {
-  TYPE_UNSPECIFIED = 0;
-  TYPE_LIMIT = 1;
-  TYPE_MARKET = 2;
-  TYPE_STOP_LOSS = 3;
-  TYPE_TAKE_PROFIT = 4;
-}
+import "common/v1/common.proto";
 
 message OrderCreatedEvent {
   string event_id = 1;
   string order_id = 2;
   string user_id = 3;
   string market_id = 4;
-  OrderType  order_type = 5;
+  common.v1.OrderType  order_type = 5;
   google.type.Decimal price = 6;
   int64  quantity = 7;
-  OrderStatus  status = 8;
-  string correlation_id = 9;
-  string causation_id = 10;
-  google.protobuf.Timestamp created_at = 11;
+  common.v1.OrderStatus  status = 8;
+  google.protobuf.Timestamp created_at = 9;
 }
 
 message OrderStatusUpdatedEvent {
   string event_id = 1;
   string order_id = 2;
-  OrderStatus new_status = 3;
+  common.v1.OrderStatus new_status = 3;
   string reason = 4;
   string correlation_id = 5;
-  string causation_id = 6;
-  google.protobuf.Timestamp updated_at = 7;
+  google.protobuf.Timestamp updated_at = 6;
 }
 
 message MarketStateChangedEvent {
@@ -52,7 +34,5 @@ message MarketStateChangedEvent {
   string market_id = 2;
   bool enabled = 3;
   google.protobuf.Timestamp deleted_at = 4;
-  string correlation_id = 5;
-  string causation_id = 6;
-  google.protobuf.Timestamp updated_at = 7;
+  google.protobuf.Timestamp updated_at = 5;
 }

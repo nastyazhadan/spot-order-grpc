@@ -36,25 +36,6 @@ func New(jwtManager JWTManager, store RefreshTokenStore, logger *zapLogger.Logge
 	}
 }
 
-func (s *AuthService) Issue(
-	ctx context.Context,
-	userID uuid.UUID,
-) (accessToken, refreshToken string, err error) {
-	refreshJTI := uuid.NewString()
-
-	accessToken, refreshToken, err = s.generateTokenPair(userID, refreshJTI)
-	if err != nil {
-		return "", "", err
-	}
-
-	if err = s.store.Save(ctx, userID, refreshJTI); err != nil {
-		s.logger.Error(ctx, "failed to save refresh token", zap.Error(err))
-		return "", "", serviceErrors.ErrSaveTokenFailed
-	}
-
-	return accessToken, refreshToken, nil
-}
-
 func (s *AuthService) Refresh(
 	ctx context.Context,
 	refreshToken string,

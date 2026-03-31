@@ -21,9 +21,7 @@ import (
 
 	outbox "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/kafka"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/consumer"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	metricInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/metrics"
@@ -62,10 +60,6 @@ func registerInfrastructure(
 ) {
 	lifecycle.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
-			if err := db.BootstrapPostgres(startCtx, pool, migrations.Migrations); err != nil {
-				return fmt.Errorf("bootstrap postgres: %w", err)
-			}
-
 			redisPingCtx, cancel := context.WithTimeout(startCtx, cfg.Redis.ConnectionTimeout)
 			defer cancel()
 

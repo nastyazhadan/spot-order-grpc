@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+	zhadan_common_v1 "zhadan.common.v1"
 )
 
 const (
@@ -22,116 +23,6 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
-
-type OrderStatus int32
-
-const (
-	OrderStatus_STATUS_UNSPECIFIED OrderStatus = 0
-	OrderStatus_STATUS_CREATED     OrderStatus = 1
-	OrderStatus_STATUS_PENDING     OrderStatus = 2
-	OrderStatus_STATUS_FILLED      OrderStatus = 3
-	OrderStatus_STATUS_CANCELLED   OrderStatus = 4
-)
-
-// Enum value maps for OrderStatus.
-var (
-	OrderStatus_name = map[int32]string{
-		0: "STATUS_UNSPECIFIED",
-		1: "STATUS_CREATED",
-		2: "STATUS_PENDING",
-		3: "STATUS_FILLED",
-		4: "STATUS_CANCELLED",
-	}
-	OrderStatus_value = map[string]int32{
-		"STATUS_UNSPECIFIED": 0,
-		"STATUS_CREATED":     1,
-		"STATUS_PENDING":     2,
-		"STATUS_FILLED":      3,
-		"STATUS_CANCELLED":   4,
-	}
-)
-
-func (x OrderStatus) Enum() *OrderStatus {
-	p := new(OrderStatus)
-	*p = x
-	return p
-}
-
-func (x OrderStatus) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (OrderStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_order_v1_order_proto_enumTypes[0].Descriptor()
-}
-
-func (OrderStatus) Type() protoreflect.EnumType {
-	return &file_order_v1_order_proto_enumTypes[0]
-}
-
-func (x OrderStatus) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use OrderStatus.Descriptor instead.
-func (OrderStatus) EnumDescriptor() ([]byte, []int) {
-	return file_order_v1_order_proto_rawDescGZIP(), []int{0}
-}
-
-type OrderType int32
-
-const (
-	OrderType_TYPE_UNSPECIFIED OrderType = 0
-	OrderType_TYPE_LIMIT       OrderType = 1
-	OrderType_TYPE_MARKET      OrderType = 2
-	OrderType_TYPE_STOP_LOSS   OrderType = 3
-	OrderType_TYPE_TAKE_PROFIT OrderType = 4
-)
-
-// Enum value maps for OrderType.
-var (
-	OrderType_name = map[int32]string{
-		0: "TYPE_UNSPECIFIED",
-		1: "TYPE_LIMIT",
-		2: "TYPE_MARKET",
-		3: "TYPE_STOP_LOSS",
-		4: "TYPE_TAKE_PROFIT",
-	}
-	OrderType_value = map[string]int32{
-		"TYPE_UNSPECIFIED": 0,
-		"TYPE_LIMIT":       1,
-		"TYPE_MARKET":      2,
-		"TYPE_STOP_LOSS":   3,
-		"TYPE_TAKE_PROFIT": 4,
-	}
-)
-
-func (x OrderType) Enum() *OrderType {
-	p := new(OrderType)
-	*p = x
-	return p
-}
-
-func (x OrderType) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (OrderType) Descriptor() protoreflect.EnumDescriptor {
-	return file_order_v1_order_proto_enumTypes[1].Descriptor()
-}
-
-func (OrderType) Type() protoreflect.EnumType {
-	return &file_order_v1_order_proto_enumTypes[1]
-}
-
-func (x OrderType) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use OrderType.Descriptor instead.
-func (OrderType) EnumDescriptor() ([]byte, []int) {
-	return file_order_v1_order_proto_rawDescGZIP(), []int{1}
-}
 
 type GetOrderStatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -178,8 +69,8 @@ func (x *GetOrderStatusRequest) GetOrderId() string {
 }
 
 type GetOrderStatusResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Status        OrderStatus            `protobuf:"varint,1,opt,name=status,proto3,enum=order.v1.OrderStatus" json:"status,omitempty"` // Status of the order
+	state         protoimpl.MessageState       `protogen:"open.v1"`
+	Status        zhadan_common_v1.OrderStatus `protobuf:"varint,1,opt,name=status,proto3,enum=common.v1.OrderStatus" json:"status,omitempty"` // Status of the order
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -214,19 +105,19 @@ func (*GetOrderStatusResponse) Descriptor() ([]byte, []int) {
 	return file_order_v1_order_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *GetOrderStatusResponse) GetStatus() OrderStatus {
+func (x *GetOrderStatusResponse) GetStatus() zhadan_common_v1.OrderStatus {
 	if x != nil {
 		return x.Status
 	}
-	return OrderStatus_STATUS_UNSPECIFIED
+	return zhadan_common_v1.OrderStatus(0)
 }
 
 type CreateOrderRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MarketId      string                 `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`                             // UUID of the market to create
-	OrderType     OrderType              `protobuf:"varint,3,opt,name=order_type,json=orderType,proto3,enum=order.v1.OrderType" json:"order_type,omitempty"` // Type of the order to create
-	Price         *decimal.Decimal       `protobuf:"bytes,4,opt,name=price,proto3" json:"price,omitempty"`                                                   // Price of the order
-	Quantity      int64                  `protobuf:"varint,5,opt,name=quantity,proto3" json:"quantity,omitempty"`                                            // Quantity of the order
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	MarketId      string                     `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`                              // UUID of the market to create
+	OrderType     zhadan_common_v1.OrderType `protobuf:"varint,3,opt,name=order_type,json=orderType,proto3,enum=common.v1.OrderType" json:"order_type,omitempty"` // Type of the order to create
+	Price         *decimal.Decimal           `protobuf:"bytes,4,opt,name=price,proto3" json:"price,omitempty"`                                                    // Price of the order
+	Quantity      int64                      `protobuf:"varint,5,opt,name=quantity,proto3" json:"quantity,omitempty"`                                             // Quantity of the order
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -268,11 +159,11 @@ func (x *CreateOrderRequest) GetMarketId() string {
 	return ""
 }
 
-func (x *CreateOrderRequest) GetOrderType() OrderType {
+func (x *CreateOrderRequest) GetOrderType() zhadan_common_v1.OrderType {
 	if x != nil {
 		return x.OrderType
 	}
-	return OrderType_TYPE_UNSPECIFIED
+	return zhadan_common_v1.OrderType(0)
 }
 
 func (x *CreateOrderRequest) GetPrice() *decimal.Decimal {
@@ -290,9 +181,9 @@ func (x *CreateOrderRequest) GetQuantity() int64 {
 }
 
 type CreateOrderResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`           // UUID of the created order
-	Status        OrderStatus            `protobuf:"varint,2,opt,name=status,proto3,enum=order.v1.OrderStatus" json:"status,omitempty"` // Status of the created order
+	state         protoimpl.MessageState       `protogen:"open.v1"`
+	OrderId       string                       `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`            // UUID of the created order
+	Status        zhadan_common_v1.OrderStatus `protobuf:"varint,2,opt,name=status,proto3,enum=common.v1.OrderStatus" json:"status,omitempty"` // Status of the created order
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -334,45 +225,32 @@ func (x *CreateOrderResponse) GetOrderId() string {
 	return ""
 }
 
-func (x *CreateOrderResponse) GetStatus() OrderStatus {
+func (x *CreateOrderResponse) GetStatus() zhadan_common_v1.OrderStatus {
 	if x != nil {
 		return x.Status
 	}
-	return OrderStatus_STATUS_UNSPECIFIED
+	return zhadan_common_v1.OrderStatus(0)
 }
 
 var File_order_v1_order_proto protoreflect.FileDescriptor
 
 const file_order_v1_order_proto_rawDesc = "" +
 	"\n" +
-	"\x14order/v1/order.proto\x12\border.v1\x1a\x19google/type/decimal.proto\x1a\x1bbuf/validate/validate.proto\"K\n" +
+	"\x14order/v1/order.proto\x12\border.v1\x1a\x19google/type/decimal.proto\x1a\x1bbuf/validate/validate.proto\x1a\x16common/v1/common.proto\"K\n" +
 	"\x15GetOrderStatusRequest\x12#\n" +
-	"\border_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aorderIdJ\x04\b\x02\x10\x03R\auser_id\"G\n" +
-	"\x16GetOrderStatusResponse\x12-\n" +
-	"\x06status\x18\x01 \x01(\x0e2\x15.order.v1.OrderStatusR\x06status\"\xdb\x01\n" +
+	"\border_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aorderIdJ\x04\b\x02\x10\x03R\auser_id\"H\n" +
+	"\x16GetOrderStatusResponse\x12.\n" +
+	"\x06status\x18\x01 \x01(\x0e2\x16.common.v1.OrderStatusR\x06status\"\xdc\x01\n" +
 	"\x12CreateOrderRequest\x12%\n" +
-	"\tmarket_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bmarketId\x12>\n" +
+	"\tmarket_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bmarketId\x12?\n" +
 	"\n" +
-	"order_type\x18\x03 \x01(\x0e2\x13.order.v1.OrderTypeB\n" +
+	"order_type\x18\x03 \x01(\x0e2\x14.common.v1.OrderTypeB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\torderType\x12*\n" +
 	"\x05price\x18\x04 \x01(\v2\x14.google.type.DecimalR\x05price\x12#\n" +
-	"\bquantity\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\bquantityJ\x04\b\x01\x10\x02R\auser_id\"_\n" +
+	"\bquantity\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\bquantityJ\x04\b\x01\x10\x02R\auser_id\"`\n" +
 	"\x13CreateOrderResponse\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\x12-\n" +
-	"\x06status\x18\x02 \x01(\x0e2\x15.order.v1.OrderStatusR\x06status*v\n" +
-	"\vOrderStatus\x12\x16\n" +
-	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x12\n" +
-	"\x0eSTATUS_CREATED\x10\x01\x12\x12\n" +
-	"\x0eSTATUS_PENDING\x10\x02\x12\x11\n" +
-	"\rSTATUS_FILLED\x10\x03\x12\x14\n" +
-	"\x10STATUS_CANCELLED\x10\x04*l\n" +
-	"\tOrderType\x12\x14\n" +
-	"\x10TYPE_UNSPECIFIED\x10\x00\x12\x0e\n" +
-	"\n" +
-	"TYPE_LIMIT\x10\x01\x12\x0f\n" +
-	"\vTYPE_MARKET\x10\x02\x12\x12\n" +
-	"\x0eTYPE_STOP_LOSS\x10\x03\x12\x14\n" +
-	"\x10TYPE_TAKE_PROFIT\x10\x042\xaf\x01\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12.\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x16.common.v1.OrderStatusR\x06status2\xaf\x01\n" +
 	"\fOrderService\x12S\n" +
 	"\x0eGetOrderStatus\x12\x1f.order.v1.GetOrderStatusRequest\x1a .order.v1.GetOrderStatusResponse\x12J\n" +
 	"\vCreateOrder\x12\x1c.order.v1.CreateOrderRequest\x1a\x1d.order.v1.CreateOrderResponseB\x19Z\x17zhadan.order.v1;orderv1b\x06proto3"
@@ -389,26 +267,25 @@ func file_order_v1_order_proto_rawDescGZIP() []byte {
 	return file_order_v1_order_proto_rawDescData
 }
 
-var file_order_v1_order_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_order_v1_order_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_order_v1_order_proto_goTypes = []any{
-	(OrderStatus)(0),               // 0: order.v1.OrderStatus
-	(OrderType)(0),                 // 1: order.v1.OrderType
-	(*GetOrderStatusRequest)(nil),  // 2: order.v1.GetOrderStatusRequest
-	(*GetOrderStatusResponse)(nil), // 3: order.v1.GetOrderStatusResponse
-	(*CreateOrderRequest)(nil),     // 4: order.v1.CreateOrderRequest
-	(*CreateOrderResponse)(nil),    // 5: order.v1.CreateOrderResponse
-	(*decimal.Decimal)(nil),        // 6: google.type.Decimal
+	(*GetOrderStatusRequest)(nil),     // 0: order.v1.GetOrderStatusRequest
+	(*GetOrderStatusResponse)(nil),    // 1: order.v1.GetOrderStatusResponse
+	(*CreateOrderRequest)(nil),        // 2: order.v1.CreateOrderRequest
+	(*CreateOrderResponse)(nil),       // 3: order.v1.CreateOrderResponse
+	(zhadan_common_v1.OrderStatus)(0), // 4: common.v1.OrderStatus
+	(zhadan_common_v1.OrderType)(0),   // 5: common.v1.OrderType
+	(*decimal.Decimal)(nil),           // 6: google.type.Decimal
 }
 var file_order_v1_order_proto_depIdxs = []int32{
-	0, // 0: order.v1.GetOrderStatusResponse.status:type_name -> order.v1.OrderStatus
-	1, // 1: order.v1.CreateOrderRequest.order_type:type_name -> order.v1.OrderType
+	4, // 0: order.v1.GetOrderStatusResponse.status:type_name -> common.v1.OrderStatus
+	5, // 1: order.v1.CreateOrderRequest.order_type:type_name -> common.v1.OrderType
 	6, // 2: order.v1.CreateOrderRequest.price:type_name -> google.type.Decimal
-	0, // 3: order.v1.CreateOrderResponse.status:type_name -> order.v1.OrderStatus
-	2, // 4: order.v1.OrderService.GetOrderStatus:input_type -> order.v1.GetOrderStatusRequest
-	4, // 5: order.v1.OrderService.CreateOrder:input_type -> order.v1.CreateOrderRequest
-	3, // 6: order.v1.OrderService.GetOrderStatus:output_type -> order.v1.GetOrderStatusResponse
-	5, // 7: order.v1.OrderService.CreateOrder:output_type -> order.v1.CreateOrderResponse
+	4, // 3: order.v1.CreateOrderResponse.status:type_name -> common.v1.OrderStatus
+	0, // 4: order.v1.OrderService.GetOrderStatus:input_type -> order.v1.GetOrderStatusRequest
+	2, // 5: order.v1.OrderService.CreateOrder:input_type -> order.v1.CreateOrderRequest
+	1, // 6: order.v1.OrderService.GetOrderStatus:output_type -> order.v1.GetOrderStatusResponse
+	3, // 7: order.v1.OrderService.CreateOrder:output_type -> order.v1.CreateOrderResponse
 	6, // [6:8] is the sub-list for method output_type
 	4, // [4:6] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
@@ -426,14 +303,13 @@ func file_order_v1_order_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_order_v1_order_proto_rawDesc), len(file_order_v1_order_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      0,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_order_v1_order_proto_goTypes,
 		DependencyIndexes: file_order_v1_order_proto_depIdxs,
-		EnumInfos:         file_order_v1_order_proto_enumTypes,
 		MessageInfos:      file_order_v1_order_proto_msgTypes,
 	}.Build()
 	File_order_v1_order_proto = out.File

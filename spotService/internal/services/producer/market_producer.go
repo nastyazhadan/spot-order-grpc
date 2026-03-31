@@ -23,9 +23,8 @@ type CursorStore interface {
 }
 
 type OutboxWriter interface {
-	SaveOutboxEvent(ctx context.Context, event models.OutboxEvent) error
 	BeginTransaction(ctx context.Context) (pgx.Tx, error)
-	SaveOutboxEventTransaction(ctx context.Context, transaction pgx.Tx, event models.OutboxEvent) error
+	SaveOutboxEvent(ctx context.Context, transaction pgx.Tx, event models.OutboxEvent) error
 }
 
 type MarketProducer struct {
@@ -79,7 +78,7 @@ func (p *MarketProducer) PublishMarketStateChanged(
 			return fmt.Errorf("%s: build outbox event: %w", op, buildError)
 		}
 
-		if err = p.outboxWriter.SaveOutboxEventTransaction(ctx, transaction, outboxEvent); err != nil {
+		if err = p.outboxWriter.SaveOutboxEvent(ctx, transaction, outboxEvent); err != nil {
 			tracing.RecordError(span, err)
 			return fmt.Errorf("%s: save outbox event: %w", op, err)
 		}

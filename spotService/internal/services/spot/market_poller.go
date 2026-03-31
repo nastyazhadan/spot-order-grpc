@@ -227,13 +227,11 @@ func (p *MarketPoller) buildMarketStateChangedEvents(
 		}
 
 		event := sharedModels.MarketStateChangedEvent{
-			EventID:       uuid.New(),
-			MarketID:      market.ID,
-			Enabled:       market.Enabled,
-			DeletedAt:     market.DeletedAt,
-			CorrelationID: uuid.New(),
-			CausationID:   nil,
-			UpdatedAt:     market.UpdatedAt.UTC(),
+			EventID:   uuid.New(),
+			MarketID:  market.ID,
+			Enabled:   market.Enabled,
+			DeletedAt: market.DeletedAt,
+			UpdatedAt: market.UpdatedAt.UTC(),
 		}
 
 		events = append(events, event)

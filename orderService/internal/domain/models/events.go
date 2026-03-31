@@ -28,17 +28,15 @@ const (
 
 // OrderCreatedEvent публикуется в Kafka через Transactional Outbox
 type OrderCreatedEvent struct {
-	EventID       uuid.UUID
-	OrderID       uuid.UUID
-	UserID        uuid.UUID
-	MarketID      uuid.UUID
-	Type          shared.OrderType
-	Price         shared.Decimal
-	Quantity      int64
-	Status        shared.OrderStatus
-	CorrelationID uuid.UUID
-	CausationID   *uuid.UUID
-	CreatedAt     time.Time
+	EventID   uuid.UUID
+	OrderID   uuid.UUID
+	UserID    uuid.UUID
+	MarketID  uuid.UUID
+	Type      shared.OrderType
+	Price     shared.Decimal
+	Quantity  int64
+	Status    shared.OrderStatus
+	CreatedAt time.Time
 }
 
 // OrderStatusUpdatedEvent публикуется в Kafka через Transactional Outbox
@@ -49,7 +47,6 @@ type OrderStatusUpdatedEvent struct {
 	NewStatus     shared.OrderStatus
 	Reason        string
 	CorrelationID uuid.UUID
-	CausationID   *uuid.UUID
 	UpdatedAt     time.Time
 }
 

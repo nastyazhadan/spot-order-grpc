@@ -23,7 +23,7 @@ func Save(
 	userID uuid.UUID,
 	jti string,
 ) error {
-	if err := store.SetWithTTL(ctx, Key(userID, jti), "1", ttl); err != nil {
+	if err := store.SetWithTTL(ctx, Key(userID, jti), "refresh_token_v1", ttl); err != nil {
 		return fmt.Errorf("save refresh token: %w", err)
 	}
 
