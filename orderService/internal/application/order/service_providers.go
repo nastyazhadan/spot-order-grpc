@@ -27,6 +27,7 @@ import (
 const (
 	prefixCreateLimiter = "rate:order:create:"
 	prefixGetLimiter    = "rate:order:get:"
+	middlewaresCount    = 3
 )
 
 var ServiceProviders = fx.Options(
@@ -202,22 +203,28 @@ func provideConsumerService(
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) *consumer.MarketConsumer {
-	middlewares := make([]sharedConsumer.Middleware, 0, 2)
+	middlewares := make([]sharedConsumer.Middleware, middlewaresCount)
 
 	if cfg.Kafka.Consumer.DLQEnabled {
 		middlewares = append(middlewares,
 			sharedConsumer.DLQMiddleware(
 				cfg.Service.Name,
 				dlqPublisher,
+				cfg.Kafka.Consumer.DLQMaxMessageBytes,
 				logger,
 			),
 		)
 	}
-
 	middlewares = append(middlewares,
 		sharedConsumer.RetryMiddleware(
 			cfg.Kafka.Consumer.MaxRetries,
 			cfg.Kafka.Consumer.RetryBackoff,
+			logger,
+		),
+	)
+	middlewares = append(middlewares,
+		sharedConsumer.MessageSizeLimitMiddleware(
+			cfg.Kafka.Consumer.MaxMessageBytes,
 			logger,
 		),
 	)

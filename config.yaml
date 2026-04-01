@@ -81,7 +81,9 @@ order:
       heartbeat_interval: 3s
       max_retries: 3
       retry_backoff: 500ms
+      max_message_bytes: 524288 # 512KB
       dlq_enabled: true
+      dlq_max_message_bytes: 786432 # 768KB
       restart_backoff: 3s
     topics:
       order_created: "order.created"

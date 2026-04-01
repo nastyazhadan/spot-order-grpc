@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"time"
 
 	"github.com/IBM/sarama"
 	"go.uber.org/zap"
@@ -14,6 +13,8 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
 
+const dlqExtraHeaders = 3
+
 var (
 	ErrMessageHandledByDLQ    = errors.New("message handled by dlq")
 	ErrRestartConsumerSession = errors.New("restart consumer session")
@@ -21,10 +22,10 @@ var (
 )
 
 type DLQPublisher interface {
-	SendMessage(ctx context.Context, msg kafka.Message) error
+	SendMessage(ctx context.Context, message kafka.Message) error
 }
 
-type MessageHandler func(ctx context.Context, msg kafka.Message) error
+type MessageHandler func(ctx context.Context, message kafka.Message) error
 
 type Middleware func(next MessageHandler) MessageHandler
 
@@ -92,105 +93,39 @@ func applyMiddlewares(handler MessageHandler, middlewares ...Middleware) Message
 	return handler
 }
 
-func RetryMiddleware(
-	maxRetries int,
-	backoff time.Duration,
-	logger *zapLogger.Logger,
-) Middleware {
-	if maxRetries < 0 {
-		maxRetries = 0
-	}
-
-	return func(next MessageHandler) MessageHandler {
-		return func(ctx context.Context, msg kafka.Message) error {
-			for attempt := range maxRetries + 1 {
-				if err := next(ctx, msg); err != nil {
-					if attempt < maxRetries {
-						sleep := backoff * time.Duration(attempt+1)
-
-						logger.Warn(ctx, "Kafka message processing failed, retrying",
-							zap.String("topic", msg.Topic),
-							zap.Int("attempt", attempt+1),
-							zap.Int("max_retries", maxRetries),
-							zap.Duration("retry_after", sleep),
-							zap.Error(err),
-						)
-
-						select {
-						case <-ctx.Done():
-							return ctx.Err()
-						case <-time.After(sleep):
-							continue
-						}
-					}
-					return RetryExhaustedError{
-						Err:        err,
-						RetryCount: maxRetries,
-					}
-				}
-				return nil
-			}
-			return nil
-		}
-	}
-}
-
-func DLQMiddleware(
-	serviceName string,
-	dlqPublisher DLQPublisher,
-	logger *zapLogger.Logger,
-) Middleware {
-	return func(next MessageHandler) MessageHandler {
-		return func(ctx context.Context, msg kafka.Message) error {
-			err := next(ctx, msg)
-			if err == nil {
-				return nil
-			}
-
-			retryCount := 0
-			var exhaustedErr RetryExhaustedError
-			if errors.As(err, &exhaustedErr) {
-				retryCount = exhaustedErr.RetryCount
-				err = exhaustedErr.Err
-			}
-
-			return sendToDLQ(ctx, msg, serviceName, dlqPublisher, logger, err, retryCount)
-		}
-	}
-}
-
 func sendToDLQ(
 	ctx context.Context,
-	msg kafka.Message,
+	message kafka.Message,
 	serviceName string,
 	dlqPublisher DLQPublisher,
 	logger *zapLogger.Logger,
 	lastErr error,
 	retryCount int,
+	maxMessageBytes int,
 ) error {
 	if dlqPublisher == nil {
 		logger.Error(ctx, "Message processing failed (no DLQ configured)",
-			zap.String("topic", msg.Topic),
+			zap.String("topic", message.Topic),
 			zap.Int("retry_count", retryCount),
 			zap.Error(lastErr),
 		)
 		return lastErr
 	}
 
-	dlqMessage := buildDLQMessage(msg, lastErr, retryCount)
+	dlqMessage := buildDLQMessage(message, lastErr, retryCount, maxMessageBytes)
 
 	if dlqError := dlqPublisher.SendMessage(ctx, dlqMessage); dlqError != nil {
 		logger.Error(ctx, "Failed to send message to DLQ",
-			zap.String("topic", msg.Topic),
+			zap.String("topic", message.Topic),
 			zap.Error(dlqError),
 		)
 		return dlqError
 	}
 
-	metrics.KafkaMessagesConsumedTotal.WithLabelValues(serviceName, msg.Topic, "dlq").Inc()
+	metrics.KafkaMessagesConsumedTotal.WithLabelValues(serviceName, message.Topic, "dlq").Inc()
 
 	logger.Error(ctx, "Message sent to DLQ after all retries",
-		zap.String("topic", msg.Topic),
+		zap.String("topic", message.Topic),
 		zap.Int("retry_count", retryCount),
 		zap.Error(lastErr),
 	)
@@ -198,26 +133,133 @@ func sendToDLQ(
 	return ErrMessageHandledByDLQ
 }
 
-func buildDLQMessage(msg kafka.Message, lastErr error, retryCount int) kafka.Message {
-	headers := make(map[string][]byte, len(msg.Headers)+3)
+func buildDLQMessage(
+	message kafka.Message,
+	lastError error,
+	retryCount int,
+	maxBytes int,
+) kafka.Message {
+	headers := buildDLQHeaders(message, lastError, retryCount)
 
-	for key, value := range msg.Headers {
-		copied := make([]byte, len(value))
-		copy(copied, value)
-		headers[key] = copied
+	dlqMessage := newDLQMessage(message, headers)
+	if !shouldTruncate(dlqMessage, maxBytes) {
+		return dlqMessage
 	}
 
-	headers["dlq-original-topic"] = []byte(msg.Topic)
-	headers["dlq-error"] = []byte(lastErr.Error())
+	originalSize := messageSize(dlqMessage)
+
+	headers["dlq-truncated"] = []byte("true")
+	headers["dlq-original-size"] = []byte(strconv.Itoa(originalSize))
+
+	// Пробуем уменьшить текст за счет ошибки dlq-error
+	truncateDLQError(&dlqMessage, lastError.Error(), maxBytes)
+	// Если текст все еще больше лимита, режем payload
+	truncateDLQValue(&dlqMessage, maxBytes)
+
+	currentSize := messageSize(dlqMessage)
+	headers["dlq-final-size"] = []byte(strconv.Itoa(currentSize))
+
+	return dlqMessage
+}
+
+func buildDLQHeaders(
+	message kafka.Message,
+	lastErr error,
+	retryCount int,
+) map[string][]byte {
+	headers := make(map[string][]byte, len(message.Headers)+dlqExtraHeaders)
+
+	// Если header values неизменяемые - копировать не надо
+	for key, value := range message.Headers {
+		headers[key] = value
+	}
+
+	headers["dlq-original-topic"] = []byte(message.Topic)
 	headers["dlq-retry-count"] = []byte(strconv.Itoa(retryCount))
+	headers["dlq-error"] = []byte(lastErr.Error())
 
+	return headers
+}
+
+func newDLQMessage(message kafka.Message, headers map[string][]byte) kafka.Message {
 	return kafka.Message{
+		Topic:          message.Topic,
 		Headers:        headers,
-		Timestamp:      msg.Timestamp,
-		BlockTimestamp: msg.BlockTimestamp,
-		Key:            msg.Key,
-		Value:          msg.Value,
-		Partition:      msg.Partition,
-		Offset:         msg.Offset,
+		Timestamp:      message.Timestamp,
+		BlockTimestamp: message.BlockTimestamp,
+		Key:            message.Key,
+		Value:          message.Value,
+		Partition:      message.Partition,
+		Offset:         message.Offset,
 	}
+}
+
+func shouldTruncate(message kafka.Message, maxBytes int) bool {
+	return maxBytes > 0 && messageSize(message) > maxBytes
+}
+
+func truncateDLQError(message *kafka.Message, errorText string, maxBytes int) {
+	sizeWithoutError := messageSize(kafka.Message{
+		Topic:          message.Topic,
+		Headers:        buildHeadersWithout(message.Headers, "dlq-error"),
+		Timestamp:      message.Timestamp,
+		BlockTimestamp: message.BlockTimestamp,
+		Key:            message.Key,
+		Value:          message.Value,
+		Partition:      message.Partition,
+		Offset:         message.Offset,
+	})
+
+	availableForError := maxBytes - sizeWithoutError
+	if availableForError < 0 {
+		availableForError = 0
+	}
+
+	message.Headers["dlq-error"] = truncateBytes([]byte(errorText), availableForError)
+}
+
+func buildHeadersWithout(source map[string][]byte, exclude string) map[string][]byte {
+	result := make(map[string][]byte, len(source))
+	for key, value := range source {
+		if key == exclude {
+			continue
+		}
+		result[key] = value
+	}
+	return result
+}
+
+func truncateDLQValue(message *kafka.Message, maxBytes int) {
+	currentSize := messageSize(*message)
+	if currentSize <= maxBytes {
+		return
+	}
+
+	sizeWithoutValue := currentSize - len(message.Value)
+	availableForValue := maxBytes - sizeWithoutValue
+	if availableForValue < 0 {
+		availableForValue = 0
+	}
+
+	message.Value = truncateBytes(message.Value, availableForValue)
+}
+
+func messageSize(message kafka.Message) int {
+	size := len(message.Key) + len(message.Value)
+
+	for key, value := range message.Headers {
+		size += len(key) + len(value)
+	}
+
+	return size
+}
+
+func truncateBytes(data []byte, limit int) []byte {
+	if limit <= 0 {
+		return nil
+	}
+	if len(data) <= limit {
+		return data
+	}
+	return data[:limit]
 }

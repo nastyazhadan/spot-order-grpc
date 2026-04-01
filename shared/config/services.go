@@ -98,13 +98,15 @@ type ProducerConfig struct {
 }
 
 type ConsumerConfig struct {
-	GroupID           string        `mapstructure:"group_id"`
-	SessionTimeout    time.Duration `mapstructure:"session_timeout"`
-	HeartbeatInterval time.Duration `mapstructure:"heartbeat_interval"`
-	MaxRetries        int           `mapstructure:"max_retries"`
-	RetryBackoff      time.Duration `mapstructure:"retry_backoff"`
-	DLQEnabled        bool          `mapstructure:"dlq_enabled"`
-	RestartBackoff    time.Duration `mapstructure:"restart_backoff"`
+	GroupID            string        `mapstructure:"group_id"`
+	SessionTimeout     time.Duration `mapstructure:"session_timeout"`
+	HeartbeatInterval  time.Duration `mapstructure:"heartbeat_interval"`
+	MaxRetries         int           `mapstructure:"max_retries"`
+	RetryBackoff       time.Duration `mapstructure:"retry_backoff"`
+	MaxMessageBytes    int           `mapstructure:"max_message_bytes"`
+	DLQEnabled         bool          `mapstructure:"dlq_enabled"`
+	DLQMaxMessageBytes int           `mapstructure:"dlq_max_message_bytes"`
+	RestartBackoff     time.Duration `mapstructure:"restart_backoff"`
 }
 
 type TopicsConfig struct {
