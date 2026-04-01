@@ -10,6 +10,7 @@ order:
   log:
     level: "info"
     format: "console"
+    context_fields_max: 10
   auth:
     skip_methods:
       - "/grpc.health.v1.Health/Check"
@@ -108,6 +109,7 @@ spot:
   log:
     level: "info"
     format: "console"
+    context_fields_max: 10
   grpc_rate_limit:
     view_markets: 1000
     get_market_by_id: 2000

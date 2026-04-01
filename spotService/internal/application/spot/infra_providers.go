@@ -45,7 +45,7 @@ type postgresPoolIn struct {
 }
 
 func provideLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (*zapLogger.Logger, error) {
-	logger := zapLogger.New(cfg.Log.Level, cfg.Log.Format == "json")
+	logger := zapLogger.New(cfg.Log.Level, cfg.Log.Format == "json", cfg.Log.ContextFieldsMax)
 
 	lifeCycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {

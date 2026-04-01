@@ -9,7 +9,7 @@ type OrderConfig struct {
 	Service         ServiceConfig            `mapstructure:"service"`
 	SpotAddress     string                   `mapstructure:"spot_address"`
 	Timeouts        TimeoutsConfig           `mapstructure:"timeouts"`
-	Log             LogConfig                `mapstructure:"log"`
+	Log             LoggingConfig            `mapstructure:"log"`
 	Auth            AuthConfig               `mapstructure:"auth"`
 	CircuitBreaker  CircuitBreakerConfig     `mapstructure:"circuit_breaker"`
 	PostgresPool    PostgresPoolConfig       `mapstructure:"postgres_pool"`
@@ -25,7 +25,7 @@ type OrderConfig struct {
 
 type SpotConfig struct {
 	Service       ServiceConfig           `mapstructure:"service"`
-	Log           LogConfig               `mapstructure:"log"`
+	Log           LoggingConfig           `mapstructure:"log"`
 	Timeouts      TimeoutsConfig          `mapstructure:"timeouts"`
 	PostgresPool  PostgresPoolConfig      `mapstructure:"postgres_pool"`
 	GRPCRateLimit SpotGRPCRateLimitConfig `mapstructure:"grpc_rate_limit"`
@@ -44,9 +44,10 @@ type ServiceConfig struct {
 	DBURI          string `mapstructure:"db_uri"`
 }
 
-type LogConfig struct {
-	Level  string `mapstructure:"level"`
-	Format string `mapstructure:"format"`
+type LoggingConfig struct {
+	Level            string `mapstructure:"level"`
+	Format           string `mapstructure:"format"`
+	ContextFieldsMax int    `mapstructure:"context_fields_max"`
 }
 
 type TimeoutsConfig struct {

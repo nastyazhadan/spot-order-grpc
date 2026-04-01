@@ -28,8 +28,6 @@ func New[T any](
 			shouldTrip := counts.ConsecutiveFailures >= cfg.MaxFailures
 
 			if shouldTrip {
-				metrics.CircuitBreakerOpenTotal.WithLabelValues(name).Inc()
-
 				logger.Warn(context.Background(), "circuit breaker is about to open",
 					zap.String("name", name),
 					zap.Uint32("consecutive_failures", counts.ConsecutiveFailures),
@@ -46,6 +44,10 @@ func New[T any](
 				from.String(),
 				to.String(),
 			).Inc()
+
+			if to == gobreaker.StateOpen {
+				metrics.CircuitBreakerOpenTotal.WithLabelValues(breakerName).Inc()
+			}
 
 			fields := []zap.Field{
 				zap.String("name", breakerName),

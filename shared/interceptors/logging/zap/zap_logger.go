@@ -17,18 +17,17 @@ const (
 	extraFieldsKey contextKey = "log_extra_fields"
 )
 
-type extraFields struct {
-	parent *extraFields
+type contextFields struct {
 	fields []zap.Field
-	total  int
 }
 
 type Logger struct {
-	zapLogger    *zap.Logger
-	dynamicLevel zap.AtomicLevel
+	zapLogger        *zap.Logger
+	dynamicLevel     zap.AtomicLevel
+	contextFieldsMax int
 }
 
-func New(levelStr string, asJSON bool) *Logger {
+func New(levelStr string, asJSON bool, contextFieldsMax int) *Logger {
 	level := zap.NewAtomicLevelAt(parseLevel(levelStr))
 
 	encoderCfg := buildEncoderConfig()
@@ -49,14 +48,16 @@ func New(levelStr string, asJSON bool) *Logger {
 	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(3))
 
 	return &Logger{
-		zapLogger:    logger,
-		dynamicLevel: level,
+		zapLogger:        logger,
+		dynamicLevel:     level,
+		contextFieldsMax: normalizeContextFieldsMax(contextFieldsMax),
 	}
 }
 
 func NewNop() *Logger {
 	return &Logger{
-		zapLogger: zap.NewNop(),
+		zapLogger:        zap.NewNop(),
+		contextFieldsMax: 0,
 	}
 }
 
@@ -75,6 +76,13 @@ func buildEncoderConfig() zapcore.EncoderConfig {
 		EncodeName:     zapcore.FullNameEncoder,
 		EncodeLevel:    zapcore.CapitalLevelEncoder,
 	}
+}
+
+func normalizeContextFieldsMax(limit int) int {
+	if limit < 0 {
+		return 0
+	}
+	return limit
 }
 
 func (l *Logger) SetLevel(levelStr string) {
@@ -103,11 +111,11 @@ func isIgnorableSyncError(err error) bool {
 		return false
 	}
 
-	msg := strings.ToLower(err.Error())
+	message := strings.ToLower(err.Error())
 
-	return strings.Contains(msg, "sync /dev/stdout: invalid argument") ||
-		strings.Contains(msg, "sync /dev/stderr: invalid argument") ||
-		strings.Contains(msg, "inappropriate ioctl for device")
+	return strings.Contains(message, "sync /dev/stdout: invalid argument") ||
+		strings.Contains(message, "sync /dev/stderr: invalid argument") ||
+		strings.Contains(message, "inappropriate ioctl for device")
 }
 
 func (l *Logger) With(fields ...zap.Field) *Logger {
@@ -119,28 +127,49 @@ func (l *Logger) With(fields ...zap.Field) *Logger {
 	}
 
 	return &Logger{
-		zapLogger:    l.zapLogger.With(fields...),
-		dynamicLevel: l.dynamicLevel,
+		zapLogger:        l.zapLogger.With(fields...),
+		dynamicLevel:     l.dynamicLevel,
+		contextFieldsMax: l.contextFieldsMax,
 	}
 }
 
-func WithFields(ctx context.Context, fields ...zap.Field) context.Context {
+func (l *Logger) WithFields(ctx context.Context, fields ...zap.Field) context.Context {
 	if len(fields) == 0 {
 		return ctx
 	}
-
-	parent, _ := ctx.Value(extraFieldsKey).(*extraFields)
-
-	node := &extraFields{
-		parent: parent,
-		fields: fields,
-		total:  len(fields),
-	}
-	if parent != nil {
-		node.total += parent.total
+	if l == nil || l.contextFieldsMax <= 0 {
+		return ctx
 	}
 
-	return context.WithValue(ctx, extraFieldsKey, node)
+	current, _ := ctx.Value(extraFieldsKey).(*contextFields)
+	existingCount := 0
+	if current != nil {
+		existingCount = len(current.fields)
+	}
+
+	available := l.contextFieldsMax - existingCount
+	if available <= 0 {
+		return ctx
+	}
+
+	toAdd := fields
+	if len(toAdd) > available {
+		toAdd = toAdd[:available]
+	}
+
+	if len(toAdd) == 0 {
+		return ctx
+	}
+
+	merged := make([]zap.Field, 0, existingCount+len(toAdd))
+	if current != nil {
+		merged = append(merged, current.fields...)
+	}
+	merged = append(merged, toAdd...)
+
+	return context.WithValue(ctx, extraFieldsKey, &contextFields{
+		fields: merged,
+	})
 }
 
 func (l *Logger) WithContext(ctx context.Context) *Logger {
@@ -154,8 +183,9 @@ func (l *Logger) WithContext(ctx context.Context) *Logger {
 	}
 
 	return &Logger{
-		zapLogger:    l.zapLogger.With(ctxFields...),
-		dynamicLevel: l.dynamicLevel,
+		zapLogger:        l.zapLogger.With(ctxFields...),
+		dynamicLevel:     l.dynamicLevel,
+		contextFieldsMax: l.contextFieldsMax,
 	}
 }
 
@@ -207,7 +237,7 @@ func (l *Logger) log(ctx context.Context, level zapcore.Level, message string, f
 func fieldsFromContext(ctx context.Context) []zap.Field {
 	traceID, hasTraceID := requestctx.TraceIDFromContext(ctx)
 	userID, hasUserID := requestctx.UserIDFromContext(ctx)
-	extra, _ := ctx.Value(extraFieldsKey).(*extraFields)
+	extra, _ := ctx.Value(extraFieldsKey).(*contextFields)
 
 	totalFields := 0
 	if hasTraceID {
@@ -217,7 +247,7 @@ func fieldsFromContext(ctx context.Context) []zap.Field {
 		totalFields++
 	}
 	if extra != nil {
-		totalFields += extra.total
+		totalFields += len(extra.fields)
 	}
 
 	if totalFields == 0 {
@@ -233,21 +263,10 @@ func fieldsFromContext(ctx context.Context) []zap.Field {
 		fields = append(fields, zap.String("user_id", userID.String()))
 	}
 	if extra != nil {
-		fields = appendExtraFields(fields, extra)
+		fields = append(fields, extra.fields...)
 	}
 
 	return fields
-}
-
-func appendExtraFields(fields []zap.Field, node *extraFields) []zap.Field {
-	if node == nil {
-		return fields
-	}
-	if node.parent != nil {
-		fields = appendExtraFields(fields, node.parent)
-	}
-
-	return append(fields, node.fields...)
 }
 
 func parseLevel(levelString string) zapcore.Level {

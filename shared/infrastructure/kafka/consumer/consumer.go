@@ -10,7 +10,6 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
 
 const dlqExtraHeaders = 3
@@ -121,8 +120,6 @@ func sendToDLQ(
 		)
 		return dlqError
 	}
-
-	metrics.KafkaMessagesConsumedTotal.WithLabelValues(serviceName, message.Topic, "dlq").Inc()
 
 	logger.Error(ctx, "Message sent to DLQ after all retries",
 		zap.String("topic", message.Topic),

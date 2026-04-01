@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sony/gobreaker/v2"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -25,6 +26,7 @@ type SpotClient struct {
 	api                  proto.SpotInstrumentServiceClient
 	viewMarketsBreaker   *gobreaker.CircuitBreaker[*proto.ViewMarketsResponse]
 	getMarketByIDBreaker *gobreaker.CircuitBreaker[*proto.GetMarketByIDResponse]
+	logger               *zapLogger.Logger
 }
 
 func NewSpotClient(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig, logger *zapLogger.Logger) *SpotClient {
@@ -32,6 +34,7 @@ func NewSpotClient(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig,
 		api:                  proto.NewSpotInstrumentServiceClient(connection),
 		viewMarketsBreaker:   breaker.New[*proto.ViewMarketsResponse]("spotService.ViewMarkets", cfg, logger),
 		getMarketByIDBreaker: breaker.New[*proto.GetMarketByIDResponse]("spotService.GetMarketByID", cfg, logger),
+		logger:               logger,
 	}
 }
 
@@ -55,6 +58,8 @@ func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) (
 		return resp, nil
 	})
 	if err != nil {
+		c.logViewMarketsBreakerError(ctx, err, roles)
+
 		return nil, mapViewMarketsError(err)
 	}
 
@@ -78,6 +83,8 @@ func (c *SpotClient) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Ma
 		})
 	})
 	if err != nil {
+		c.logGetMarketByIDBreakerError(ctx, err, id)
+
 		return models.Market{}, mapGetMarketByIDError(err, id)
 	}
 
@@ -95,8 +102,9 @@ func mapViewMarketsError(err error) error {
 	}
 
 	switch {
+	case errors.Is(err, context.Canceled):
+		return context.Canceled
 	case errors.Is(err, context.DeadlineExceeded),
-		errors.Is(err, context.Canceled),
 		errors.Is(err, gobreaker.ErrOpenState),
 		errors.Is(err, gobreaker.ErrTooManyRequests):
 		return serviceErrors.ErrMarketsUnavailable
@@ -124,8 +132,9 @@ func mapGetMarketByIDError(err error, marketID uuid.UUID) error {
 	}
 
 	switch {
+	case errors.Is(err, context.Canceled):
+		return context.Canceled
 	case errors.Is(err, context.DeadlineExceeded),
-		errors.Is(err, context.Canceled),
 		errors.Is(err, gobreaker.ErrOpenState),
 		errors.Is(err, gobreaker.ErrTooManyRequests):
 		return serviceErrors.ErrUnavailable{ID: marketID}
@@ -146,5 +155,45 @@ func mapGetMarketByIDError(err error, marketID uuid.UUID) error {
 		return serviceErrors.ErrDisabled{ID: marketID}
 	default:
 		return fmt.Errorf("spot client get market by id: %w", err)
+	}
+}
+
+func (c *SpotClient) logViewMarketsBreakerError(ctx context.Context, err error, roles []models.UserRole) {
+	fields := []zap.Field{
+		zap.Any("roles", roles),
+		zap.Error(err),
+	}
+
+	switch {
+	case errors.Is(err, gobreaker.ErrOpenState):
+		c.logger.Warn(ctx, "SpotClient.ViewMarkets skipped by open circuit breaker", fields...)
+	case errors.Is(err, gobreaker.ErrTooManyRequests):
+		c.logger.Warn(ctx, "SpotClient.ViewMarkets rejected by half-open circuit breaker", fields...)
+	case errors.Is(err, context.DeadlineExceeded):
+		c.logger.Warn(ctx, "SpotClient.ViewMarkets failed by deadline exceeded", fields...)
+	case errors.Is(err, context.Canceled):
+		c.logger.Info(ctx, "SpotClient.ViewMarkets canceled", fields...)
+	default:
+		c.logger.Warn(ctx, "SpotClient.ViewMarkets failed", fields...)
+	}
+}
+
+func (c *SpotClient) logGetMarketByIDBreakerError(ctx context.Context, err error, marketID uuid.UUID) {
+	fields := []zap.Field{
+		zap.String("market_id", marketID.String()),
+		zap.Error(err),
+	}
+
+	switch {
+	case errors.Is(err, gobreaker.ErrOpenState):
+		c.logger.Warn(ctx, "SpotClient.GetMarketByID skipped by open circuit breaker", fields...)
+	case errors.Is(err, gobreaker.ErrTooManyRequests):
+		c.logger.Warn(ctx, "SpotClient.GetMarketByID rejected by half-open circuit breaker", fields...)
+	case errors.Is(err, context.DeadlineExceeded):
+		c.logger.Warn(ctx, "SpotClient.GetMarketByID failed by deadline exceeded", fields...)
+	case errors.Is(err, context.Canceled):
+		c.logger.Info(ctx, "SpotClient.GetMarketByID canceled", fields...)
+	default:
+		c.logger.Warn(ctx, "SpotClient.GetMarketByID failed", fields...)
 	}
 }

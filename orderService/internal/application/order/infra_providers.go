@@ -47,7 +47,7 @@ type postgresPoolIn struct {
 }
 
 func provideLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*zapLogger.Logger, error) {
-	logger := zapLogger.New(cfg.Log.Level, cfg.Log.Format == "json")
+	logger := zapLogger.New(cfg.Log.Level, cfg.Log.Format == "json", cfg.Log.ContextFieldsMax)
 
 	lifeCycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
@@ -105,7 +105,7 @@ func provideOutboxStore(pool *pgxpool.Pool, logger *zapLogger.Logger, cfg config
 }
 
 func provideBlockStore(store *cache.Store, cfg config.OrderConfig) *blockStore.MarketBlockStore {
-	return blockStore.New(store, cfg.Redis.MarketBlockTTL)
+	return blockStore.New(store, cfg.Redis.MarketBlockTTL, cfg)
 }
 
 func provideInboxStore(pool *pgxpool.Pool, cfg config.OrderConfig) *inboxStore.InboxStore {
