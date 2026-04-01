@@ -51,12 +51,15 @@ func (m *MarketCacheRepository) GetAll(
 	defer span.End()
 
 	start := time.Now()
-	data, err := m.cacheStore.Get(ctx, cacheKey(roleKey))
-	metrics.ObserveWithTrace(ctx,
-		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "get_all"),
-		time.Since(start).Seconds(),
-	)
+	defer func() {
+		metrics.ObserveWithTrace(
+			ctx,
+			metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "get_all"),
+			time.Since(start).Seconds(),
+		)
+	}()
 
+	data, err := m.cacheStore.Get(ctx, cacheKey(roleKey))
 	if err != nil {
 		if errors.Is(err, sharedErrors.ErrCacheNotFound) {
 			metrics.CacheMissesTotal.WithLabelValues(m.serviceName, "get_all").Inc()
@@ -165,7 +168,16 @@ func (m *MarketCacheRepository) invalidateCorruptedCache(
 	if err := m.Delete(ctx, roleKey); err != nil {
 		span.SetAttributes(attribute.Bool("cache_invalidation_failed", true))
 		tracing.RecordError(span, err)
+
+		metrics.CacheInvalidationsTotal.
+			WithLabelValues(m.serviceName, reason, roleKey, "error").
+			Inc()
+		return
 	}
+
+	metrics.CacheInvalidationsTotal.
+		WithLabelValues(m.serviceName, reason, roleKey, "success").
+		Inc()
 }
 
 func cacheKey(roleKey string) string {

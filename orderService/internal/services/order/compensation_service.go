@@ -3,6 +3,7 @@ package order
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
@@ -275,7 +277,12 @@ func (s *CompensationService) trySyncMarketBlockState(
 	syncCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.config.Timeouts.Service)
 	defer cancel()
 
-	if err := s.syncMarketBlockState(syncCtx, event); err != nil {
+	blocked, updated, err := s.syncMarketBlockState(syncCtx, event)
+	if err != nil {
+		metrics.MarketBlockStateSyncTotal.
+			WithLabelValues(s.config.Service.Name, reason, strconv.FormatBool(blocked), "error", "false").
+			Inc()
+
 		span.SetAttributes(
 			attribute.Bool("market_block_sync_failed", true),
 			attribute.String("market_block_sync_reason", reason),
@@ -287,15 +294,24 @@ func (s *CompensationService) trySyncMarketBlockState(
 			zap.String("sync_reason", reason),
 			zap.Error(err),
 		)
+		return
 	}
+
+	metrics.MarketBlockStateSyncTotal.
+		WithLabelValues(s.config.Service.Name, reason, strconv.FormatBool(blocked), "success", strconv.FormatBool(updated)).
+		Inc()
 }
 
 func (s *CompensationService) syncMarketBlockState(
 	ctx context.Context,
 	event sharedModels.MarketStateChangedEvent,
-) error {
+) (bool, bool, error) {
 	blocked := !event.Enabled || event.DeletedAt != nil
 
-	_, err := s.blockStore.SyncState(ctx, event.MarketID, blocked, event.UpdatedAt)
-	return err
+	updated, err := s.blockStore.SyncState(ctx, event.MarketID, blocked, event.UpdatedAt)
+	if err != nil {
+		return blocked, false, err
+	}
+
+	return blocked, updated, nil
 }

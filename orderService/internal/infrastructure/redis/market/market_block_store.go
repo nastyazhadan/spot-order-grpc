@@ -11,8 +11,10 @@ import (
 	"github.com/google/uuid"
 	redisGo "github.com/redis/go-redis/v9"
 
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
 
 const (
@@ -52,14 +54,16 @@ var syncStateScript = redisGo.NewScript(`
 `)
 
 type MarketBlockStore struct {
-	store *cache.Store
-	ttl   time.Duration
+	store  *cache.Store
+	ttl    time.Duration
+	config config.OrderConfig
 }
 
-func New(store *cache.Store, ttl time.Duration) *MarketBlockStore {
+func New(store *cache.Store, ttl time.Duration, cfg config.OrderConfig) *MarketBlockStore {
 	return &MarketBlockStore{
-		store: store,
-		ttl:   ttl,
+		store:  store,
+		ttl:    ttl,
+		config: cfg,
 	}
 }
 
@@ -70,6 +74,15 @@ func (s *MarketBlockStore) SyncState(
 	updatedAt time.Time,
 ) (bool, error) {
 	const op = "redis.MarketBlockStore.SyncState"
+
+	start := time.Now()
+	defer func() {
+		metrics.ObserveWithTrace(
+			ctx,
+			metrics.CacheOperationDuration.WithLabelValues(s.config.Service.Name, "market_sync_state"),
+			time.Since(start).Seconds(),
+		)
+	}()
 
 	state := unblockedState
 	if blocked {
@@ -106,9 +119,22 @@ func (s *MarketBlockStore) SyncState(
 func (s *MarketBlockStore) IsBlocked(ctx context.Context, marketID uuid.UUID) (bool, error) {
 	const op = "redis.MarketBlockStore.IsBlocked"
 
+	start := time.Now()
+	defer func() {
+		metrics.ObserveWithTrace(
+			ctx,
+			metrics.CacheOperationDuration.WithLabelValues(s.config.Service.Name, "market_is_blocked"),
+			time.Since(start).Seconds(),
+		)
+	}()
+
 	raw, err := s.store.Get(ctx, blockKey(marketID))
 	if err != nil {
 		if errors.Is(err, sharedErrors.ErrCacheNotFound) {
+			metrics.CacheMissesTotal.
+				WithLabelValues(s.config.Service.Name, "market_is_blocked").
+				Inc()
+
 			return false, nil
 		}
 		return false, fmt.Errorf("%s: get blocked state: %w", op, err)
@@ -118,6 +144,10 @@ func (s *MarketBlockStore) IsBlocked(ctx context.Context, marketID uuid.UUID) (b
 	if parseErr != nil {
 		return false, fmt.Errorf("%s: parse blocked state: %w", op, parseErr)
 	}
+
+	metrics.CacheHitsTotal.
+		WithLabelValues(s.config.Service.Name, "market_is_blocked").
+		Inc()
 
 	return blocked, nil
 }

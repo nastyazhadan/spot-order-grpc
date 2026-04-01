@@ -83,6 +83,38 @@ var (
 		[]string{"service", "operation"},
 	)
 
+	CacheInvalidationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "grpc_server_cache_invalidations_total",
+			Help: "Total number of cache invalidations",
+		},
+		[]string{"service", "reason", "role", "result"},
+	)
+
+	CacheFallbacksTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "grpc_server_cache_fallbacks_total",
+			Help: "Total number of fallbacks after cache lookup failure",
+		},
+		[]string{"service", "operation", "reason"},
+	)
+
+	CacheWarmupsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "grpc_server_cache_warmups_total",
+			Help: "Total number of cache warmup attempts",
+		},
+		[]string{"service", "operation", "role", "result"},
+	)
+
+	MarketBlockStateSyncTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "grpc_server_market_block_state_sync_total",
+			Help: "Total number of market block state sync attempts",
+		},
+		[]string{"service", "reason", "blocked", "result", "updated"},
+	)
+
 	DBQueryDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "grpc_server_db_query_duration_seconds",

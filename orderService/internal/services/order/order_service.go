@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -286,29 +287,28 @@ func (s *OrderService) getMarketBlockedState(
 	marketID uuid.UUID,
 ) (bool, error) {
 	blocked, err := s.blockStore.IsBlocked(ctx, marketID)
-	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			tracing.RecordError(span, err)
-			return false, err
-		}
+	if err == nil {
+		return blocked, nil
+	}
 
-		span.SetAttributes(
-			attribute.Bool("market_block_store_lookup_failed", true),
-			attribute.Bool("market_block_store_fallback", true),
-		)
-
-		s.logger.Warn(ctx, "Market block store lookup failed, falling back to market validation",
-			zap.String("market_id", marketID.String()),
-			zap.Error(err),
-		)
-
-		return false, nil
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		tracing.RecordError(span, err)
+		return false, err
 	}
 
 	span.SetAttributes(
-		attribute.Bool("market_block_store_lookup_failed", false),
-		attribute.Bool("market_block_store_fallback", false),
-		attribute.Bool("market_blocked", blocked),
+		attribute.Bool("market_block_store_lookup_failed", true),
+		attribute.Bool("market_block_store_fallback", true),
+	)
+
+	tracing.RecordError(span, err)
+	metrics.CacheFallbacksTotal.
+		WithLabelValues(s.config.ServiceName, "market_is_blocked", "lookup_error").
+		Inc()
+
+	s.logger.Warn(ctx, "Market block store lookup failed, falling back to market validation",
+		zap.String("market_id", marketID.String()),
+		zap.Error(err),
 	)
 
 	return blocked, nil
@@ -322,6 +322,10 @@ func (s *OrderService) syncMarketBlock(
 ) {
 	updated, err := s.blockStore.SyncState(ctx, market.ID, blocked, market.UpdatedAt)
 	if err != nil {
+		metrics.MarketBlockStateSyncTotal.
+			WithLabelValues(s.config.ServiceName, reason, strconv.FormatBool(blocked), "error", "false").
+			Inc()
+
 		s.logger.Warn(ctx, "Failed to sync market block state after recheck",
 			zap.String("market_id", market.ID.String()),
 			zap.Bool("blocked", blocked),
@@ -330,6 +334,10 @@ func (s *OrderService) syncMarketBlock(
 		)
 		return
 	}
+
+	metrics.MarketBlockStateSyncTotal.
+		WithLabelValues(s.config.ServiceName, reason, strconv.FormatBool(blocked), "success", strconv.FormatBool(updated)).
+		Inc()
 
 	if updated {
 		s.logger.Warn(ctx, "Synced market block state after recheck",

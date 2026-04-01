@@ -19,6 +19,7 @@ import (
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
+	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
@@ -45,6 +46,7 @@ type MarketViewer struct {
 	marketCacheRepository MarketCacheRepository
 	cacheTTL              time.Duration
 	serviceTimeout        time.Duration
+	serviceName           string
 	singleFlight          singleflight.Group
 	logger                *zapLogger.Logger
 }
@@ -53,6 +55,7 @@ func NewMarketViewer(
 	repo MarketRepository,
 	cacheRepo MarketCacheRepository,
 	ttl, timeout time.Duration,
+	serviceName string,
 	logger *zapLogger.Logger,
 ) *MarketViewer {
 	return &MarketViewer{
@@ -60,6 +63,7 @@ func NewMarketViewer(
 		marketCacheRepository: cacheRepo,
 		cacheTTL:              ttl,
 		serviceTimeout:        timeout,
+		serviceName:           serviceName,
 		logger:                logger,
 	}
 }
@@ -205,9 +209,14 @@ func (s *MarketViewer) getMarkets(ctx context.Context, roleKey string) ([]models
 		return markets, nil
 	}
 
-	if !errors.Is(err, repositoryErrors.ErrMarketsNotFound) {
-		s.logger.Error(ctx, "internal cache error", zap.Error(err))
+	if errors.Is(err, repositoryErrors.ErrMarketsNotFound) {
+		return s.getMarketsWithSingleFlight(ctx, roleKey)
 	}
+
+	s.logger.Error(ctx, "internal cache error", zap.Error(err))
+	metrics.CacheFallbacksTotal.
+		WithLabelValues(s.serviceName, "get_all", "internal_cache_error").
+		Inc()
 
 	return s.getMarketsWithSingleFlight(ctx, roleKey)
 }
@@ -243,10 +252,6 @@ func (s *MarketViewer) loadAndWarmCache(ctx context.Context, roleKey string) ([]
 	)
 	defer span.End()
 
-	if markets, err := s.marketCacheRepository.GetAll(ctx, roleKey); err == nil {
-		return markets, nil
-	}
-
 	allMarkets, err := s.getMarketsFromRepo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
@@ -255,8 +260,16 @@ func (s *MarketViewer) loadAndWarmCache(ctx context.Context, roleKey string) ([]
 	filtered := filterByRole(allMarkets, roleKey)
 
 	if err = s.marketCacheRepository.SetAll(ctx, filtered, roleKey, s.cacheTTL); err != nil {
+		metrics.CacheWarmupsTotal.
+			WithLabelValues(s.serviceName, "load_and_warm_cache", roleKey, "error").
+			Inc()
+
 		s.logger.Warn(ctx, "failed to update cache", zap.Error(err))
+		return filtered, nil
 	}
+	metrics.CacheWarmupsTotal.
+		WithLabelValues(s.serviceName, "load_and_warm_cache", roleKey, "success").
+		Inc()
 
 	return filtered, nil
 }
@@ -319,8 +332,16 @@ func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 		filtered := filterByRole(allMarkets, roleKey)
 
 		if err = s.marketCacheRepository.SetAll(refreshCtx, filtered, roleKey, s.cacheTTL); err != nil {
+			metrics.CacheWarmupsTotal.
+				WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").
+				Inc()
+
 			return fmt.Errorf("%s: set cache for role %s: %w", op, roleKey, err)
 		}
+
+		metrics.CacheWarmupsTotal.
+			WithLabelValues(s.serviceName, "refresh_all", roleKey, "success").
+			Inc()
 	}
 
 	return nil
@@ -331,8 +352,16 @@ func (s *MarketViewer) invalidateAll(ctx context.Context) error {
 
 	for _, roleKey := range []string{roleAdminKey, roleViewerKey, roleUserKey} {
 		if err := s.marketCacheRepository.Delete(ctx, roleKey); err != nil {
+			metrics.CacheInvalidationsTotal.
+				WithLabelValues(s.serviceName, "refresh_empty_store", roleKey, "error").
+				Inc()
+
 			return fmt.Errorf("%s: delete cache for role %s: %w", op, roleKey, err)
 		}
+
+		metrics.CacheInvalidationsTotal.
+			WithLabelValues(s.serviceName, "refresh_empty_store", roleKey, "success").
+			Inc()
 	}
 
 	return nil
