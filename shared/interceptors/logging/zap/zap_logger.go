@@ -140,6 +140,9 @@ func (l *Logger) WithFields(ctx context.Context, fields ...zap.Field) context.Co
 	if l == nil || l.contextFieldsMax <= 0 {
 		return ctx
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	current, _ := ctx.Value(extraFieldsKey).(*contextFields)
 	existingCount := 0
@@ -235,6 +238,10 @@ func (l *Logger) log(ctx context.Context, level zapcore.Level, message string, f
 }
 
 func fieldsFromContext(ctx context.Context) []zap.Field {
+	if ctx == nil {
+		return nil
+	}
+
 	traceID, hasTraceID := requestctx.TraceIDFromContext(ctx)
 	userID, hasUserID := requestctx.UserIDFromContext(ctx)
 	extra, _ := ctx.Value(extraFieldsKey).(*contextFields)

@@ -95,7 +95,6 @@ func applyMiddlewares(handler MessageHandler, middlewares ...Middleware) Message
 func sendToDLQ(
 	ctx context.Context,
 	message kafka.Message,
-	serviceName string,
 	dlqPublisher DLQPublisher,
 	logger *zapLogger.Logger,
 	lastErr error,

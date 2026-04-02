@@ -77,6 +77,10 @@ func UnaryClientInterceptor() grpc.UnaryClientInterceptor {
 }
 
 func extractOutgoingMetadata(ctx context.Context) metadata.MD {
+	if ctx == nil {
+		return metadata.New(nil)
+	}
+
 	md, ok := metadata.FromOutgoingContext(ctx)
 	if !ok {
 		return metadata.New(nil)

@@ -260,6 +260,7 @@ func (s *MarketViewer) loadAndWarmCache(ctx context.Context, roleKey string) ([]
 	filtered := filterByRole(allMarkets, roleKey)
 
 	if err = s.marketCacheRepository.SetAll(ctx, filtered, roleKey, s.cacheTTL); err != nil {
+		// При ошибке записи старые ключи не удаляются, чтобы не возникало лишних промахов кэша
 		metrics.CacheWarmupsTotal.
 			WithLabelValues(s.serviceName, "load_and_warm_cache", roleKey, "error").
 			Inc()
@@ -332,6 +333,7 @@ func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 		filtered := filterByRole(allMarkets, roleKey)
 
 		if err = s.marketCacheRepository.SetAll(refreshCtx, filtered, roleKey, s.cacheTTL); err != nil {
+			// При ошибке записи старые ключи не удаляются, чтобы не возникало лишних промахов кэша
 			metrics.CacheWarmupsTotal.
 				WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").
 				Inc()
@@ -347,6 +349,7 @@ func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 	return nil
 }
 
+// Удаление всех ключей при пустом market store
 func (s *MarketViewer) invalidateAll(ctx context.Context) error {
 	const op = "MarketViewer.invalidateAll"
 

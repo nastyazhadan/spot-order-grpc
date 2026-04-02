@@ -13,7 +13,9 @@ import (
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
-func PanicRecoveryMiddleware(logger *zapLogger.Logger) Middleware {
+func PanicRecoveryMiddleware(
+	logger *zapLogger.Logger,
+) Middleware {
 	return func(next MessageHandler) MessageHandler {
 		return func(ctx context.Context, msg kafka.Message) (err error) {
 			defer func() {
@@ -117,7 +119,6 @@ func MessageSizeLimitMiddleware(
 }
 
 func DLQMiddleware(
-	serviceName string,
 	dlqPublisher DLQPublisher,
 	maxMessageBytes int,
 	logger *zapLogger.Logger,
@@ -136,7 +137,7 @@ func DLQMiddleware(
 				err = exhaustedErr.Err
 			}
 
-			return sendToDLQ(ctx, message, serviceName, dlqPublisher, logger, err, retryCount, maxMessageBytes)
+			return sendToDLQ(ctx, message, dlqPublisher, logger, err, retryCount, maxMessageBytes)
 		}
 	}
 }

@@ -114,11 +114,11 @@ func (m *MarketStore) GetByID(ctx context.Context, id uuid.UUID) (models.Market,
 
 func (m *MarketStore) ListUpdatedSince(
 	ctx context.Context,
-	since time.Time,
-	afterID uuid.UUID,
+	updatedAt time.Time,
+	lastID uuid.UUID,
 	limit int,
 ) ([]models.Market, error) {
-	const op = "MarketStore.ListUpdatedSince"
+	const op = "postgres.MarketStore.ListUpdatedSince"
 
 	ctx, span := tracing.StartSpan(ctx, "postgres.list_updated_since",
 		trace.WithSpanKind(trace.SpanKindClient),
@@ -135,20 +135,20 @@ func (m *MarketStore) ListUpdatedSince(
 
 	rows, err := m.pool.Query(ctx, `
 		SELECT id, name, enabled, deleted_at, updated_at FROM market_store
-		WHERE (updated_at > $1) OR (updated_at = $1 AND id > $2)
+		WHERE (updated_at, id) > ($1, $2)
 		ORDER BY updated_at, id
 		LIMIT $3
-	`, since.UTC(), afterID, limit)
+	`, updatedAt.UTC(), lastID, limit)
 	if err != nil {
 		tracing.RecordError(span, err)
-		return nil, fmt.Errorf("%s: query: %w", op, err)
+		return nil, fmt.Errorf("%s: query updated markets: %w", op, err)
 	}
 	defer rows.Close()
 
 	dtoMarkets, err := pgx.CollectRows(rows, pgx.RowToStructByName[dto.Market])
 	if err != nil {
-		span.RecordError(err)
-		return nil, fmt.Errorf("%s: collect: %w", op, err)
+		tracing.RecordError(span, err)
+		return nil, fmt.Errorf("%s: collect rows: %w", op, err)
 	}
 
 	markets := make([]models.Market, 0, len(dtoMarkets))

@@ -27,6 +27,8 @@ var (
 	ErrTokenRevoked      = errors.New("refresh token revoked or not found")
 	ErrRevokeTokenFailed = errors.New("failed to revoke refresh token")
 	ErrSaveTokenFailed   = errors.New("failed to save refresh token")
+
+	ErrNilContext = errors.New("outbox worker: nil context")
 )
 
 type ErrLimitExceeded struct {

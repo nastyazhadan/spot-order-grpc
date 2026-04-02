@@ -25,6 +25,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	metricInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/metrics"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
@@ -209,16 +210,31 @@ func registerOutboxWorker(
 	logger *zapLogger.Logger,
 ) {
 	appCtx := in.AppCtx
-	ctx, cancel := context.WithCancel(appCtx)
-	done := make(chan struct{})
+
+	var (
+		workerCtx context.Context
+		cancel    context.CancelFunc
+		done      chan struct{}
+	)
 
 	lifecycle.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
+			workerCtx, cancel = context.WithCancel(appCtx)
+			done = make(chan struct{})
+
 			logger.Info(startCtx, "Outbox worker: starting")
 
 			go func() {
 				defer close(done)
-				worker.Run(ctx)
+
+				err := recovery.PanicRecoveryHandler(workerCtx, logger, "Outbox worker",
+					func() error {
+						return worker.Run(workerCtx)
+					},
+				)
+				if err != nil && workerCtx.Err() == nil {
+					logger.Error(workerCtx, "Outbox worker stopped with error", zap.Error(err))
+				}
 			}()
 
 			return nil
@@ -248,35 +264,41 @@ func registerKafkaConsumer(
 	config config.OrderConfig,
 ) {
 	appCtx := in.AppCtx
-	ctx, cancel := context.WithCancel(appCtx)
-	done := make(chan struct{})
+
+	var (
+		consumerCtx context.Context
+		cancel      context.CancelFunc
+		done        chan struct{}
+	)
 
 	lifecycle.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
+			consumerCtx, cancel = context.WithCancel(appCtx)
+			done = make(chan struct{})
+
 			logger.Info(startCtx, "Kafka consumer: starting")
 
 			go func() {
 				defer close(done)
 
 				for {
-					if ctx.Err() != nil {
-						logger.Info(ctx, "Kafka consumer stopped")
+					err := recovery.PanicRecoveryHandler(consumerCtx, logger, "Kafka consumer",
+						func() error {
+							return consumer.Run(consumerCtx)
+						},
+					)
+					if err == nil || consumerCtx.Err() != nil {
+						logger.Info(consumerCtx, "Kafka consumer stopped")
 						return
 					}
 
-					err := consumer.Run(ctx)
-					if err == nil || ctx.Err() != nil {
-						logger.Info(ctx, "Kafka consumer stopped")
-						return
-					}
-
-					logger.Error(ctx, "Kafka consumer exited with error, restarting",
+					logger.Error(consumerCtx, "Kafka consumer exited with error, restarting",
 						zap.Error(err),
 						zap.Duration("restart_after", config.Kafka.Consumer.RestartBackoff),
 					)
 
 					select {
-					case <-ctx.Done():
+					case <-consumerCtx.Done():
 						return
 					case <-time.After(config.Kafka.Consumer.RestartBackoff):
 					}

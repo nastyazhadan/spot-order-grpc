@@ -204,12 +204,11 @@ func provideConsumerService(
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) *consumer.MarketConsumer {
-	middlewares := make([]sharedConsumer.Middleware, middlewaresCount)
+	middlewares := make([]sharedConsumer.Middleware, 0, middlewaresCount)
 
 	if cfg.Kafka.Consumer.DLQEnabled {
 		middlewares = append(middlewares,
 			sharedConsumer.DLQMiddleware(
-				cfg.Service.Name,
 				dlqPublisher,
 				cfg.Kafka.Consumer.DLQMaxMessageBytes,
 				logger,

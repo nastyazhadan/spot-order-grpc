@@ -153,6 +153,7 @@ func (m *MarketCacheRepository) Delete(ctx context.Context, roleKey string) erro
 	return nil
 }
 
+// Удаление ключей, если возникла ошибка
 func (m *MarketCacheRepository) invalidateCorruptedCache(
 	ctx context.Context,
 	span trace.Span,

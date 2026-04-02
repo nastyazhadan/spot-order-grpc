@@ -99,6 +99,12 @@ func (s *MarketBlockStore) SyncState(
 		ttlMs,
 	).Result()
 	if err != nil {
+		if isCorruptedMarketBlockStateError(err) {
+			// Удаляем в случае ошибки
+			if deleteError := s.invalidateCorruptedState(ctx, marketID); deleteError != nil {
+				return false, fmt.Errorf("%s: %w; invalidate corrupted cache: %v", op, err, deleteError)
+			}
+		}
 		return false, fmt.Errorf("%s: run sync state script: %w", op, err)
 	}
 
@@ -142,6 +148,11 @@ func (s *MarketBlockStore) IsBlocked(ctx context.Context, marketID uuid.UUID) (b
 
 	blocked, _, parseErr := parseBlockedState(string(raw))
 	if parseErr != nil {
+		// Удаляем в случае ошибкиг
+		if deleteError := s.invalidateCorruptedState(ctx, marketID); deleteError != nil {
+			return false, fmt.Errorf(
+				"%s: parse blocked state: %w; invalidate corrupted cache: %v", op, parseErr, deleteError)
+		}
 		return false, fmt.Errorf("%s: parse blocked state: %w", op, parseErr)
 	}
 
@@ -150,6 +161,21 @@ func (s *MarketBlockStore) IsBlocked(ctx context.Context, marketID uuid.UUID) (b
 		Inc()
 
 	return blocked, nil
+}
+
+func (s *MarketBlockStore) invalidateCorruptedState(ctx context.Context, marketID uuid.UUID) error {
+	return s.store.Delete(ctx, blockKey(marketID))
+}
+
+func isCorruptedMarketBlockStateError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	msg := err.Error()
+
+	return strings.Contains(msg, "invalid market block state") ||
+		strings.Contains(msg, "invalid market block timestamp")
 }
 
 func parseBlockedState(raw string) (bool, time.Time, error) {

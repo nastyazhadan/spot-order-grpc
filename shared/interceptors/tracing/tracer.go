@@ -90,10 +90,18 @@ func ShutdownTracer(ctx context.Context) error {
 }
 
 func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	return otel.Tracer(instrumentationName).Start(ctx, name, opts...)
 }
 
 func SpanFromContext(ctx context.Context) trace.Span {
+	if ctx == nil {
+		return trace.SpanFromContext(context.Background())
+	}
+
 	return trace.SpanFromContext(ctx)
 }
 

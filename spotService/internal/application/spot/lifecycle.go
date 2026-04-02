@@ -21,6 +21,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	metricInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/metrics"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	outbox "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/kafka"
@@ -174,30 +175,45 @@ func registerOutboxWorker(
 	logger *zapLogger.Logger,
 ) {
 	appCtx := in.AppCtx
-	ctx, cancel := context.WithCancel(appCtx)
-	done := make(chan struct{})
+
+	var (
+		workerCtx context.Context
+		cancel    context.CancelFunc
+		done      chan struct{}
+	)
 
 	lifecycle.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
-			logger.Info(startCtx, "Outbox worker: starting")
+			workerCtx, cancel = context.WithCancel(appCtx)
+			done = make(chan struct{})
+
+			logger.Info(startCtx, "Spot outbox worker: starting")
 
 			go func() {
 				defer close(done)
-				worker.Run(ctx)
+
+				err := recovery.PanicRecoveryHandler(workerCtx, logger, "Spot outbox worker",
+					func() error {
+						return worker.Run(workerCtx)
+					},
+				)
+				if err != nil && workerCtx.Err() == nil {
+					logger.Error(workerCtx, "Spot outbox worker stopped with error", zap.Error(err))
+				}
 			}()
 
 			return nil
 		},
 		OnStop: func(stopCtx context.Context) error {
-			logger.Info(stopCtx, "Outbox worker: stopping")
+			logger.Info(stopCtx, "Spot outbox worker: stopping")
 			cancel()
 
 			select {
 			case <-done:
-				logger.Info(stopCtx, "Outbox worker: stopped")
+				logger.Info(stopCtx, "Spot outbox worker: stopped")
 				return nil
 			case <-stopCtx.Done():
-				logger.Warn(stopCtx, "Outbox worker: stop timeout exceeded", zap.Error(stopCtx.Err()))
+				logger.Warn(stopCtx, "Spot outbox worker: stop timeout exceeded", zap.Error(stopCtx.Err()))
 				return stopCtx.Err()
 			}
 		},
@@ -212,11 +228,18 @@ func registerMarketPoller(
 	config config.SpotConfig,
 ) {
 	appCtx := in.AppCtx
-	ctx, cancel := context.WithCancel(appCtx)
-	done := make(chan struct{})
+
+	var (
+		workerCtx context.Context
+		cancel    context.CancelFunc
+		done      chan struct{}
+	)
 
 	lifecycle.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
+			workerCtx, cancel = context.WithCancel(appCtx)
+			done = make(chan struct{})
+
 			logger.Info(startCtx, "Market poller: starting")
 
 			if err := poller.Init(startCtx); err != nil {
@@ -228,24 +251,21 @@ func registerMarketPoller(
 				defer close(done)
 
 				for {
-					if ctx.Err() != nil {
-						logger.Info(ctx, "Market poller stopped")
+					err := recovery.PanicRecoveryHandler(workerCtx, logger, "Market poller", func() error {
+						return poller.Run(workerCtx)
+					})
+					if err == nil || workerCtx.Err() != nil {
+						logger.Info(workerCtx, "Market poller stopped")
 						return
 					}
 
-					err := poller.Run(ctx)
-					if err == nil || ctx.Err() != nil {
-						logger.Info(ctx, "Market poller stopped")
-						return
-					}
-
-					logger.Error(ctx, "Market poller exited with error, restarting",
+					logger.Error(workerCtx, "Market poller exited with error, restarting",
 						zap.Error(err),
 						zap.Duration("restart_after", config.MarketPoller.RestartBackoff),
 					)
 
 					select {
-					case <-ctx.Done():
+					case <-workerCtx.Done():
 						return
 					case <-time.After(config.MarketPoller.RestartBackoff):
 					}

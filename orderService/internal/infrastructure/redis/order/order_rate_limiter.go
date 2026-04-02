@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
-
 	"github.com/google/uuid"
 	redisGo "github.com/redis/go-redis/v9"
+
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 )
 
 // для решения проблемы race condition между incr и count == 1
