@@ -326,7 +326,7 @@ const file_spot_v1_spot_proto_rawDesc = "" +
 	"\x06market\x18\x01 \x01(\v2\x0f.spot.v1.MarketR\x06market2\xb1\x01\n" +
 	"\x15SpotInstrumentService\x12H\n" +
 	"\vViewMarkets\x12\x1b.spot.v1.ViewMarketsRequest\x1a\x1c.spot.v1.ViewMarketsResponse\x12N\n" +
-	"\rGetMarketByID\x12\x1d.spot.v1.GetMarketByIDRequest\x1a\x1e.spot.v1.GetMarketByIDResponseB\x17Z\x15zhadan.spot.v1;spotv1b\x06proto3"
+	"\rGetMarketByID\x12\x1d.spot.v1.GetMarketByIDRequest\x1a\x1e.spot.v1.GetMarketByIDResponseBFZDgithub.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1;spotv1b\x06proto3"
 
 var (
 	file_spot_v1_spot_proto_rawDescOnce sync.Once

@@ -148,7 +148,7 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"TYPE_LIMIT\x10\x01\x12\x0f\n" +
 	"\vTYPE_MARKET\x10\x02\x12\x12\n" +
 	"\x0eTYPE_STOP_LOSS\x10\x03\x12\x14\n" +
-	"\x10TYPE_TAKE_PROFIT\x10\x04B\x1bZ\x19zhadan.common.v1;commonv1b\x06proto3"
+	"\x10TYPE_TAKE_PROFIT\x10\x04BJZHgithub.com/nastyazhadan/spot-order-grpc/protos/gen/go/common/v1;commonv1b\x06proto3"
 
 var (
 	file_common_v1_common_proto_rawDescOnce sync.Once

@@ -11,12 +11,14 @@ import (
 
 func LoadAll(configDir string) error {
 	if configDir == "" {
-		return fmt.Errorf("configDir is empty")
+		configDir = "."
 	}
 
 	envPath := filepath.Join(configDir, ".env")
-	if err := godotenv.Load(envPath); err != nil {
-		return fmt.Errorf("load .env file %q: %w", envPath, err)
+	if _, err := os.Stat(envPath); err == nil {
+		if err = godotenv.Load(envPath); err != nil {
+			return fmt.Errorf("load .env file %q: %w", envPath, err)
+		}
 	}
 
 	configPath := filepath.Join(configDir, "config.yaml")

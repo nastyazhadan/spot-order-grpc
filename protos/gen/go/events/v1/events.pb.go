@@ -7,6 +7,7 @@
 package eventsv1
 
 import (
+	v1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/common/v1"
 	decimal "google.golang.org/genproto/googleapis/type/decimal"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -14,7 +15,6 @@ import (
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-	zhadan_common_v1 "zhadan.common.v1"
 )
 
 const (
@@ -25,16 +25,16 @@ const (
 )
 
 type OrderCreatedEvent struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	EventId       string                       `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	OrderId       string                       `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	UserId        string                       `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	MarketId      string                       `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
-	OrderType     zhadan_common_v1.OrderType   `protobuf:"varint,5,opt,name=order_type,json=orderType,proto3,enum=common.v1.OrderType" json:"order_type,omitempty"`
-	Price         *decimal.Decimal             `protobuf:"bytes,6,opt,name=price,proto3" json:"price,omitempty"`
-	Quantity      int64                        `protobuf:"varint,7,opt,name=quantity,proto3" json:"quantity,omitempty"`
-	Status        zhadan_common_v1.OrderStatus `protobuf:"varint,8,opt,name=status,proto3,enum=common.v1.OrderStatus" json:"status,omitempty"`
-	CreatedAt     *timestamppb.Timestamp       `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	OrderId       string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	MarketId      string                 `protobuf:"bytes,4,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
+	OrderType     v1.OrderType           `protobuf:"varint,5,opt,name=order_type,json=orderType,proto3,enum=common.v1.OrderType" json:"order_type,omitempty"`
+	Price         *decimal.Decimal       `protobuf:"bytes,6,opt,name=price,proto3" json:"price,omitempty"`
+	Quantity      int64                  `protobuf:"varint,7,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	Status        v1.OrderStatus         `protobuf:"varint,8,opt,name=status,proto3,enum=common.v1.OrderStatus" json:"status,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -97,11 +97,11 @@ func (x *OrderCreatedEvent) GetMarketId() string {
 	return ""
 }
 
-func (x *OrderCreatedEvent) GetOrderType() zhadan_common_v1.OrderType {
+func (x *OrderCreatedEvent) GetOrderType() v1.OrderType {
 	if x != nil {
 		return x.OrderType
 	}
-	return zhadan_common_v1.OrderType(0)
+	return v1.OrderType(0)
 }
 
 func (x *OrderCreatedEvent) GetPrice() *decimal.Decimal {
@@ -118,11 +118,11 @@ func (x *OrderCreatedEvent) GetQuantity() int64 {
 	return 0
 }
 
-func (x *OrderCreatedEvent) GetStatus() zhadan_common_v1.OrderStatus {
+func (x *OrderCreatedEvent) GetStatus() v1.OrderStatus {
 	if x != nil {
 		return x.Status
 	}
-	return zhadan_common_v1.OrderStatus(0)
+	return v1.OrderStatus(0)
 }
 
 func (x *OrderCreatedEvent) GetCreatedAt() *timestamppb.Timestamp {
@@ -133,13 +133,13 @@ func (x *OrderCreatedEvent) GetCreatedAt() *timestamppb.Timestamp {
 }
 
 type OrderStatusUpdatedEvent struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	EventId       string                       `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	OrderId       string                       `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	NewStatus     zhadan_common_v1.OrderStatus `protobuf:"varint,3,opt,name=new_status,json=newStatus,proto3,enum=common.v1.OrderStatus" json:"new_status,omitempty"`
-	Reason        string                       `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
-	CorrelationId string                       `protobuf:"bytes,5,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp       `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	OrderId       string                 `protobuf:"bytes,2,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	NewStatus     v1.OrderStatus         `protobuf:"varint,3,opt,name=new_status,json=newStatus,proto3,enum=common.v1.OrderStatus" json:"new_status,omitempty"`
+	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	CorrelationId string                 `protobuf:"bytes,5,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -188,11 +188,11 @@ func (x *OrderStatusUpdatedEvent) GetOrderId() string {
 	return ""
 }
 
-func (x *OrderStatusUpdatedEvent) GetNewStatus() zhadan_common_v1.OrderStatus {
+func (x *OrderStatusUpdatedEvent) GetNewStatus() v1.OrderStatus {
 	if x != nil {
 		return x.NewStatus
 	}
-	return zhadan_common_v1.OrderStatus(0)
+	return v1.OrderStatus(0)
 }
 
 func (x *OrderStatusUpdatedEvent) GetReason() string {
@@ -325,7 +325,7 @@ const file_events_v1_events_proto_rawDesc = "" +
 	"\n" +
 	"deleted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\x1bZ\x19zhadan.events.v1;eventsv1b\x06proto3"
+	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtBJZHgithub.com/nastyazhadan/spot-order-grpc/protos/gen/go/events/v1;eventsv1b\x06proto3"
 
 var (
 	file_events_v1_events_proto_rawDescOnce sync.Once
@@ -341,13 +341,13 @@ func file_events_v1_events_proto_rawDescGZIP() []byte {
 
 var file_events_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_events_v1_events_proto_goTypes = []any{
-	(*OrderCreatedEvent)(nil),         // 0: events.v1.OrderCreatedEvent
-	(*OrderStatusUpdatedEvent)(nil),   // 1: events.v1.OrderStatusUpdatedEvent
-	(*MarketStateChangedEvent)(nil),   // 2: events.v1.MarketStateChangedEvent
-	(zhadan_common_v1.OrderType)(0),   // 3: common.v1.OrderType
-	(*decimal.Decimal)(nil),           // 4: google.type.Decimal
-	(zhadan_common_v1.OrderStatus)(0), // 5: common.v1.OrderStatus
-	(*timestamppb.Timestamp)(nil),     // 6: google.protobuf.Timestamp
+	(*OrderCreatedEvent)(nil),       // 0: events.v1.OrderCreatedEvent
+	(*OrderStatusUpdatedEvent)(nil), // 1: events.v1.OrderStatusUpdatedEvent
+	(*MarketStateChangedEvent)(nil), // 2: events.v1.MarketStateChangedEvent
+	(v1.OrderType)(0),               // 3: common.v1.OrderType
+	(*decimal.Decimal)(nil),         // 4: google.type.Decimal
+	(v1.OrderStatus)(0),             // 5: common.v1.OrderStatus
+	(*timestamppb.Timestamp)(nil),   // 6: google.protobuf.Timestamp
 }
 var file_events_v1_events_proto_depIdxs = []int32{
 	3, // 0: events.v1.OrderCreatedEvent.order_type:type_name -> common.v1.OrderType

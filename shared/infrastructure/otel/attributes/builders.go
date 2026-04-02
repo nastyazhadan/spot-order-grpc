@@ -26,6 +26,7 @@ func CacheCorruptedValue(v bool) attribute.KeyValue { return attribute.Bool(Cach
 func CacheCorruptedReasonValue(v string) attribute.KeyValue {
 	return attribute.String(CacheCorruptedReason, v)
 }
+
 func CacheInvalidationFailedValue(v bool) attribute.KeyValue {
 	return attribute.Bool(CacheInvalidationFailed, v)
 }
@@ -40,6 +41,7 @@ func MessagingSystemValue(v string) attribute.KeyValue { return attribute.String
 func MessagingDestinationValue(v string) attribute.KeyValue {
 	return attribute.String(MessagingDestination, v)
 }
+
 func MessagingDestinationKindValue(v string) attribute.KeyValue {
 	return attribute.String(MessagingDestinationKind, v)
 }
@@ -64,6 +66,7 @@ func MarketBlockedValue(v bool) attribute.KeyValue { return attribute.Bool(Marke
 func MarketBlockSyncFailedValue(v bool) attribute.KeyValue {
 	return attribute.Bool(MarketBlockSyncFailed, v)
 }
+
 func MarketBlockSyncReasonValue(v string) attribute.KeyValue {
 	return attribute.String(MarketBlockSyncReason, v)
 }

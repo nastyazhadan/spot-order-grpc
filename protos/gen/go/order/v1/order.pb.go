@@ -8,13 +8,13 @@ package orderv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	v1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/common/v1"
 	decimal "google.golang.org/genproto/googleapis/type/decimal"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-	zhadan_common_v1 "zhadan.common.v1"
 )
 
 const (
@@ -69,8 +69,8 @@ func (x *GetOrderStatusRequest) GetOrderId() string {
 }
 
 type GetOrderStatusResponse struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	Status        zhadan_common_v1.OrderStatus `protobuf:"varint,1,opt,name=status,proto3,enum=common.v1.OrderStatus" json:"status,omitempty"` // Status of the order
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        v1.OrderStatus         `protobuf:"varint,1,opt,name=status,proto3,enum=common.v1.OrderStatus" json:"status,omitempty"` // Status of the order
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -105,19 +105,19 @@ func (*GetOrderStatusResponse) Descriptor() ([]byte, []int) {
 	return file_order_v1_order_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *GetOrderStatusResponse) GetStatus() zhadan_common_v1.OrderStatus {
+func (x *GetOrderStatusResponse) GetStatus() v1.OrderStatus {
 	if x != nil {
 		return x.Status
 	}
-	return zhadan_common_v1.OrderStatus(0)
+	return v1.OrderStatus(0)
 }
 
 type CreateOrderRequest struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	MarketId      string                     `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`                              // UUID of the market to create
-	OrderType     zhadan_common_v1.OrderType `protobuf:"varint,3,opt,name=order_type,json=orderType,proto3,enum=common.v1.OrderType" json:"order_type,omitempty"` // Type of the order to create
-	Price         *decimal.Decimal           `protobuf:"bytes,4,opt,name=price,proto3" json:"price,omitempty"`                                                    // Price of the order
-	Quantity      int64                      `protobuf:"varint,5,opt,name=quantity,proto3" json:"quantity,omitempty"`                                             // Quantity of the order
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MarketId      string                 `protobuf:"bytes,2,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`                              // UUID of the market to create
+	OrderType     v1.OrderType           `protobuf:"varint,3,opt,name=order_type,json=orderType,proto3,enum=common.v1.OrderType" json:"order_type,omitempty"` // Type of the order to create
+	Price         *decimal.Decimal       `protobuf:"bytes,4,opt,name=price,proto3" json:"price,omitempty"`                                                    // Price of the order
+	Quantity      int64                  `protobuf:"varint,5,opt,name=quantity,proto3" json:"quantity,omitempty"`                                             // Quantity of the order
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -159,11 +159,11 @@ func (x *CreateOrderRequest) GetMarketId() string {
 	return ""
 }
 
-func (x *CreateOrderRequest) GetOrderType() zhadan_common_v1.OrderType {
+func (x *CreateOrderRequest) GetOrderType() v1.OrderType {
 	if x != nil {
 		return x.OrderType
 	}
-	return zhadan_common_v1.OrderType(0)
+	return v1.OrderType(0)
 }
 
 func (x *CreateOrderRequest) GetPrice() *decimal.Decimal {
@@ -181,9 +181,9 @@ func (x *CreateOrderRequest) GetQuantity() int64 {
 }
 
 type CreateOrderResponse struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	OrderId       string                       `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`            // UUID of the created order
-	Status        zhadan_common_v1.OrderStatus `protobuf:"varint,2,opt,name=status,proto3,enum=common.v1.OrderStatus" json:"status,omitempty"` // Status of the created order
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`            // UUID of the created order
+	Status        v1.OrderStatus         `protobuf:"varint,2,opt,name=status,proto3,enum=common.v1.OrderStatus" json:"status,omitempty"` // Status of the created order
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -225,11 +225,11 @@ func (x *CreateOrderResponse) GetOrderId() string {
 	return ""
 }
 
-func (x *CreateOrderResponse) GetStatus() zhadan_common_v1.OrderStatus {
+func (x *CreateOrderResponse) GetStatus() v1.OrderStatus {
 	if x != nil {
 		return x.Status
 	}
-	return zhadan_common_v1.OrderStatus(0)
+	return v1.OrderStatus(0)
 }
 
 var File_order_v1_order_proto protoreflect.FileDescriptor
@@ -253,7 +253,7 @@ const file_order_v1_order_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\x0e2\x16.common.v1.OrderStatusR\x06status2\xaf\x01\n" +
 	"\fOrderService\x12S\n" +
 	"\x0eGetOrderStatus\x12\x1f.order.v1.GetOrderStatusRequest\x1a .order.v1.GetOrderStatusResponse\x12J\n" +
-	"\vCreateOrder\x12\x1c.order.v1.CreateOrderRequest\x1a\x1d.order.v1.CreateOrderResponseB\x19Z\x17zhadan.order.v1;orderv1b\x06proto3"
+	"\vCreateOrder\x12\x1c.order.v1.CreateOrderRequest\x1a\x1d.order.v1.CreateOrderResponseBHZFgithub.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1;orderv1b\x06proto3"
 
 var (
 	file_order_v1_order_proto_rawDescOnce sync.Once
@@ -269,13 +269,13 @@ func file_order_v1_order_proto_rawDescGZIP() []byte {
 
 var file_order_v1_order_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_order_v1_order_proto_goTypes = []any{
-	(*GetOrderStatusRequest)(nil),     // 0: order.v1.GetOrderStatusRequest
-	(*GetOrderStatusResponse)(nil),    // 1: order.v1.GetOrderStatusResponse
-	(*CreateOrderRequest)(nil),        // 2: order.v1.CreateOrderRequest
-	(*CreateOrderResponse)(nil),       // 3: order.v1.CreateOrderResponse
-	(zhadan_common_v1.OrderStatus)(0), // 4: common.v1.OrderStatus
-	(zhadan_common_v1.OrderType)(0),   // 5: common.v1.OrderType
-	(*decimal.Decimal)(nil),           // 6: google.type.Decimal
+	(*GetOrderStatusRequest)(nil),  // 0: order.v1.GetOrderStatusRequest
+	(*GetOrderStatusResponse)(nil), // 1: order.v1.GetOrderStatusResponse
+	(*CreateOrderRequest)(nil),     // 2: order.v1.CreateOrderRequest
+	(*CreateOrderResponse)(nil),    // 3: order.v1.CreateOrderResponse
+	(v1.OrderStatus)(0),            // 4: common.v1.OrderStatus
+	(v1.OrderType)(0),              // 5: common.v1.OrderType
+	(*decimal.Decimal)(nil),        // 6: google.type.Decimal
 }
 var file_order_v1_order_proto_depIdxs = []int32{
 	4, // 0: order.v1.GetOrderStatusResponse.status:type_name -> common.v1.OrderStatus

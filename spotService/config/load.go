@@ -11,7 +11,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 )
 
-const configDir = ""
+const configDir = "."
 
 func Load() (*config.SpotConfig, error) {
 	if err := config.LoadAll(configDir); err != nil {

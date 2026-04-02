@@ -8,4 +8,3 @@ CREATE TABLE IF NOT EXISTS market_poller_cursor (
 
 -- +goose Down
 DROP TABLE IF EXISTS market_poller_cursor;
-DROP INDEX IF EXISTS idx_market_store_updated_at_id;

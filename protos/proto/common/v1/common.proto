@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package common.v1;
 
-option go_package = "zhadan.common.v1;commonv1";
+option go_package = "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/common/v1;commonv1";
 
 enum OrderStatus {
   STATUS_UNSPECIFIED = 0;

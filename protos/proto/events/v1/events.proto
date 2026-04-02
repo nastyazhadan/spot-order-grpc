@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package events.v1;
 
-option go_package = "zhadan.events.v1;eventsv1";
+option go_package = "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/events/v1;eventsv1";
 
 import "google/protobuf/timestamp.proto";
 import "google/type/decimal.proto";

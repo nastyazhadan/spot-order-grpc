@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package order.v1;
 
-option go_package = "zhadan.order.v1;orderv1";
+option go_package = "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1;orderv1";
 
 import "google/type/decimal.proto";
 import "buf/validate/validate.proto";

@@ -169,8 +169,11 @@ func (s *CompensationService) handleSkippedEvent(
 		return false, fmt.Errorf("commit skipped transaction: %w", err)
 	}
 
-	if currentStatus == models.InboxEventStatusProcessed {
+	switch currentStatus {
+	case models.InboxEventStatusProcessed:
 		s.trySyncMarketBlockState(ctx, span, event, "processed_event_resync")
+	case models.InboxEventStatusProcessing:
+		s.trySyncMarketBlockState(ctx, span, event, "processing_event_resync")
 	}
 
 	return true, nil
@@ -289,7 +292,7 @@ func (s *CompensationService) trySyncMarketBlockState(
 			attributes.MarketBlockSyncReasonValue(reason),
 		)
 
-		s.logger.Warn(syncCtx, "Market block state sync failed after successful transaction",
+		s.logger.Warn(syncCtx, "Market block state sync failed",
 			zap.String("event_id", event.EventID.String()),
 			zap.String("market_id", event.MarketID.String()),
 			zap.String("sync_reason", reason),

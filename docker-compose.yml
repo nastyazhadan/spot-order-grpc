@@ -7,9 +7,10 @@ services:
     container_name: spot-service
     environment:
       SPOT_DB_URI: ${SPOT_DB_URI}
+      JWT_SECRET: ${JWT_SECRET}
     ports:
       - "${SPOT_GRPC_PORT}:50052"
-      - "${SPOT_METRICS_PORT}:9093"
+      - "${SPOT_METRICS_PORT}:9092"
     depends_on:
       postgres:
         condition: service_healthy

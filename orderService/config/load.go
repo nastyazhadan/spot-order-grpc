@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const configDir = ""
+const configDir = "."
 
 func Load() (*config.OrderConfig, error) {
 	if err := config.LoadAll(configDir); err != nil {

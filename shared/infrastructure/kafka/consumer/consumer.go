@@ -179,7 +179,6 @@ func buildDLQHeaders(
 
 func newDLQMessage(message kafka.Message, headers map[string][]byte) kafka.Message {
 	return kafka.Message{
-		Topic:          message.Topic,
 		Headers:        headers,
 		Timestamp:      message.Timestamp,
 		BlockTimestamp: message.BlockTimestamp,

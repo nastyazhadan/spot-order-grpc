@@ -78,3 +78,35 @@ func (d Decimal) String() string {
 func (d Decimal) IsPositive() bool {
 	return d.value.IsPositive()
 }
+
+func (d Decimal) FitsNumeric(maxPrecision, maxScale int) bool {
+	raw := d.value.String()
+	raw = strings.TrimPrefix(raw, "-")
+
+	parts := strings.SplitN(raw, ".", 2)
+
+	integerDigits := countIntegerDigits(parts[0])
+	fractionalDigits := 0
+
+	if len(parts) == 2 {
+		fractionalDigits = countFractionalDigits(parts[1])
+	}
+
+	maxIntegerDigits := maxPrecision - maxScale
+
+	return integerDigits <= maxIntegerDigits && fractionalDigits <= maxScale
+}
+
+func countIntegerDigits(integerPart string) int {
+	trimmed := strings.TrimLeft(integerPart, "0")
+	if trimmed == "" {
+		return 0
+	}
+
+	return len(trimmed)
+}
+
+func countFractionalDigits(fractionalPart string) int {
+	trimmed := strings.TrimRight(fractionalPart, "0")
+	return len(trimmed)
+}

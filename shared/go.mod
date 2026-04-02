@@ -7,6 +7,7 @@ replace github.com/nastyazhadan/spot-order-grpc/protos => ../protos
 require (
 	buf.build/go/protovalidate v1.1.3
 	github.com/IBM/sarama v1.47.0
+	github.com/go-faster/errors v0.7.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.1

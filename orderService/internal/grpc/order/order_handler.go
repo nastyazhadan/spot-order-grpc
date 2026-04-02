@@ -18,7 +18,11 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 )
 
-const minQuantity = 0
+const (
+	minQuantity    = 0
+	pricePrecision = 18
+	priceScale     = 8
+)
 
 type OrderService interface {
 	CreateOrder(ctx context.Context,
@@ -37,6 +41,7 @@ type OrderService interface {
 type serverAPI struct {
 	proto.UnimplementedOrderServiceServer
 	service OrderService
+	logger  *zapLogger.Logger
 }
 
 func Register(server *grpc.Server, service OrderService) {
@@ -68,7 +73,7 @@ func (s *serverAPI) CreateOrder(
 	orderType := mapper.TypeFromProto(request.GetOrderType())
 	orderQuantity := request.GetQuantity()
 
-	ctx = zapLogger.WithFields(ctx,
+	ctx = s.logger.WithFields(ctx,
 		zap.String("market_id", marketID.String()),
 		zap.String("price", orderPrice.String()),
 		zap.Int64("quantity", orderQuantity),
@@ -107,7 +112,7 @@ func (s *serverAPI) GetOrderStatus(
 		return nil, status.Error(codes.InvalidArgument, "order_id must be a valid UUID")
 	}
 
-	ctx = zapLogger.WithFields(ctx,
+	ctx = s.logger.WithFields(ctx,
 		zap.String("order_id", orderID.String()),
 	)
 
@@ -154,6 +159,13 @@ func validatePrice(request *proto.CreateOrderRequest) (shared.Decimal, error) {
 
 	if !validPrice.IsPositive() {
 		return shared.Decimal{}, status.Error(codes.InvalidArgument, "price must be > 0")
+	}
+
+	if !validPrice.FitsNumeric(pricePrecision, priceScale) {
+		return shared.Decimal{}, status.Error(
+			codes.InvalidArgument,
+			"price must have at most 10 integer digits and 8 fractional digits",
+		)
 	}
 
 	return validPrice, nil

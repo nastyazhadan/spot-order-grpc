@@ -4,7 +4,7 @@ package auth.v1;
 
 import "buf/validate/validate.proto";
 
-option go_package = "zhadan.auth.v1;authv1";
+option go_package = "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/auth/v1;authv1";
 
 service AuthService {
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);

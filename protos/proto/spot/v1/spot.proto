@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package spot.v1;
 
-option go_package = "zhadan.spot.v1;spotv1";
+option go_package = "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1;spotv1";
 
 import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
