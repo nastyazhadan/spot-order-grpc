@@ -7,12 +7,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
@@ -40,9 +40,9 @@ func (s *OutboxStore) SaveOutboxEvent(ctx context.Context, transaction pgx.Tx, e
 
 	ctx, span := tracing.StartSpan(ctx, "outbox.save_event",
 		trace.WithAttributes(
-			attribute.String("event_id", event.EventID.String()),
-			attribute.String("event_type", event.EventType),
-			attribute.String("aggregate_id", event.AggregateID.String()),
+			attributes.EventIDValue(event.EventID.String()),
+			attributes.EventTypeValue(event.EventType),
+			attributes.AggregateIDValue(event.AggregateID.String()),
 		),
 	)
 	defer span.End()
@@ -78,7 +78,7 @@ func (s *OutboxStore) ClaimPendingEvents(ctx context.Context, limit int) ([]mode
 	const op = "OutboxStore.ClaimPendingEvents"
 
 	ctx, span := tracing.StartSpan(ctx, "outbox.claim_pending",
-		trace.WithAttributes(attribute.Int("batch.limit", limit)),
+		trace.WithAttributes(attributes.BatchLimitValue(limit)),
 	)
 	defer span.End()
 
@@ -117,7 +117,7 @@ func (s *OutboxStore) ClaimPendingEvents(ctx context.Context, limit int) ([]mode
 		return nil, fmt.Errorf("%s: collect: %w", op, err)
 	}
 
-	span.SetAttributes(attribute.Int("batch.claimed", len(events)))
+	span.SetAttributes(attributes.BatchSizeValue(len(events)))
 
 	if len(events) == 0 {
 		return events, nil
@@ -139,8 +139,8 @@ func (s *OutboxStore) MarkPublished(ctx context.Context, event models.OutboxEven
 
 	ctx, span := tracing.StartSpan(ctx, "outbox.mark_published",
 		trace.WithAttributes(
-			attribute.String("outbox_id", event.ID.String()),
-			attribute.String("event_id", event.EventID.String()),
+			attributes.OutboxIDValue(event.ID.String()),
+			attributes.EventIDValue(event.EventID.String()),
 		),
 	)
 	defer span.End()
@@ -182,9 +182,9 @@ func (s *OutboxStore) ScheduleRetry(
 
 	ctx, span := tracing.StartSpan(ctx, "outbox.schedule_retry",
 		trace.WithAttributes(
-			attribute.String("outbox_id", event.ID.String()),
-			attribute.String("event_id", event.EventID.String()),
-			attribute.Int("retry_count.current", event.RetryCount),
+			attributes.OutboxIDValue(event.ID.String()),
+			attributes.EventIDValue(event.EventID.String()),
+			attributes.RetryCountValue(event.RetryCount),
 		),
 	)
 	defer span.End()
@@ -222,9 +222,9 @@ func (s *OutboxStore) MarkFailed(ctx context.Context, event models.OutboxEvent, 
 
 	ctx, span := tracing.StartSpan(ctx, "outbox.mark_failed",
 		trace.WithAttributes(
-			attribute.String("outbox_id", event.ID.String()),
-			attribute.String("event_id", event.EventID.String()),
-			attribute.Int("retry_count.current", event.RetryCount),
+			attributes.OutboxIDValue(event.ID.String()),
+			attributes.EventIDValue(event.EventID.String()),
+			attributes.RetryCountValue(event.RetryCount),
 		),
 	)
 	defer span.End()
@@ -265,7 +265,7 @@ func (s *OutboxStore) ReleaseStuckEvents(ctx context.Context, stuckBefore time.T
 
 	ctx, span := tracing.StartSpan(ctx, "outbox.release_stuck",
 		trace.WithAttributes(
-			attribute.String("stuck_before", stuckBefore.String()),
+			attributes.StuckEventValue(stuckBefore.String()),
 		),
 	)
 	defer span.End()
@@ -290,7 +290,7 @@ func (s *OutboxStore) ReleaseStuckEvents(ctx context.Context, stuckBefore time.T
 	}
 
 	released := result.RowsAffected()
-	span.SetAttributes(attribute.Int64("released_count", released))
+	span.SetAttributes(attributes.ReleasedEventCountValue(released))
 
 	return released, nil
 }

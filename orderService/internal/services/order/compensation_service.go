@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -82,12 +83,12 @@ func (s *CompensationService) ProcessMarketStateChanged(
 
 	ctx, span := tracing.StartSpan(ctx, "market_compensation.process",
 		trace.WithAttributes(
-			attribute.String("event_id", event.EventID.String()),
-			attribute.String("market_id", event.MarketID.String()),
+			attributes.EventIDValue(event.EventID.String()),
+			attributes.MarketIDValue(event.MarketID.String()),
 			attribute.String("topic", topic),
-			attribute.String("consumer_group", consumerGroup),
-			attribute.Bool("market_enabled", event.Enabled),
-			attribute.Bool("market_deleted", event.DeletedAt != nil),
+			attributes.ConsumerGroupValue(consumerGroup),
+			attributes.MarketEnabledValue(event.Enabled),
+			attributes.MarketDeletedValue(event.DeletedAt != nil),
 		),
 	)
 	defer span.End()
@@ -194,7 +195,7 @@ func (s *CompensationService) applyCompensationTransaction(
 		return err
 	}
 
-	span.SetAttributes(attribute.Int("orders_cancelled_count", len(cancelledIDs)))
+	span.SetAttributes(attributes.OrdersCancelledCountValue(len(cancelledIDs)))
 
 	return nil
 }
@@ -284,8 +285,8 @@ func (s *CompensationService) trySyncMarketBlockState(
 			Inc()
 
 		span.SetAttributes(
-			attribute.Bool("market_block_sync_failed", true),
-			attribute.String("market_block_sync_reason", reason),
+			attributes.MarketBlockSyncFailedValue(true),
+			attributes.MarketBlockSyncReasonValue(reason),
 		)
 
 		s.logger.Warn(syncCtx, "Market block state sync failed after successful transaction",

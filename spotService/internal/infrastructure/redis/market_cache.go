@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
 	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
@@ -21,6 +21,7 @@ import (
 
 const (
 	cacheKeyPrefix = "market:cache"
+	dbSystem       = "redis"
 )
 
 type MarketCacheRepository struct {
@@ -44,8 +45,8 @@ func (m *MarketCacheRepository) GetAll(
 	ctx, span := tracing.StartSpan(ctx, "redis.get_markets",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
-			attribute.String("db.system", "redis"),
-			attribute.String("role_key", roleKey),
+			attributes.DBSystemValue(dbSystem),
+			attributes.UserRoleKeyValue(roleKey),
 		),
 	)
 	defer span.End()
@@ -103,10 +104,10 @@ func (m *MarketCacheRepository) SetAll(
 	ctx, span := tracing.StartSpan(ctx, "redis.set_markets",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
-			attribute.String("db.system", "redis"),
-			attribute.String("role_key", roleKey),
-			attribute.Int("markets_count", len(markets)),
-			attribute.String("ttl", ttl.String()),
+			attributes.DBSystemValue(dbSystem),
+			attributes.UserRoleKeyValue(roleKey),
+			attributes.MarketsCountValue(len(markets)),
+			attributes.CacheTTLValue(ttl),
 		),
 	)
 	defer span.End()
@@ -160,13 +161,13 @@ func (m *MarketCacheRepository) invalidateCorruptedCache(
 	cause error,
 ) {
 	span.SetAttributes(
-		attribute.Bool("cache_corrupted", true),
-		attribute.String("cache_corruption_reason", reason),
+		attributes.CacheCorruptedValue(true),
+		attributes.CacheCorruptedReasonValue(reason),
 	)
 	tracing.RecordError(span, cause)
 
 	if err := m.Delete(ctx, roleKey); err != nil {
-		span.SetAttributes(attribute.Bool("cache_invalidation_failed", true))
+		span.SetAttributes(attributes.CacheInvalidationFailedValue(true))
 		tracing.RecordError(span, err)
 
 		metrics.CacheInvalidationsTotal.

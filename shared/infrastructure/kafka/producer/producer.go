@@ -6,11 +6,11 @@ import (
 
 	"github.com/IBM/sarama"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
@@ -64,9 +64,9 @@ func (p *producer) sendMessage(ctx context.Context, msg kafka.Message) error {
 		"kafka.produce",
 		trace.WithSpanKind(trace.SpanKindProducer),
 		trace.WithAttributes(
-			attribute.String("messaging.system", kafka.SystemName),
-			attribute.String("messaging.destination", topic),
-			attribute.String("messaging.destination_kind", kafka.DestinationKind),
+			attributes.MessagingSystemValue(kafka.SystemName),
+			attributes.MessagingDestinationValue(topic),
+			attributes.MessagingDestinationKindValue(kafka.DestinationKind),
 		),
 	)
 	defer span.End()

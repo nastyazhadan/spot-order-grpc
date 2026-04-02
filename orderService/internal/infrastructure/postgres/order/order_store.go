@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
 	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/outbound/postgres"
@@ -18,6 +17,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
@@ -46,10 +46,10 @@ func (o *OrderStore) SaveOrder(ctx context.Context, transaction pgx.Tx, order mo
 	ctx, span := tracing.StartSpan(ctx, "postgres.save_order_transaction",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
-			attribute.String("db.system", databaseName),
-			attribute.String("order_id", order.ID.String()),
-			attribute.String("user_id", order.UserID.String()),
-			attribute.String("market_id", order.MarketID.String()),
+			attributes.DBSystemValue(databaseName),
+			attributes.OrderIDValue(order.ID.String()),
+			attributes.UserIDValue(order.UserID.String()),
+			attributes.MarketIDValue(order.MarketID.String()),
 		),
 	)
 	defer span.End()
@@ -86,9 +86,9 @@ func (o *OrderStore) GetOrder(ctx context.Context, id, userID uuid.UUID) (models
 	ctx, span := tracing.StartSpan(ctx, "postgres.get_order",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
-			attribute.String("db.system", databaseName),
-			attribute.String("order_id", id.String()),
-			attribute.String("user_id", userID.String()),
+			attributes.DBSystemValue(databaseName),
+			attributes.OrderIDValue(id.String()),
+			attributes.UserIDValue(userID.String()),
 		),
 	)
 	defer span.End()
@@ -129,8 +129,8 @@ func (o *OrderStore) GetOrder(ctx context.Context, id, userID uuid.UUID) (models
 	}
 
 	span.SetAttributes(
-		attribute.String("order_status", order.Status.String()),
-		attribute.String("order_type", order.Type.String()),
+		attributes.OrderStatusValue(order.Status.String()),
+		attributes.OrderTypeValue(order.Type.String()),
 	)
 
 	return order, nil
@@ -145,7 +145,7 @@ func (o *OrderStore) CancelActiveOrdersByMarket(
 
 	ctx, span := tracing.StartSpan(ctx, "order.cancel_active_by_market",
 		trace.WithAttributes(
-			attribute.String("market_id", marketID.String()),
+			attributes.MarketIDValue(marketID.String()),
 		),
 	)
 	defer span.End()
@@ -186,7 +186,7 @@ func (o *OrderStore) CancelActiveOrdersByMarket(
 		return nil, fmt.Errorf("%s: collect cancelled order ids: %w", op, err)
 	}
 
-	span.SetAttributes(attribute.Int("orders_cancelled_count", len(cancelledIDs)))
+	span.SetAttributes(attributes.OrdersCancelledCountValue(len(cancelledIDs)))
 
 	return cancelledIDs, nil
 }

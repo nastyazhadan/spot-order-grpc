@@ -14,6 +14,7 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 )
@@ -39,9 +40,9 @@ func (s *InboxStore) BeginProcessing(
 
 	ctx, span := tracing.StartSpan(ctx, "inbox.begin_processing",
 		trace.WithAttributes(
-			attribute.String("event_id", event.EventID.String()),
+			attributes.EventIDValue(event.EventID.String()),
 			attribute.String("topic", event.Topic),
-			attribute.String("consumer_group", event.ConsumerGroup),
+			attributes.ConsumerGroupValue(event.ConsumerGroup),
 		),
 	)
 	defer span.End()
@@ -139,8 +140,8 @@ func (s *InboxStore) MarkProcessed(
 
 	ctx, span := tracing.StartSpan(ctx, "inbox.mark_processed",
 		trace.WithAttributes(
-			attribute.String("event_id", eventID.String()),
-			attribute.String("consumer_group", consumerGroup),
+			attributes.EventIDValue(eventID.String()),
+			attributes.ConsumerGroupValue(consumerGroup),
 		),
 	)
 	defer span.End()
@@ -180,9 +181,9 @@ func (s *InboxStore) SaveFailed(
 
 	ctx, span := tracing.StartSpan(ctx, "inbox.save_failed",
 		trace.WithAttributes(
-			attribute.String("event_id", event.EventID.String()),
+			attributes.EventIDValue(event.EventID.String()),
 			attribute.String("topic", event.Topic),
-			attribute.String("consumer_group", event.ConsumerGroup),
+			attributes.ConsumerGroupValue(event.ConsumerGroup),
 		),
 	)
 	defer span.End()

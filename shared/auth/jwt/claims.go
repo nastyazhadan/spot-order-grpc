@@ -14,4 +14,5 @@ const (
 type Claims struct {
 	jwt.RegisteredClaims
 	TokenType TokenType `json:"token_type"`
+	SessionID string    `json:"session_id"`
 }

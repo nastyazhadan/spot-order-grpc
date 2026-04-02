@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
@@ -106,7 +106,7 @@ func (w *Worker) processBatch(ctx context.Context) {
 	defer cancel()
 
 	claimCtx, span := tracing.StartSpan(claimCtx, "spot.outbox.worker.process_batch",
-		trace.WithAttributes(attribute.Int("batch.max_size", w.batchSize)),
+		trace.WithAttributes(attributes.BatchSizeValue(w.batchSize)),
 	)
 	defer span.End()
 
@@ -129,7 +129,7 @@ func (w *Worker) processBatch(ctx context.Context) {
 		return
 	}
 
-	span.SetAttributes(attribute.Int("batch.fetched", len(events)))
+	span.SetAttributes(attributes.BatchSizeValue(len(events)))
 
 	for _, event := range events {
 		if ctxError := ctx.Err(); ctxError != nil {
@@ -158,7 +158,7 @@ func (w *Worker) releaseStuck(ctx context.Context) {
 	}
 
 	if released > 0 {
-		span.SetAttributes(attribute.Int64("released_count", released))
+		span.SetAttributes(attributes.ReleasedEventCountValue(released))
 		w.logger.Warn(releaseCtx, "Released stuck outbox events back to pending",
 			zap.Int64("count", released),
 			zap.Time("stuck_before", stuckBefore),
@@ -173,9 +173,9 @@ func (w *Worker) processEvent(ctx context.Context, event models.OutboxEvent) {
 
 	sendCtx, span := tracing.StartSpan(sendCtx, "spot.outbox.worker.publish_event",
 		trace.WithAttributes(
-			attribute.String("event_type", event.EventType),
-			attribute.String("aggregate_id", event.AggregateID.String()),
-			attribute.Int("retry_count", event.RetryCount),
+			attributes.EventTypeValue(event.EventType),
+			attributes.AggregateIDValue(event.AggregateID.String()),
+			attributes.RetryCountValue(event.RetryCount),
 		),
 	)
 	defer span.End()

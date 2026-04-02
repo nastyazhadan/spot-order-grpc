@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
@@ -17,6 +16,7 @@ import (
 	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
@@ -92,7 +92,7 @@ func (s *MarketViewer) ViewMarkets(ctx context.Context, userRoles []models.UserR
 		tracing.RecordError(span, err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	span.SetAttributes(attribute.Int("markets_count", len(markets)))
+	span.SetAttributes(attributes.MarketsCountValue(len(markets)))
 
 	return markets, nil
 }
@@ -111,7 +111,7 @@ func (s *MarketViewer) GetMarketByID(
 	}
 
 	ctx, span := tracing.StartSpan(ctx, "spot.get_market_by_id",
-		trace.WithAttributes(attribute.String("market_id", id.String())),
+		trace.WithAttributes(attributes.MarketIDValue(id.String())),
 	)
 	defer span.End()
 
@@ -248,7 +248,7 @@ func (s *MarketViewer) loadAndWarmCache(ctx context.Context, roleKey string) ([]
 	const op = "MarketViewer.loadAndWarmCache"
 
 	ctx, span := tracing.StartSpan(ctx, "spot.load_and_warm_cache",
-		trace.WithAttributes(attribute.String("roleKey", roleKey)),
+		trace.WithAttributes(attributes.UserRoleKeyValue(roleKey)),
 	)
 	defer span.End()
 

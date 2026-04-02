@@ -52,9 +52,10 @@ var ServiceProviders = fx.Options(
 )
 
 type container struct {
-	JWTManager   *authjwt.Manager
-	AuthService  *authService.AuthService
-	OrderService *orderService.OrderService
+	JWTManager        *authjwt.Manager
+	RefreshTokenStore *authStore.RefreshTokenStore
+	AuthService       *authService.AuthService
+	OrderService      *orderService.OrderService
 }
 
 func provideRateLimiters(store *cache.Store, cfg config.OrderConfig) orderService.RateLimiters {
@@ -247,12 +248,14 @@ func provideConsumerService(
 
 func provideContainer(
 	jwtManager *authjwt.Manager,
+	tokenStore *authStore.RefreshTokenStore,
 	authService *authService.AuthService,
 	orderService *orderService.OrderService,
 ) *container {
 	return &container{
-		JWTManager:   jwtManager,
-		AuthService:  authService,
-		OrderService: orderService,
+		JWTManager:        jwtManager,
+		RefreshTokenStore: tokenStore,
+		AuthService:       authService,
+		OrderService:      orderService,
 	}
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/nastyazhadan/spot-order-grpc/shared/auth"
+	authStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/auth"
 	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 )
@@ -50,13 +50,14 @@ func main() {
 	)
 
 	refreshJTI := uuid.NewString()
+	sessionID := uuid.NewString()
 
-	accessToken, err := jwtManager.GenerateAccessToken(userID)
+	accessToken, err := jwtManager.GenerateAccessToken(userID, sessionID)
 	if err != nil {
 		log.Fatalf("failed to generate access token: %v", err)
 	}
 
-	refreshToken, err := jwtManager.GenerateRefreshToken(userID, refreshJTI)
+	refreshToken, err := jwtManager.GenerateRefreshToken(userID, refreshJTI, sessionID)
 	if err != nil {
 		log.Fatalf("failed to generate refresh token: %v", err)
 	}
@@ -64,15 +65,15 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRedisTimeout)
 	defer cancel()
 
-	if err = saveRefreshToken(ctx, userID, refreshJTI, defaultRefreshTokenTTL); err != nil {
-		log.Fatalf("failed to save refresh token in redis: %v", err)
+	if err = replaceSession(ctx, userID, refreshJTI, sessionID, defaultRefreshTokenTTL); err != nil {
+		log.Fatalf("failed to save auth session in redis: %v", err)
 	}
 
 	fmt.Printf("access_token: %s\n", accessToken)
 	fmt.Printf("refresh_token: %s\n", refreshToken)
 }
 
-func saveRefreshToken(ctx context.Context, userID uuid.UUID, jti string, ttl time.Duration) error {
+func replaceSession(ctx context.Context, userID uuid.UUID, jti, sessionID string, ttl time.Duration) error {
 	client := redis.NewClient(&redis.Options{
 		Addr:         redisAddress(),
 		DialTimeout:  defaultRedisTimeout,
@@ -84,8 +85,9 @@ func saveRefreshToken(ctx context.Context, userID uuid.UUID, jti string, ttl tim
 	}()
 
 	store := cache.New(client)
+	tokenStore := authStore.New(store, ttl)
 
-	return auth.Save(ctx, store, ttl, userID, jti)
+	return tokenStore.Replace(ctx, userID, jti, sessionID)
 }
 
 func redisAddress() string {

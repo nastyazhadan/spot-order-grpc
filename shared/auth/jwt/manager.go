@@ -24,7 +24,7 @@ func NewManager(secret string, accessTTL, refreshTTL time.Duration) *Manager {
 	}
 }
 
-func (m *Manager) GenerateAccessToken(userID uuid.UUID) (string, error) {
+func (m *Manager) GenerateAccessToken(userID uuid.UUID, sessionID string) (string, error) {
 	now := time.Now()
 
 	claims := &Claims{
@@ -34,6 +34,7 @@ func (m *Manager) GenerateAccessToken(userID uuid.UUID) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTTL)),
 		},
 		TokenType: TokenTypeAccess,
+		SessionID: sessionID,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -46,7 +47,7 @@ func (m *Manager) GenerateAccessToken(userID uuid.UUID) (string, error) {
 	return signed, nil
 }
 
-func (m *Manager) GenerateRefreshToken(userID uuid.UUID, jti string) (string, error) {
+func (m *Manager) GenerateRefreshToken(userID uuid.UUID, jti, sessionID string) (string, error) {
 	now := time.Now()
 
 	claims := &Claims{
@@ -57,6 +58,7 @@ func (m *Manager) GenerateRefreshToken(userID uuid.UUID, jti string) (string, er
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshTTL)),
 		},
 		TokenType: TokenTypeRefresh,
+		SessionID: sessionID,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -95,6 +97,10 @@ func (m *Manager) ParseToken(tokenString string, expectedType TokenType) (*Claim
 
 	if claims.Subject == "" {
 		return nil, status.Error(codes.Unauthenticated, "subject not found in token")
+	}
+
+	if claims.SessionID == "" {
+		return nil, status.Error(codes.Unauthenticated, "session_id not found in token")
 	}
 
 	return claims, nil

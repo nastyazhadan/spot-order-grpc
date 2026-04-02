@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	mapper "github.com/nastyazhadan/spot-order-grpc/orderService/internal/application/dto/inbound/kafka"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka/consumer"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
@@ -62,10 +62,9 @@ func (c *MarketConsumer) handleMarketStateChanged(ctx context.Context, msg kafka
 
 	ctx, span := tracing.StartSpan(ctx, "market_consumer.handle_market_state_changed",
 		trace.WithAttributes(
-			attribute.String("messaging.system", messagingSystem),
-			attribute.String("messaging.destination", msg.Topic),
-			attribute.Int64("messaging.kafka.offset", msg.Offset),
-			attribute.Int("messaging.message_payload_size_bytes", len(msg.Value)),
+			attributes.MessagingSystemValue(messagingSystem),
+			attributes.MessagingDestinationValue(msg.Topic),
+			attributes.KafkaOffsetValue(msg.Offset),
 		),
 	)
 	defer span.End()
@@ -85,10 +84,10 @@ func (c *MarketConsumer) handleMarketStateChanged(ctx context.Context, msg kafka
 	}
 
 	span.SetAttributes(
-		attribute.String("event_id", event.EventID.String()),
-		attribute.String("market_id", event.MarketID.String()),
-		attribute.Bool("market_enabled", event.Enabled),
-		attribute.Bool("market_deleted", event.DeletedAt != nil),
+		attributes.EventIDValue(event.EventID.String()),
+		attributes.MarketIDValue(event.MarketID.String()),
+		attributes.MarketEnabledValue(event.Enabled),
+		attributes.MarketDeletedValue(event.DeletedAt != nil),
 	)
 
 	if err = c.processor.ProcessMarketStateChanged(

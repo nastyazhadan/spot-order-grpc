@@ -7,11 +7,11 @@ import (
 
 	"github.com/IBM/sarama"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
@@ -98,11 +98,11 @@ func (g *groupHandler) startMessageProcessing(
 		"kafka.consume",
 		trace.WithSpanKind(trace.SpanKindConsumer),
 		trace.WithAttributes(
-			attribute.String("messaging.system", kafka.SystemName),
-			attribute.String("messaging.source", message.Topic),
-			attribute.String("messaging.source_kind", kafka.DestinationKind),
-			attribute.Int("messaging.kafka.partition", int(message.Partition)),
-			attribute.Int64("messaging.kafka.offset", message.Offset),
+			attributes.MessagingSystemValue(kafka.SystemName),
+			attributes.KafkaTopicValue(message.Topic),
+			attributes.MessagingDestinationKindValue(kafka.DestinationKind),
+			attributes.KafkaPartitionValue(message.Partition),
+			attributes.KafkaOffsetValue(message.Offset),
 		),
 	)
 

@@ -18,6 +18,7 @@ import (
 	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
@@ -164,8 +165,8 @@ func (s *OrderService) fetchOrder(
 ) (models.Order, error) {
 	ctx, span := tracing.StartSpan(ctx, "order.fetch_order",
 		trace.WithAttributes(
-			attributeUUID("user_id", userID),
-			attributeUUID("order_id", orderID),
+			attributes.UserIDValue(userID.String()),
+			attributes.OrderIDValue(orderID.String()),
 		),
 	)
 	defer span.End()
@@ -181,8 +182,8 @@ func (s *OrderService) fetchOrder(
 	}
 
 	span.SetAttributes(
-		attribute.String("order_status", order.Status.String()),
-		attribute.String("order_type", order.Type.String()),
+		attributes.OrderStatusValue(order.Status.String()),
+		attributes.OrderTypeValue(order.Type.String()),
 	)
 
 	return order, nil
@@ -199,7 +200,7 @@ func (s *OrderService) checkRateLimit(
 
 	ctx, span := tracing.StartSpan(ctx, "order.check_rate_limit",
 		trace.WithAttributes(
-			attributeUUID("user_id", userID),
+			attributes.UserIDValue(userID.String()),
 			attribute.Int64("limit", limit),
 			attribute.String("window", window.String()),
 		),
@@ -229,7 +230,7 @@ func (s *OrderService) validateMarket(
 	marketID uuid.UUID,
 ) error {
 	ctx, span := tracing.StartSpan(ctx, "order.validate_market",
-		trace.WithAttributes(attributeUUID("market_id", marketID)),
+		trace.WithAttributes(attributes.MarketIDValue(marketID.String())),
 	)
 	defer span.End()
 
@@ -253,9 +254,9 @@ func (s *OrderService) validateMarket(
 	}
 
 	span.SetAttributes(
-		attribute.Bool("market_enabled", market.Enabled),
-		attribute.Bool("market_deleted", market.DeletedAt != nil),
-		attribute.Bool("market_was_blocked", blocked),
+		attributes.MarketEnabledValue(market.Enabled),
+		attributes.MarketDeletedValue(market.DeletedAt != nil),
+		attributes.MarketBlockedValue(blocked),
 	)
 
 	if market.DeletedAt != nil {
@@ -295,11 +296,6 @@ func (s *OrderService) getMarketBlockedState(
 		tracing.RecordError(span, err)
 		return false, err
 	}
-
-	span.SetAttributes(
-		attribute.Bool("market_block_store_lookup_failed", true),
-		attribute.Bool("market_block_store_fallback", true),
-	)
 
 	tracing.RecordError(span, err)
 	metrics.CacheFallbacksTotal.
@@ -454,8 +450,4 @@ func buildOrderCreatedEvent(
 		Status:    order.Status,
 		CreatedAt: now,
 	}
-}
-
-func attributeUUID(key string, id uuid.UUID) attribute.KeyValue {
-	return attribute.String(key, id.String())
 }

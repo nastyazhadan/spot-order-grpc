@@ -12,14 +12,15 @@ import (
 )
 
 type JWTManager interface {
-	GenerateAccessToken(userID uuid.UUID) (string, error)
-	GenerateRefreshToken(userID uuid.UUID, jti string) (string, error)
+	GenerateAccessToken(userID uuid.UUID, sessionID string) (string, error)
+	GenerateRefreshToken(userID uuid.UUID, jti, sessionID string) (string, error)
 	ParseToken(tokenString string, expectedType jwt.TokenType) (*jwt.Claims, error)
 }
 
 type RefreshTokenStore interface {
-	Rotate(ctx context.Context, userID uuid.UUID, oldJTI, newJTI string) (bool, error)
-	Save(ctx context.Context, userID uuid.UUID, jti string) error
+	Rotate(ctx context.Context, userID uuid.UUID, oldJTI, oldSessionID, newJTI, newSessionID string) (bool, error)
+	Replace(ctx context.Context, userID uuid.UUID, newJTI, newSessionID string) error
+	IsSessionActive(ctx context.Context, userID uuid.UUID, sessionID string) (bool, error)
 }
 
 type AuthService struct {
@@ -40,45 +41,58 @@ func (s *AuthService) Refresh(
 	ctx context.Context,
 	refreshToken string,
 ) (newAccessToken, newRefreshToken string, err error) {
-	userID, oldJTI, err := s.validateRefreshToken(refreshToken)
+	userID, oldJTI, oldSessionID, err := s.validateRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return "", "", err
 	}
 
-	return s.rotateTokens(ctx, userID, oldJTI)
+	return s.rotateTokens(ctx, userID, oldJTI, oldSessionID)
 }
 
-func (s *AuthService) validateRefreshToken(refreshToken string) (uuid.UUID, string, error) {
+func (s *AuthService) validateRefreshToken(
+	ctx context.Context,
+	refreshToken string,
+) (uuid.UUID, string, string, error) {
 	claims, err := s.jwtManager.ParseToken(refreshToken, jwt.TokenTypeRefresh)
 	if err != nil {
-		return uuid.Nil, "", err
+		return uuid.Nil, "", "", err
 	}
 
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		return uuid.Nil, "", serviceErrors.ErrInvalidSubject
+		return uuid.Nil, "", "", serviceErrors.ErrInvalidSubject
 	}
 
 	if claims.ID == "" {
-		return uuid.Nil, "", serviceErrors.ErrInvalidJTI
+		return uuid.Nil, "", "", serviceErrors.ErrInvalidJTI
 	}
 
-	return userID, claims.ID, nil
+	active, err := s.store.IsSessionActive(ctx, userID, claims.SessionID)
+	if err != nil {
+		s.logger.Error(ctx, "failed to validate refresh token session", zap.Error(err))
+		return uuid.Nil, "", "", serviceErrors.ErrSaveTokenFailed
+	}
+	if !active {
+		return uuid.Nil, "", "", serviceErrors.ErrTokenRevoked
+	}
+
+	return userID, claims.ID, claims.SessionID, nil
 }
 
 func (s *AuthService) rotateTokens(
 	ctx context.Context,
 	userID uuid.UUID,
-	oldJTI string,
+	oldJTI, oldSessionID string,
 ) (newAccessToken, newRefreshToken string, err error) {
 	newJTI := uuid.NewString()
+	newSessionID := uuid.NewString()
 
-	newAccessToken, newRefreshToken, err = s.generateTokenPair(userID, newJTI)
+	newAccessToken, newRefreshToken, err = s.generateTokenPair(userID, newJTI, newSessionID)
 	if err != nil {
 		return "", "", err
 	}
 
-	rotated, err := s.store.Rotate(ctx, userID, oldJTI, newJTI)
+	rotated, err := s.store.Rotate(ctx, userID, oldJTI, oldSessionID, newJTI, newSessionID)
 	if err != nil {
 		s.logger.Error(ctx, "failed to rotate refresh token", zap.Error(err))
 		return "", "", serviceErrors.ErrSaveTokenFailed
@@ -92,14 +106,14 @@ func (s *AuthService) rotateTokens(
 
 func (s *AuthService) generateTokenPair(
 	userID uuid.UUID,
-	refreshJTI string,
+	refreshJTI, sessionID string,
 ) (accessToken, refreshToken string, err error) {
-	accessToken, err = s.jwtManager.GenerateAccessToken(userID)
+	accessToken, err = s.jwtManager.GenerateAccessToken(userID, sessionID)
 	if err != nil {
 		return "", "", err
 	}
 
-	refreshToken, err = s.jwtManager.GenerateRefreshToken(userID, refreshJTI)
+	refreshToken, err = s.jwtManager.GenerateRefreshToken(userID, refreshJTI, sessionID)
 	if err != nil {
 		return "", "", err
 	}

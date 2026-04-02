@@ -24,7 +24,15 @@ type TokenParser interface {
 	ParseToken(tokenString string, expectedType authjwt.TokenType) (*authjwt.Claims, error)
 }
 
-func UnaryServerInterceptor(jwtManager TokenParser, cfg config.AuthConfig) grpc.UnaryServerInterceptor {
+type SessionValidator interface {
+	IsSessionActive(ctx context.Context, userID uuid.UUID, sessionID string) (bool, error)
+}
+
+func UnaryServerInterceptor(
+	jwtManager TokenParser,
+	sessionValidator SessionValidator,
+	cfg config.AuthConfig,
+) grpc.UnaryServerInterceptor {
 	skipMethods := makeSkipMethods(cfg.SkipMethods)
 
 	return func(
@@ -50,6 +58,14 @@ func UnaryServerInterceptor(jwtManager TokenParser, cfg config.AuthConfig) grpc.
 		userID, err := uuid.Parse(claims.Subject)
 		if err != nil {
 			return nil, status.Error(codes.Unauthenticated, "invalid user_id in token")
+		}
+
+		active, err := sessionValidator.IsSessionActive(ctx, userID, claims.SessionID)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "failed to validate session")
+		}
+		if !active {
+			return nil, status.Error(codes.Unauthenticated, "session revoked")
 		}
 
 		ctx = requestctx.ContextWithUserID(ctx, userID)
