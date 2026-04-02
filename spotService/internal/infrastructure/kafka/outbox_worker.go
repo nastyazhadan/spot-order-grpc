@@ -288,6 +288,7 @@ func (w *Worker) handleSendError(ctx context.Context, event models.OutboxEvent, 
 	)
 }
 
+// События для одного рынка идут в одну партицию
 func (w *Worker) messageKey(event models.OutboxEvent) []byte {
 	return []byte(event.AggregateID.String())
 }

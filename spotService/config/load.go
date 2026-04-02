@@ -6,8 +6,9 @@ import (
 	"net"
 	"os"
 
-	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/spf13/viper"
+
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 )
 
 const configDir = ""
@@ -27,6 +28,11 @@ func Load() (*config.SpotConfig, error) {
 		return nil, errors.New("SPOT_DB_URI is required")
 	}
 
+	cfg.Auth.JWTSecret = os.Getenv("JWT_SECRET")
+	if cfg.Auth.JWTSecret == "" {
+		return nil, errors.New("JWT_SECRET is required")
+	}
+
 	if err := validateSpotConfig(cfg); err != nil {
 		return nil, err
 	}
@@ -36,6 +42,12 @@ func Load() (*config.SpotConfig, error) {
 
 func validateSpotConfig(cfg config.SpotConfig) error {
 	if err := validateSpotService(cfg); err != nil {
+		return err
+	}
+	if err := validateSpotViewMarkets(cfg); err != nil {
+		return err
+	}
+	if err := validateSpotAuth(cfg); err != nil {
 		return err
 	}
 	if err := validateSpotRedis(cfg); err != nil {
@@ -71,6 +83,49 @@ func validateSpotService(cfg config.SpotConfig) error {
 
 	if err := validateTCPAddress("metrics.http_address", cfg.Metrics.HTTPAddress, true); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func validateSpotViewMarkets(cfg config.SpotConfig) error {
+	if cfg.ViewMarkets.DefaultLimit <= 0 {
+		return fmt.Errorf(
+			"view_markets.default_limit must be greater than 0, got %d",
+			cfg.ViewMarkets.DefaultLimit,
+		)
+	}
+	if cfg.ViewMarkets.MaxLimit <= 0 {
+		return fmt.Errorf(
+			"view_markets.max_limit must be greater than 0, got %d",
+			cfg.ViewMarkets.MaxLimit,
+		)
+	}
+	if cfg.ViewMarkets.DefaultLimit > cfg.ViewMarkets.MaxLimit {
+		return fmt.Errorf(
+			"view_markets.default_limit must be less than or equal to view_markets.max_limit, "+
+				"got default_limit=%d max_limit=%d",
+			cfg.ViewMarkets.DefaultLimit,
+			cfg.ViewMarkets.MaxLimit,
+		)
+	}
+
+	return nil
+}
+
+func validateSpotAuth(cfg config.SpotConfig) error {
+	if cfg.Auth.AccessTokenTTL <= 0 {
+		return fmt.Errorf(
+			"auth.access_token_ttl must be greater than 0, got %s",
+			cfg.Auth.AccessTokenTTL,
+		)
+	}
+
+	if cfg.Auth.RefreshTokenTTL <= 0 {
+		return fmt.Errorf(
+			"auth.refresh_token_ttl must be greater than 0, got %s",
+			cfg.Auth.RefreshTokenTTL,
+		)
 	}
 
 	return nil

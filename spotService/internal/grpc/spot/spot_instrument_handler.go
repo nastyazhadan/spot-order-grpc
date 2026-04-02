@@ -15,8 +15,8 @@ import (
 )
 
 type SpotInstrument interface {
-	ViewMarkets(ctx context.Context, userRoles []models.UserRole) ([]models.Market, error)
-	GetMarketByID(ctx context.Context, id uuid.UUID, userRoles []models.UserRole) (models.Market, error)
+	ViewMarkets(ctx context.Context, limit, offset uint64) ([]models.Market, uint64, bool, error)
+	GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error)
 }
 
 type serverAPI struct {
@@ -39,12 +39,7 @@ func (s *serverAPI) ViewMarkets(
 		return nil, status.Error(codes.InvalidArgument, errors.MsgRequestRequired)
 	}
 
-	userRoles, err := validateUserRoles(request.GetUserRoles())
-	if err != nil {
-		return nil, err
-	}
-
-	markets, err := s.spotInstrument.ViewMarkets(ctx, userRoles)
+	markets, nextOffset, hasMore, err := s.spotInstrument.ViewMarkets(ctx, request.GetLimit(), request.GetOffset())
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +50,9 @@ func (s *serverAPI) ViewMarkets(
 	}
 
 	return &proto.ViewMarketsResponse{
-		Markets: out,
+		Markets:    out,
+		NextOffset: nextOffset,
+		HasMore:    hasMore,
 	}, nil
 }
 
@@ -72,12 +69,7 @@ func (s *serverAPI) GetMarketByID(
 		return nil, status.Error(codes.InvalidArgument, "invalid market_id")
 	}
 
-	userRoles, err := validateUserRoles(request.GetUserRoles())
-	if err != nil {
-		return nil, err
-	}
-
-	market, err := s.spotInstrument.GetMarketByID(ctx, marketID, userRoles)
+	market, err := s.spotInstrument.GetMarketByID(ctx, marketID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,30 +77,4 @@ func (s *serverAPI) GetMarketByID(
 	return &proto.GetMarketByIDResponse{
 		Market: mapper.MarketToProto(market),
 	}, nil
-}
-
-func validateUserRoles(
-	roles []proto.UserRole,
-) ([]models.UserRole, error) {
-	if len(roles) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "user roles are required")
-	}
-
-	seen := make(map[proto.UserRole]struct{}, len(roles))
-	userRoles := make([]models.UserRole, 0, len(roles))
-
-	for _, role := range roles {
-		if role == proto.UserRole_ROLE_UNSPECIFIED {
-			return nil, status.Error(codes.InvalidArgument, "user role not specified")
-		}
-
-		if _, found := seen[role]; found {
-			return nil, status.Error(codes.InvalidArgument, "duplicate user role found")
-		}
-		seen[role] = struct{}{}
-
-		userRoles = append(userRoles, mapper.UserRoleFromProto(role))
-	}
-
-	return userRoles, nil
 }

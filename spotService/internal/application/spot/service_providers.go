@@ -4,6 +4,7 @@ import (
 	"github.com/IBM/sarama"
 	"go.uber.org/fx"
 
+	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	sharedProducer "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka/producer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -18,6 +19,7 @@ import (
 
 var ServiceProviders = fx.Options(
 	fx.Provide(
+		provideJWTManager,
 		provideMarketStateChangedProducer,
 		provideSpotOutboxWorker,
 		provideMarketEventProducer,
@@ -29,7 +31,16 @@ var ServiceProviders = fx.Options(
 )
 
 type container struct {
+	JWTManager  *authjwt.Manager
 	SpotService *spotService.MarketViewer
+}
+
+func provideJWTManager(cfg config.SpotConfig) *authjwt.Manager {
+	return authjwt.NewManager(
+		cfg.Auth.JWTSecret,
+		cfg.Auth.AccessTokenTTL,
+		cfg.Auth.RefreshTokenTTL,
+	)
 }
 
 func provideMarketStateChangedProducer(
@@ -83,6 +94,9 @@ func provideSpotService(
 		cacheRepository,
 		cfg.Redis.CacheTTL,
 		cfg.Timeouts.Service,
+		cfg.ViewMarkets.DefaultLimit,
+		cfg.ViewMarkets.MaxLimit,
+		cfg.Service.Name,
 		logger,
 	)
 }
@@ -107,8 +121,9 @@ func provideMarketPoller(
 	)
 }
 
-func provideContainer(service *spotService.MarketViewer) *container {
+func provideContainer(jwtManager *authjwt.Manager, service *spotService.MarketViewer) *container {
 	return &container{
+		JWTManager:  jwtManager,
 		SpotService: service,
 	}
 }

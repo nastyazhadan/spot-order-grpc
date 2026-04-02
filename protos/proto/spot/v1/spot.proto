@@ -7,13 +7,6 @@ option go_package = "zhadan.spot.v1;spotv1";
 import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
 
-enum UserRole {
-  ROLE_UNSPECIFIED = 0;
-  ROLE_USER = 1;
-  ROLE_ADMIN = 2;
-  ROLE_VIEWER = 3;
-}
-
 service SpotInstrumentService {
   rpc ViewMarkets (ViewMarketsRequest) returns (ViewMarketsResponse);
   rpc GetMarketByID (GetMarketByIDRequest) returns (GetMarketByIDResponse);
@@ -28,32 +21,18 @@ message Market {
 }
 
 message ViewMarketsRequest{
-  repeated UserRole user_roles = 1 [
-    (buf.validate.field).repeated = {
-      min_items: 1,
-      unique: true,
-      items: {
-        enum: { defined_only: true, not_in: 0 }
-      }
-    }
-    ]; // Roles for filtering markets
+  uint64 limit = 1;
+  uint64 offset = 2;
 }
 
 message ViewMarketsResponse {
   repeated Market markets = 1; // Market object
+  uint64 next_offset = 2;
+  bool has_more = 3;
 }
 
 message GetMarketByIDRequest {
   string market_id = 1 [(buf.validate.field).string.uuid = true];
-  repeated UserRole user_roles = 2 [
-    (buf.validate.field).repeated = {
-      min_items: 1,
-      unique: true,
-      items: {
-        enum: { defined_only: true, not_in: 0 }
-      }
-    }
-  ];
 }
 
 message GetMarketByIDResponse {

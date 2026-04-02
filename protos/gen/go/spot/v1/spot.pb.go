@@ -23,58 +23,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type UserRole int32
-
-const (
-	UserRole_ROLE_UNSPECIFIED UserRole = 0
-	UserRole_ROLE_USER        UserRole = 1
-	UserRole_ROLE_ADMIN       UserRole = 2
-	UserRole_ROLE_VIEWER      UserRole = 3
-)
-
-// Enum value maps for UserRole.
-var (
-	UserRole_name = map[int32]string{
-		0: "ROLE_UNSPECIFIED",
-		1: "ROLE_USER",
-		2: "ROLE_ADMIN",
-		3: "ROLE_VIEWER",
-	}
-	UserRole_value = map[string]int32{
-		"ROLE_UNSPECIFIED": 0,
-		"ROLE_USER":        1,
-		"ROLE_ADMIN":       2,
-		"ROLE_VIEWER":      3,
-	}
-)
-
-func (x UserRole) Enum() *UserRole {
-	p := new(UserRole)
-	*p = x
-	return p
-}
-
-func (x UserRole) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (UserRole) Descriptor() protoreflect.EnumDescriptor {
-	return file_spot_v1_spot_proto_enumTypes[0].Descriptor()
-}
-
-func (UserRole) Type() protoreflect.EnumType {
-	return &file_spot_v1_spot_proto_enumTypes[0]
-}
-
-func (x UserRole) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use UserRole.Descriptor instead.
-func (UserRole) EnumDescriptor() ([]byte, []int) {
-	return file_spot_v1_spot_proto_rawDescGZIP(), []int{0}
-}
-
 type Market struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -153,7 +101,8 @@ func (x *Market) GetUpdatedAt() *timestamppb.Timestamp {
 
 type ViewMarketsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserRoles     []UserRole             `protobuf:"varint,1,rep,packed,name=user_roles,json=userRoles,proto3,enum=spot.v1.UserRole" json:"user_roles,omitempty"` // Roles for filtering markets
+	Limit         uint64                 `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        uint64                 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -188,16 +137,25 @@ func (*ViewMarketsRequest) Descriptor() ([]byte, []int) {
 	return file_spot_v1_spot_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *ViewMarketsRequest) GetUserRoles() []UserRole {
+func (x *ViewMarketsRequest) GetLimit() uint64 {
 	if x != nil {
-		return x.UserRoles
+		return x.Limit
 	}
-	return nil
+	return 0
+}
+
+func (x *ViewMarketsRequest) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
 }
 
 type ViewMarketsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Markets       []*Market              `protobuf:"bytes,1,rep,name=markets,proto3" json:"markets,omitempty"` // Market object
+	NextOffset    uint64                 `protobuf:"varint,2,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
+	HasMore       bool                   `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -239,10 +197,23 @@ func (x *ViewMarketsResponse) GetMarkets() []*Market {
 	return nil
 }
 
+func (x *ViewMarketsResponse) GetNextOffset() uint64 {
+	if x != nil {
+		return x.NextOffset
+	}
+	return 0
+}
+
+func (x *ViewMarketsResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
 type GetMarketByIDRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MarketId      string                 `protobuf:"bytes,1,opt,name=market_id,json=marketId,proto3" json:"market_id,omitempty"`
-	UserRoles     []UserRole             `protobuf:"varint,2,rep,packed,name=user_roles,json=userRoles,proto3,enum=spot.v1.UserRole" json:"user_roles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -282,13 +253,6 @@ func (x *GetMarketByIDRequest) GetMarketId() string {
 		return x.MarketId
 	}
 	return ""
-}
-
-func (x *GetMarketByIDRequest) GetUserRoles() []UserRole {
-	if x != nil {
-		return x.UserRoles
-	}
-	return nil
 }
 
 type GetMarketByIDResponse struct {
@@ -347,24 +311,19 @@ const file_spot_v1_spot_proto_rawDesc = "" +
 	"\n" +
 	"deleted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"[\n" +
-	"\x12ViewMarketsRequest\x12E\n" +
-	"\n" +
-	"user_roles\x18\x01 \x03(\x0e2\x11.spot.v1.UserRoleB\x13\xbaH\x10\x92\x01\r\b\x01\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\tuserRoles\"@\n" +
+	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"B\n" +
+	"\x12ViewMarketsRequest\x12\x14\n" +
+	"\x05limit\x18\x01 \x01(\x04R\x05limit\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\x04R\x06offset\"|\n" +
 	"\x13ViewMarketsResponse\x12)\n" +
-	"\amarkets\x18\x01 \x03(\v2\x0f.spot.v1.MarketR\amarkets\"\x84\x01\n" +
+	"\amarkets\x18\x01 \x03(\v2\x0f.spot.v1.MarketR\amarkets\x12\x1f\n" +
+	"\vnext_offset\x18\x02 \x01(\x04R\n" +
+	"nextOffset\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"=\n" +
 	"\x14GetMarketByIDRequest\x12%\n" +
-	"\tmarket_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bmarketId\x12E\n" +
-	"\n" +
-	"user_roles\x18\x02 \x03(\x0e2\x11.spot.v1.UserRoleB\x13\xbaH\x10\x92\x01\r\b\x01\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\tuserRoles\"@\n" +
+	"\tmarket_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bmarketId\"@\n" +
 	"\x15GetMarketByIDResponse\x12'\n" +
-	"\x06market\x18\x01 \x01(\v2\x0f.spot.v1.MarketR\x06market*P\n" +
-	"\bUserRole\x12\x14\n" +
-	"\x10ROLE_UNSPECIFIED\x10\x00\x12\r\n" +
-	"\tROLE_USER\x10\x01\x12\x0e\n" +
-	"\n" +
-	"ROLE_ADMIN\x10\x02\x12\x0f\n" +
-	"\vROLE_VIEWER\x10\x032\xb1\x01\n" +
+	"\x06market\x18\x01 \x01(\v2\x0f.spot.v1.MarketR\x06market2\xb1\x01\n" +
 	"\x15SpotInstrumentService\x12H\n" +
 	"\vViewMarkets\x12\x1b.spot.v1.ViewMarketsRequest\x1a\x1c.spot.v1.ViewMarketsResponse\x12N\n" +
 	"\rGetMarketByID\x12\x1d.spot.v1.GetMarketByIDRequest\x1a\x1e.spot.v1.GetMarketByIDResponseB\x17Z\x15zhadan.spot.v1;spotv1b\x06proto3"
@@ -381,33 +340,29 @@ func file_spot_v1_spot_proto_rawDescGZIP() []byte {
 	return file_spot_v1_spot_proto_rawDescData
 }
 
-var file_spot_v1_spot_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_spot_v1_spot_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_spot_v1_spot_proto_goTypes = []any{
-	(UserRole)(0),                 // 0: spot.v1.UserRole
-	(*Market)(nil),                // 1: spot.v1.Market
-	(*ViewMarketsRequest)(nil),    // 2: spot.v1.ViewMarketsRequest
-	(*ViewMarketsResponse)(nil),   // 3: spot.v1.ViewMarketsResponse
-	(*GetMarketByIDRequest)(nil),  // 4: spot.v1.GetMarketByIDRequest
-	(*GetMarketByIDResponse)(nil), // 5: spot.v1.GetMarketByIDResponse
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(*Market)(nil),                // 0: spot.v1.Market
+	(*ViewMarketsRequest)(nil),    // 1: spot.v1.ViewMarketsRequest
+	(*ViewMarketsResponse)(nil),   // 2: spot.v1.ViewMarketsResponse
+	(*GetMarketByIDRequest)(nil),  // 3: spot.v1.GetMarketByIDRequest
+	(*GetMarketByIDResponse)(nil), // 4: spot.v1.GetMarketByIDResponse
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
 }
 var file_spot_v1_spot_proto_depIdxs = []int32{
-	6, // 0: spot.v1.Market.deleted_at:type_name -> google.protobuf.Timestamp
-	6, // 1: spot.v1.Market.updated_at:type_name -> google.protobuf.Timestamp
-	0, // 2: spot.v1.ViewMarketsRequest.user_roles:type_name -> spot.v1.UserRole
-	1, // 3: spot.v1.ViewMarketsResponse.markets:type_name -> spot.v1.Market
-	0, // 4: spot.v1.GetMarketByIDRequest.user_roles:type_name -> spot.v1.UserRole
-	1, // 5: spot.v1.GetMarketByIDResponse.market:type_name -> spot.v1.Market
-	2, // 6: spot.v1.SpotInstrumentService.ViewMarkets:input_type -> spot.v1.ViewMarketsRequest
-	4, // 7: spot.v1.SpotInstrumentService.GetMarketByID:input_type -> spot.v1.GetMarketByIDRequest
-	3, // 8: spot.v1.SpotInstrumentService.ViewMarkets:output_type -> spot.v1.ViewMarketsResponse
-	5, // 9: spot.v1.SpotInstrumentService.GetMarketByID:output_type -> spot.v1.GetMarketByIDResponse
-	8, // [8:10] is the sub-list for method output_type
-	6, // [6:8] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	5, // 0: spot.v1.Market.deleted_at:type_name -> google.protobuf.Timestamp
+	5, // 1: spot.v1.Market.updated_at:type_name -> google.protobuf.Timestamp
+	0, // 2: spot.v1.ViewMarketsResponse.markets:type_name -> spot.v1.Market
+	0, // 3: spot.v1.GetMarketByIDResponse.market:type_name -> spot.v1.Market
+	1, // 4: spot.v1.SpotInstrumentService.ViewMarkets:input_type -> spot.v1.ViewMarketsRequest
+	3, // 5: spot.v1.SpotInstrumentService.GetMarketByID:input_type -> spot.v1.GetMarketByIDRequest
+	2, // 6: spot.v1.SpotInstrumentService.ViewMarkets:output_type -> spot.v1.ViewMarketsResponse
+	4, // 7: spot.v1.SpotInstrumentService.GetMarketByID:output_type -> spot.v1.GetMarketByIDResponse
+	6, // [6:8] is the sub-list for method output_type
+	4, // [4:6] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_spot_v1_spot_proto_init() }
@@ -420,14 +375,13 @@ func file_spot_v1_spot_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_spot_v1_spot_proto_rawDesc), len(file_spot_v1_spot_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      0,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_spot_v1_spot_proto_goTypes,
 		DependencyIndexes: file_spot_v1_spot_proto_depIdxs,
-		EnumInfos:         file_spot_v1_spot_proto_enumTypes,
 		MessageInfos:      file_spot_v1_spot_proto_msgTypes,
 	}.Build()
 	File_spot_v1_spot_proto = out.File

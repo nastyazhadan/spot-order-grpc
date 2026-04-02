@@ -25,7 +25,9 @@ type OrderConfig struct {
 
 type SpotConfig struct {
 	Service       ServiceConfig           `mapstructure:"service"`
+	ViewMarkets   ViewMarketsConfig       `mapstructure:"view_markets"`
 	Log           LoggingConfig           `mapstructure:"log"`
+	Auth          AuthConfig              `mapstructure:"auth"`
 	Timeouts      TimeoutsConfig          `mapstructure:"timeouts"`
 	PostgresPool  PostgresPoolConfig      `mapstructure:"postgres_pool"`
 	GRPCRateLimit SpotGRPCRateLimitConfig `mapstructure:"grpc_rate_limit"`
@@ -42,6 +44,11 @@ type ServiceConfig struct {
 	Name           string `mapstructure:"name"`
 	MaxRecvMsgSize int    `mapstructure:"max_recv_msg_size"`
 	DBURI          string `mapstructure:"db_uri"`
+}
+
+type ViewMarketsConfig struct {
+	DefaultLimit uint64 `mapstructure:"default_limit"`
+	MaxLimit     uint64 `mapstructure:"max_limit"`
 }
 
 type LoggingConfig struct {

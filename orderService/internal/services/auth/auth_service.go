@@ -9,11 +9,12 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
 type JWTManager interface {
-	GenerateAccessToken(userID uuid.UUID, sessionID string) (string, error)
-	GenerateRefreshToken(userID uuid.UUID, jti, sessionID string) (string, error)
+	GenerateAccessToken(userID uuid.UUID, roles []models.UserRole, sessionID string) (string, error)
+	GenerateRefreshToken(userID uuid.UUID, roles []models.UserRole, jti, sessionID string) (string, error)
 	ParseToken(tokenString string, expectedType jwt.TokenType) (*jwt.Claims, error)
 }
 
@@ -41,53 +42,56 @@ func (s *AuthService) Refresh(
 	ctx context.Context,
 	refreshToken string,
 ) (newAccessToken, newRefreshToken string, err error) {
-	userID, oldJTI, oldSessionID, err := s.validateRefreshToken(ctx, refreshToken)
+	userID, roles, oldJTI, oldSessionID, err := s.validateRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return "", "", err
 	}
 
-	return s.rotateTokens(ctx, userID, oldJTI, oldSessionID)
+	return s.rotateTokens(ctx, userID, roles, oldJTI, oldSessionID)
 }
 
 func (s *AuthService) validateRefreshToken(
 	ctx context.Context,
 	refreshToken string,
-) (uuid.UUID, string, string, error) {
+) (uuid.UUID, []models.UserRole, string, string, error) {
 	claims, err := s.jwtManager.ParseToken(refreshToken, jwt.TokenTypeRefresh)
 	if err != nil {
-		return uuid.Nil, "", "", err
+		return uuid.Nil, nil, "", "", err
 	}
 
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		return uuid.Nil, "", "", serviceErrors.ErrInvalidSubject
+		return uuid.Nil, nil, "", "", serviceErrors.ErrInvalidSubject
 	}
 
 	if claims.ID == "" {
-		return uuid.Nil, "", "", serviceErrors.ErrInvalidJTI
+		return uuid.Nil, nil, "", "", serviceErrors.ErrInvalidJTI
 	}
+
+	roles := parseUserRolesFromClaims(claims.UserRoles)
 
 	active, err := s.store.IsSessionActive(ctx, userID, claims.SessionID)
 	if err != nil {
 		s.logger.Error(ctx, "failed to validate refresh token session", zap.Error(err))
-		return uuid.Nil, "", "", serviceErrors.ErrSaveTokenFailed
+		return uuid.Nil, nil, "", "", serviceErrors.ErrSaveTokenFailed
 	}
 	if !active {
-		return uuid.Nil, "", "", serviceErrors.ErrTokenRevoked
+		return uuid.Nil, nil, "", "", serviceErrors.ErrTokenRevoked
 	}
 
-	return userID, claims.ID, claims.SessionID, nil
+	return userID, roles, claims.ID, claims.SessionID, nil
 }
 
 func (s *AuthService) rotateTokens(
 	ctx context.Context,
 	userID uuid.UUID,
+	roles []models.UserRole,
 	oldJTI, oldSessionID string,
 ) (newAccessToken, newRefreshToken string, err error) {
 	newJTI := uuid.NewString()
 	newSessionID := uuid.NewString()
 
-	newAccessToken, newRefreshToken, err = s.generateTokenPair(userID, newJTI, newSessionID)
+	newAccessToken, newRefreshToken, err = s.generateTokenPair(userID, roles, newJTI, newSessionID)
 	if err != nil {
 		return "", "", err
 	}
@@ -106,17 +110,45 @@ func (s *AuthService) rotateTokens(
 
 func (s *AuthService) generateTokenPair(
 	userID uuid.UUID,
+	roles []models.UserRole,
 	refreshJTI, sessionID string,
 ) (accessToken, refreshToken string, err error) {
-	accessToken, err = s.jwtManager.GenerateAccessToken(userID, sessionID)
+	accessToken, err = s.jwtManager.GenerateAccessToken(userID, roles, sessionID)
 	if err != nil {
 		return "", "", err
 	}
 
-	refreshToken, err = s.jwtManager.GenerateRefreshToken(userID, refreshJTI, sessionID)
+	refreshToken, err = s.jwtManager.GenerateRefreshToken(userID, roles, refreshJTI, sessionID)
 	if err != nil {
 		return "", "", err
 	}
 
 	return accessToken, refreshToken, nil
+}
+
+func parseUserRolesFromClaims(rawRoles []string) []models.UserRole {
+	if len(rawRoles) == 0 {
+		return []models.UserRole{models.UserRoleUser}
+	}
+
+	out := make([]models.UserRole, 0, len(rawRoles))
+	seen := make(map[models.UserRole]struct{}, len(rawRoles))
+
+	for _, raw := range rawRoles {
+		role, ok := models.ParseUserRole(raw)
+		if !ok || role == models.UserRoleUnspecified {
+			continue
+		}
+		if _, exists := seen[role]; exists {
+			continue
+		}
+		seen[role] = struct{}{}
+		out = append(out, role)
+	}
+
+	if len(out) == 0 {
+		return []models.UserRole{models.UserRoleUser}
+	}
+
+	return out
 }

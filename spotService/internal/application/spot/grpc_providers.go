@@ -14,6 +14,7 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/auth"
 	grpcErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors"
 	logInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -70,6 +71,7 @@ func provideGRPCServer(
 	recoverer := recovery.UnaryServerInterceptor(appLogger)
 	tracer := tracing.UnaryServerInterceptor()
 	logger := logInterceptor.UnaryServerInterceptor(appLogger)
+	authenticator := auth.UnaryServerInterceptor(container.JWTManager, nil, cfg.Auth)
 	errorsMapper := grpcErrors.UnaryServerInterceptor(appLogger)
 	rateLimiter := ratelimit.SpotUnaryServerInterceptor(cfg, appLogger)
 	meter := metricInterceptor.UnaryServerInterceptor(cfg.Service.Name)
@@ -85,7 +87,7 @@ func provideGRPCServer(
 			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
 		}),
 		grpc.ChainUnaryInterceptor(
-			recoverer, tracer, meter, logger, rateLimiter, errorsMapper, validator,
+			recoverer, tracer, meter, logger, authenticator, rateLimiter, errorsMapper, validator,
 		),
 	)
 

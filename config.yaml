@@ -104,12 +104,21 @@ spot:
     address: ":50052"
     name: "spot-service"
     max_recv_msg_size: 10485760 # 10MB
+  view_markets:
+    default_limit: 100
+    max_limit: 500
   timeouts:
     service: 5s
   log:
     level: "info"
     format: "console"
     context_fields_max: 10
+  auth:
+    skip_methods:
+      - "/grpc.health.v1.Health/Check"
+      - "/grpc.health.v1.Health/Watch"
+    access_token_ttl: 15m
+    refresh_token_ttl: 24h
   grpc_rate_limit:
     view_markets: 1000
     get_market_by_id: 2000

@@ -315,6 +315,7 @@ func (w *Worker) messageTopic(event models.OutboxEvent) string {
 	}
 }
 
+// Все сообщения по одному ордеру попадут в одну партицию
 func (w *Worker) messageKey(event models.OutboxEvent) []byte {
 	return []byte(event.AggregateID.String())
 }

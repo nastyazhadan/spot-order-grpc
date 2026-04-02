@@ -21,6 +21,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
+	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 )
 
 const (
@@ -46,6 +47,8 @@ type MarketViewer struct {
 	marketCacheRepository MarketCacheRepository
 	cacheTTL              time.Duration
 	serviceTimeout        time.Duration
+	defaultLimit          uint64
+	maxLimit              uint64
 	serviceName           string
 	singleFlight          singleflight.Group
 	logger                *zapLogger.Logger
@@ -55,6 +58,7 @@ func NewMarketViewer(
 	repo MarketRepository,
 	cacheRepo MarketCacheRepository,
 	ttl, timeout time.Duration,
+	defaultLimit, maxLimit uint64,
 	serviceName string,
 	logger *zapLogger.Logger,
 ) *MarketViewer {
@@ -63,12 +67,14 @@ func NewMarketViewer(
 		marketCacheRepository: cacheRepo,
 		cacheTTL:              ttl,
 		serviceTimeout:        timeout,
+		defaultLimit:          defaultLimit,
+		maxLimit:              maxLimit,
 		serviceName:           serviceName,
 		logger:                logger,
 	}
 }
 
-func (s *MarketViewer) ViewMarkets(ctx context.Context, userRoles []models.UserRole) ([]models.Market, error) {
+func (s *MarketViewer) ViewMarkets(ctx context.Context, limit, offset uint64) ([]models.Market, uint64, bool, error) {
 	const op = "MarketViewer.ViewMarkets"
 
 	if _, ok := ctx.Deadline(); !ok {
@@ -80,27 +86,42 @@ func (s *MarketViewer) ViewMarkets(ctx context.Context, userRoles []models.UserR
 	ctx, span := tracing.StartSpan(ctx, "spot.view_markets")
 	defer span.End()
 
+	userRoles, ok := requestctx.UserRolesFromContext(ctx)
+	if !ok {
+		err := serviceErrors.ErrUserRoleNotSpecified
+		tracing.RecordError(span, err)
+		return nil, 0, false, err
+	}
+
 	roleKey, ok := effectiveUserRole(userRoles)
 	if !ok {
 		err := serviceErrors.ErrUserRoleNotSpecified
 		tracing.RecordError(span, err)
-		return nil, err
+		return nil, 0, false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if limit == 0 {
+		limit = s.defaultLimit
+	}
+	if limit > s.maxLimit {
+		limit = s.maxLimit
 	}
 
 	markets, err := s.getMarkets(ctx, roleKey)
 	if err != nil {
 		tracing.RecordError(span, err)
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, 0, false, fmt.Errorf("%s: %w", op, err)
 	}
-	span.SetAttributes(attributes.MarketsCountValue(len(markets)))
 
-	return markets, nil
+	page, nextOffset, hasMore := paginateMarkets(markets, limit, offset)
+	span.SetAttributes(attributes.MarketsCountValue(len(page)))
+
+	return page, nextOffset, hasMore, nil
 }
 
 func (s *MarketViewer) GetMarketByID(
 	ctx context.Context,
 	id uuid.UUID,
-	userRoles []models.UserRole,
 ) (models.Market, error) {
 	const op = "MarketViewer.GetMarketByID"
 
@@ -114,6 +135,13 @@ func (s *MarketViewer) GetMarketByID(
 		trace.WithAttributes(attributes.MarketIDValue(id.String())),
 	)
 	defer span.End()
+
+	userRoles, ok := requestctx.UserRolesFromContext(ctx)
+	if !ok {
+		err := serviceErrors.ErrUserRoleNotSpecified
+		tracing.RecordError(span, err)
+		return models.Market{}, fmt.Errorf("%s: %w", op, err)
+	}
 
 	roleKey, ok := effectiveUserRole(userRoles)
 	if !ok {
@@ -368,4 +396,27 @@ func (s *MarketViewer) invalidateAll(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func paginateMarkets(markets []models.Market, limit, offset uint64) ([]models.Market, uint64, bool) {
+	if limit <= 0 {
+		return []models.Market{}, 0, false
+	}
+
+	if len(markets) == 0 || offset >= uint64(len(markets)) {
+		return []models.Market{}, 0, false
+	}
+
+	start := int(offset)
+	end := start + int(limit)
+	if end > len(markets) {
+		end = len(markets)
+	}
+
+	hasMore := end < len(markets)
+	if !hasMore {
+		return markets[start:end], 0, false
+	}
+
+	return markets[start:end], uint64(end), true
 }

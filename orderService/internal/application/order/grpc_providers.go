@@ -53,6 +53,7 @@ func provideClientConnection(
 		cfg.SpotAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithChainUnaryInterceptor(
+			auth.UnaryClientAuthInterceptor(),
 			tracing.UnaryClientInterceptor(),
 			retry.UnaryClientInterceptor(
 				retry.WithMax(cfg.Retry.MaxAttempts),

@@ -15,6 +15,7 @@ import (
 	authStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/auth"
 	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
 const (
@@ -51,13 +52,14 @@ func main() {
 
 	refreshJTI := uuid.NewString()
 	sessionID := uuid.NewString()
+	role := []models.UserRole{models.UserRoleUser}
 
-	accessToken, err := jwtManager.GenerateAccessToken(userID, sessionID)
+	accessToken, err := jwtManager.GenerateAccessToken(userID, role, sessionID)
 	if err != nil {
 		log.Fatalf("failed to generate access token: %v", err)
 	}
 
-	refreshToken, err := jwtManager.GenerateRefreshToken(userID, refreshJTI, sessionID)
+	refreshToken, err := jwtManager.GenerateRefreshToken(userID, role, refreshJTI, sessionID)
 	if err != nil {
 		log.Fatalf("failed to generate refresh token: %v", err)
 	}

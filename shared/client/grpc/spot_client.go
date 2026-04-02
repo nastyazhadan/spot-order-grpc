@@ -38,19 +38,14 @@ func NewSpotClient(connection *grpc.ClientConn, cfg config.CircuitBreakerConfig,
 	}
 }
 
-func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) ([]models.Market, error) {
-	if len(roles) == 0 {
-		return nil, serviceErrors.ErrUserRoleNotSpecified
-	}
-
-	userRoles := make([]proto.UserRole, 0, len(roles))
-	for _, role := range roles {
-		userRoles = append(userRoles, mapper.UserRoleToProto(role))
-	}
-
+func (c *SpotClient) ViewMarkets(
+	ctx context.Context,
+	limit, offset uint64,
+) ([]models.Market, uint64, bool, error) {
 	response, err := c.viewMarketsBreaker.Execute(func() (*proto.ViewMarketsResponse, error) {
 		resp, err := c.api.ViewMarkets(ctx, &proto.ViewMarketsRequest{
-			UserRoles: userRoles,
+			Limit:  limit,
+			Offset: offset,
 		})
 		if err != nil {
 			return nil, err
@@ -58,28 +53,30 @@ func (c *SpotClient) ViewMarkets(ctx context.Context, roles []models.UserRole) (
 		return resp, nil
 	})
 	if err != nil {
-		c.logViewMarketsBreakerError(ctx, err, roles)
+		c.logViewMarketsBreakerError(ctx, err, limit, offset)
 
-		return nil, mapViewMarketsError(err)
+		return nil, 0, false, mapViewMarketsError(err)
 	}
 
 	out := make([]models.Market, 0, len(response.GetMarkets()))
 	for _, market := range response.GetMarkets() {
 		mappedMarket, mapError := mapper.MarketFromProto(market)
 		if mapError != nil {
-			return nil, fmt.Errorf("map market from proto: %w", mapError)
+			return nil, 0, false, fmt.Errorf("map market from proto: %w", mapError)
 		}
 		out = append(out, mappedMarket)
 	}
 
-	return out, nil
+	return out, response.GetNextOffset(), response.GetHasMore(), nil
 }
 
-func (c *SpotClient) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
+func (c *SpotClient) GetMarketByID(
+	ctx context.Context,
+	id uuid.UUID,
+) (models.Market, error) {
 	response, err := c.getMarketByIDBreaker.Execute(func() (*proto.GetMarketByIDResponse, error) {
 		return c.api.GetMarketByID(ctx, &proto.GetMarketByIDRequest{
-			MarketId:  id.String(),
-			UserRoles: []proto.UserRole{proto.UserRole_ROLE_USER},
+			MarketId: id.String(),
 		})
 	})
 	if err != nil {
@@ -158,9 +155,14 @@ func mapGetMarketByIDError(err error, marketID uuid.UUID) error {
 	}
 }
 
-func (c *SpotClient) logViewMarketsBreakerError(ctx context.Context, err error, roles []models.UserRole) {
+func (c *SpotClient) logViewMarketsBreakerError(
+	ctx context.Context,
+	err error,
+	limit, offset uint64,
+) {
 	fields := []zap.Field{
-		zap.Any("roles", roles),
+		zap.Uint64("limit", limit),
+		zap.Uint64("offset", offset),
 		zap.Error(err),
 	}
 
@@ -178,7 +180,11 @@ func (c *SpotClient) logViewMarketsBreakerError(ctx context.Context, err error, 
 	}
 }
 
-func (c *SpotClient) logGetMarketByIDBreakerError(ctx context.Context, err error, marketID uuid.UUID) {
+func (c *SpotClient) logGetMarketByIDBreakerError(
+	ctx context.Context,
+	err error,
+	marketID uuid.UUID,
+) {
 	fields := []zap.Field{
 		zap.String("market_id", marketID.String()),
 		zap.Error(err),

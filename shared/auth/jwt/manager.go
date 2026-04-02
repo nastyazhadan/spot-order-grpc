@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
 type Manager struct {
@@ -24,7 +26,7 @@ func NewManager(secret string, accessTTL, refreshTTL time.Duration) *Manager {
 	}
 }
 
-func (m *Manager) GenerateAccessToken(userID uuid.UUID, sessionID string) (string, error) {
+func (m *Manager) GenerateAccessToken(userID uuid.UUID, roles []models.UserRole, sessionID string) (string, error) {
 	now := time.Now()
 
 	claims := &Claims{
@@ -35,6 +37,7 @@ func (m *Manager) GenerateAccessToken(userID uuid.UUID, sessionID string) (strin
 		},
 		TokenType: TokenTypeAccess,
 		SessionID: sessionID,
+		UserRoles: userRolesToClaims(roles),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -47,7 +50,7 @@ func (m *Manager) GenerateAccessToken(userID uuid.UUID, sessionID string) (strin
 	return signed, nil
 }
 
-func (m *Manager) GenerateRefreshToken(userID uuid.UUID, jti, sessionID string) (string, error) {
+func (m *Manager) GenerateRefreshToken(userID uuid.UUID, roles []models.UserRole, jti, sessionID string) (string, error) {
 	now := time.Now()
 
 	claims := &Claims{
@@ -59,6 +62,7 @@ func (m *Manager) GenerateRefreshToken(userID uuid.UUID, jti, sessionID string) 
 		},
 		TokenType: TokenTypeRefresh,
 		SessionID: sessionID,
+		UserRoles: userRolesToClaims(roles),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -104,4 +108,24 @@ func (m *Manager) ParseToken(tokenString string, expectedType TokenType) (*Claim
 	}
 
 	return claims, nil
+}
+
+func userRolesToClaims(roles []models.UserRole) []string {
+	if len(roles) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(roles))
+	for _, role := range roles {
+		if role == models.UserRoleUnspecified {
+			continue
+		}
+		out = append(out, role.String())
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+
+	return out
 }

@@ -244,6 +244,7 @@ func fieldsFromContext(ctx context.Context) []zap.Field {
 
 	traceID, hasTraceID := requestctx.TraceIDFromContext(ctx)
 	userID, hasUserID := requestctx.UserIDFromContext(ctx)
+	userRoles, hasUserRoles := requestctx.UserRolesFromContext(ctx)
 	extra, _ := ctx.Value(extraFieldsKey).(*contextFields)
 
 	totalFields := 0
@@ -251,6 +252,9 @@ func fieldsFromContext(ctx context.Context) []zap.Field {
 		totalFields++
 	}
 	if hasUserID {
+		totalFields++
+	}
+	if hasUserRoles {
 		totalFields++
 	}
 	if extra != nil {
@@ -268,6 +272,13 @@ func fieldsFromContext(ctx context.Context) []zap.Field {
 	}
 	if hasUserID {
 		fields = append(fields, zap.String("user_id", userID.String()))
+	}
+	if hasUserRoles {
+		roleNames := make([]string, 0, len(userRoles))
+		for _, role := range userRoles {
+			roleNames = append(roleNames, role.String())
+		}
+		fields = append(fields, zap.Strings("user_roles", roleNames))
 	}
 	if extra != nil {
 		fields = append(fields, extra.fields...)
