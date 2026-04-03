@@ -2,21 +2,17 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	redisGo "github.com/redis/go-redis/v9"
 
-	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
+	auth "github.com/nastyazhadan/spot-order-grpc/shared/auth/session"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 )
 
-const (
-	refreshPrefix = "refresh"
-	sessionPrefix = "auth_session"
-)
+const refreshPrefix = "refresh"
 
 // Атомарно проверяет старый refresh token, записывает новый с TTL и удаляет старый
 var rotateScript = redisGo.NewScript(`
@@ -74,8 +70,8 @@ func (s *RefreshTokenStore) Replace(
 		ctx,
 		s.store.ScriptRunner(),
 		[]string{
-			RefreshKey(userID, newJTI),
-			SessionKey(userID),
+			refreshKey(userID, newJTI),
+			auth.SessionKey(userID),
 		},
 		s.ttl.Milliseconds(),
 		newSessionID,
@@ -97,9 +93,9 @@ func (s *RefreshTokenStore) Rotate(
 		ctx,
 		s.store.ScriptRunner(),
 		[]string{
-			RefreshKey(userID, oldJTI),
-			RefreshKey(userID, newJTI),
-			SessionKey(userID),
+			refreshKey(userID, oldJTI),
+			refreshKey(userID, newJTI),
+			auth.SessionKey(userID),
 		},
 		s.ttl.Milliseconds(),
 		oldSessionID,
@@ -112,26 +108,6 @@ func (s *RefreshTokenStore) Rotate(
 	return result == 1, nil
 }
 
-func (s *RefreshTokenStore) IsSessionActive(
-	ctx context.Context,
-	userID uuid.UUID,
-	sessionID string,
-) (bool, error) {
-	raw, err := s.store.Get(ctx, SessionKey(userID))
-	if errors.Is(err, sharedErrors.ErrCacheNotFound) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("get active session: %w", err)
-	}
-
-	return string(raw) == sessionID, nil
-}
-
-func RefreshKey(userID uuid.UUID, jti string) string {
+func refreshKey(userID uuid.UUID, jti string) string {
 	return fmt.Sprintf("%s:%s:%s", refreshPrefix, userID, jti)
-}
-
-func SessionKey(userID uuid.UUID) string {
-	return fmt.Sprintf("%s:%s", sessionPrefix, userID)
 }

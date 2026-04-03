@@ -21,20 +21,30 @@ type JWTManager interface {
 type RefreshTokenStore interface {
 	Rotate(ctx context.Context, userID uuid.UUID, oldJTI, oldSessionID, newJTI, newSessionID string) (bool, error)
 	Replace(ctx context.Context, userID uuid.UUID, newJTI, newSessionID string) error
+}
+
+type SessionStore interface {
 	IsSessionActive(ctx context.Context, userID uuid.UUID, sessionID string) (bool, error)
 }
 
 type AuthService struct {
-	jwtManager JWTManager
-	store      RefreshTokenStore
-	logger     *zapLogger.Logger
+	jwtManager   JWTManager
+	refreshStore RefreshTokenStore
+	sessionStore SessionStore
+	logger       *zapLogger.Logger
 }
 
-func New(jwtManager JWTManager, store RefreshTokenStore, logger *zapLogger.Logger) *AuthService {
+func New(
+	jwtManager JWTManager,
+	refreshStore RefreshTokenStore,
+	sessionStore SessionStore,
+	logger *zapLogger.Logger,
+) *AuthService {
 	return &AuthService{
-		jwtManager: jwtManager,
-		store:      store,
-		logger:     logger,
+		jwtManager:   jwtManager,
+		refreshStore: refreshStore,
+		sessionStore: sessionStore,
+		logger:       logger,
 	}
 }
 
@@ -73,7 +83,7 @@ func (s *AuthService) validateRefreshToken(
 		return uuid.Nil, nil, "", "", err
 	}
 
-	active, err := s.store.IsSessionActive(ctx, userID, claims.SessionID)
+	active, err := s.sessionStore.IsSessionActive(ctx, userID, claims.SessionID)
 	if err != nil {
 		s.logger.Error(ctx, "failed to validate refresh token session", zap.Error(err))
 		return uuid.Nil, nil, "", "", serviceErrors.ErrSaveTokenFailed
@@ -99,7 +109,7 @@ func (s *AuthService) rotateTokens(
 		return "", "", err
 	}
 
-	rotated, err := s.store.Rotate(ctx, userID, oldJTI, oldSessionID, newJTI, newSessionID)
+	rotated, err := s.refreshStore.Rotate(ctx, userID, oldJTI, oldSessionID, newJTI, newSessionID)
 	if err != nil {
 		s.logger.Error(ctx, "failed to rotate refresh token", zap.Error(err))
 		return "", "", serviceErrors.ErrSaveTokenFailed

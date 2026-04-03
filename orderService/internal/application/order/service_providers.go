@@ -17,6 +17,7 @@ import (
 	orderService "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/order"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/producer"
 	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
+	authsession "github.com/nastyazhadan/spot-order-grpc/shared/auth/session"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	sharedConsumer "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka/consumer"
@@ -36,6 +37,7 @@ var ServiceProviders = fx.Options(
 
 		provideJWTManager,
 		provideRefreshTokenStore,
+		provideSessionStore,
 		provideAuthService,
 		provideOrderServiceConfig,
 
@@ -53,6 +55,7 @@ var ServiceProviders = fx.Options(
 
 type container struct {
 	JWTManager        *authjwt.Manager
+	SessionStore      *authsession.Store
 	RefreshTokenStore *authStore.RefreshTokenStore
 	AuthService       *authService.AuthService
 	OrderService      *orderService.OrderService
@@ -87,12 +90,17 @@ func provideRefreshTokenStore(store *cache.Store, cfg config.OrderConfig) *authS
 	return authStore.New(store, cfg.Auth.RefreshTokenTTL)
 }
 
+func provideSessionStore(store *cache.Store) *authsession.Store {
+	return authsession.New(store)
+}
+
 func provideAuthService(
 	jwtManager *authjwt.Manager,
-	store *authStore.RefreshTokenStore,
+	refreshStore *authStore.RefreshTokenStore,
+	sessionStore *authsession.Store,
 	logger *zapLogger.Logger,
 ) *authService.AuthService {
-	return authService.New(jwtManager, store, logger)
+	return authService.New(jwtManager, refreshStore, sessionStore, logger)
 }
 
 func provideOrderServiceConfig(cfg config.OrderConfig) orderService.Config {
@@ -247,12 +255,14 @@ func provideConsumerService(
 
 func provideContainer(
 	jwtManager *authjwt.Manager,
+	sessionStore *authsession.Store,
 	tokenStore *authStore.RefreshTokenStore,
 	authService *authService.AuthService,
 	orderService *orderService.OrderService,
 ) *container {
 	return &container{
 		JWTManager:        jwtManager,
+		SessionStore:      sessionStore,
 		RefreshTokenStore: tokenStore,
 		AuthService:       authService,
 		OrderService:      orderService,
