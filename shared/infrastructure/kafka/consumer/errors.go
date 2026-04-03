@@ -1,6 +1,7 @@
 package consumer
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -24,4 +25,16 @@ type MessageTooLargeError struct {
 
 func (e MessageTooLargeError) Error() string {
 	return fmt.Sprintf("kafka message too large: %d > %d", e.Size, e.Limit)
+}
+
+func IsControlFlowError(err error) bool {
+	return errors.Is(err, ErrSkipMessage) ||
+		errors.Is(err, ErrRestartConsumerSession) ||
+		errors.Is(err, ErrMessageHandledByDLQ)
+}
+
+func IsNonRetryableError(err error) bool {
+	var tooLargeError MessageTooLargeError
+
+	return errors.As(err, &tooLargeError) || IsControlFlowError(err)
 }

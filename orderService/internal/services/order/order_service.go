@@ -336,7 +336,7 @@ func (s *OrderService) syncMarketBlock(
 		Inc()
 
 	if updated {
-		s.logger.Warn(ctx, "Synced market block state after recheck",
+		s.logger.Info(ctx, "Synced market block state after recheck",
 			zap.String("market_id", market.ID.String()),
 			zap.Bool("blocked", blocked),
 			zap.String("reason", reason),

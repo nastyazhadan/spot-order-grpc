@@ -198,14 +198,6 @@ var (
 		[]string{"service", "event_type", "result"},
 	)
 
-	OutboxPendingEvents = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "grpc_server_outbox_pending_events",
-			Help: "Number of unprocessed events in the outbox table",
-		},
-		[]string{"service"},
-	)
-
 	OutboxWorkerDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "grpc_server_outbox_worker_iteration_duration_seconds",

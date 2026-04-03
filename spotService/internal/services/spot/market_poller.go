@@ -161,13 +161,12 @@ func (p *MarketPoller) poll(ctx context.Context) error {
 		}
 
 		updated, hasMore, err := p.processNextBatch(pollCtx)
-		if updated {
-			needCacheRefresh = true
-		}
 		if err != nil {
 			return err
 		}
-
+		if updated {
+			needCacheRefresh = true
+		}
 		if !hasMore {
 			return err
 		}

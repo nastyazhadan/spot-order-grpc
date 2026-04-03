@@ -50,11 +50,10 @@ func RetryMiddleware(
 		return func(ctx context.Context, message kafka.Message) error {
 			for attempt := range maxRetries + 1 {
 				if err := next(ctx, message); err != nil {
-
-					var tooLargeError MessageTooLargeError
-					if errors.As(err, &tooLargeError) {
+					if IsNonRetryableError(err) {
 						return err
 					}
+
 					if attempt < maxRetries {
 						sleep := backoff * time.Duration(attempt+1)
 
@@ -130,11 +129,19 @@ func DLQMiddleware(
 				return nil
 			}
 
+			if IsControlFlowError(err) {
+				return err
+			}
+
 			retryCount := 0
 			var exhaustedErr RetryExhaustedError
 			if errors.As(err, &exhaustedErr) {
 				retryCount = exhaustedErr.RetryCount
 				err = exhaustedErr.Err
+			}
+
+			if IsControlFlowError(err) {
+				return err
 			}
 
 			return sendToDLQ(ctx, message, dlqPublisher, logger, err, retryCount, maxMessageBytes)

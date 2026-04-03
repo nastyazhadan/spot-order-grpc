@@ -123,14 +123,6 @@ func (s *OutboxStore) ClaimPendingEvents(ctx context.Context, limit int) ([]mode
 		return events, nil
 	}
 
-	pendingCount, countErr := s.countPendingEvents(ctx)
-	if countErr != nil {
-		tracing.RecordError(span, countErr)
-		s.logger.Warn(ctx, "Failed to count pending outbox events", zap.Error(countErr))
-	} else {
-		metrics.OutboxPendingEvents.WithLabelValues(s.config.Service.Name).Set(float64(pendingCount))
-	}
-
 	return events, nil
 }
 
