@@ -16,36 +16,36 @@ const refreshPrefix = "refresh"
 
 // Атомарно проверяет старый refresh token, записывает новый с TTL и удаляет старый
 var rotateScript = redisGo.NewScript(`
-local oldRefreshKey = KEYS[1]
-local newRefreshKey = KEYS[2]
-local sessionKey = KEYS[3]
-local ttlMs = ARGV[1]
-local oldSessionID = ARGV[2]
-local newSessionID = ARGV[3]
+	local oldRefreshKey = KEYS[1]
+	local newRefreshKey = KEYS[2]
+	local sessionKey = KEYS[3]
+	local ttlMs = ARGV[1]
+	local oldSessionID = ARGV[2]
+	local newSessionID = ARGV[3]
 
-if redis.call("GET", sessionKey) ~= oldSessionID then
-    return 0
-end
+	if redis.call("GET", sessionKey) ~= oldSessionID then
+    	return 0
+	end
 
-if redis.call("EXISTS", oldRefreshKey) == 0 then
-    return 0
-end
+	if redis.call("EXISTS", oldRefreshKey) == 0 then
+    	return 0
+	end
 
-redis.call("PSETEX", newRefreshKey, ttlMs, "1")
-redis.call("PSETEX", sessionKey, ttlMs, newSessionID)
-redis.call("DEL", oldRefreshKey)
-return 1
+	redis.call("PSETEX", newRefreshKey, ttlMs, "1")
+	redis.call("PSETEX", sessionKey, ttlMs, newSessionID)
+	redis.call("DEL", oldRefreshKey)
+	return 1
 `)
 
 var replaceScript = redisGo.NewScript(`
-local refreshKey = KEYS[1]
-local sessionKey = KEYS[2]
-local ttlMs = ARGV[1]
-local sessionID = ARGV[2]
+	local refreshKey = KEYS[1]
+	local sessionKey = KEYS[2]
+	local ttlMs = ARGV[1]
+	local sessionID = ARGV[2]
 
-redis.call("PSETEX", refreshKey, ttlMs, "1")
-redis.call("PSETEX", sessionKey, ttlMs, sessionID)
-return 1
+	redis.call("PSETEX", refreshKey, ttlMs, "1")
+	redis.call("PSETEX", sessionKey, ttlMs, sessionID)
+	return 1
 `)
 
 type RefreshTokenStore struct {

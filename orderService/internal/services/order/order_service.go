@@ -390,7 +390,7 @@ func (s *OrderService) saveOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err = transaction.Commit(ctx); err != nil {
+	if err = commitTransaction(ctx, transaction, s.config.Timeout); err != nil {
 		tracing.RecordError(span, err)
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: commit transaction: %w", op, err)
 	}
@@ -401,7 +401,8 @@ func (s *OrderService) saveOrder(
 	return order.ID, order.Status, nil
 }
 
-func rollbackTransaction(ctx context.Context,
+func rollbackTransaction(
+	ctx context.Context,
 	transaction pgx.Tx,
 	logger *zapLogger.Logger,
 	message string,
@@ -413,6 +414,17 @@ func rollbackTransaction(ctx context.Context,
 	if err := transaction.Rollback(cleanupCtx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
 		logger.Error(cleanupCtx, message, zap.Error(err))
 	}
+}
+
+func commitTransaction(
+	ctx context.Context,
+	transaction pgx.Tx,
+	timeout time.Duration,
+) error {
+	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	defer cancel()
+
+	return transaction.Commit(commitCtx)
 }
 
 func buildOrder(

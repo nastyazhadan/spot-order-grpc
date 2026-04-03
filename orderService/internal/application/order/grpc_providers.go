@@ -122,7 +122,7 @@ func provideGRPCServer(
 	recoverer := recovery.UnaryServerInterceptor(appLogger)
 	tracer := tracing.UnaryServerInterceptor()
 	logger := logInterceptor.UnaryServerInterceptor(appLogger)
-	authenticator := auth.UnaryServerInterceptor(container.JWTManager, container.SessionStore, cfg.Auth)
+	authenticator := auth.UnaryServerInterceptor(container.JWTManager, cfg.Auth)
 	errorsMapper := grpcErrors.UnaryServerInterceptor(appLogger)
 	rateLimiter := ratelimit.OrderUnaryServerInterceptor(cfg, appLogger)
 	meter := metricInterceptor.UnaryServerInterceptor(cfg.Service.Name)

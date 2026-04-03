@@ -10,7 +10,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
     ports:
       - "${SPOT_GRPC_PORT}:50052"
-      - "${SPOT_METRICS_PORT}:9092"
+      - "${SPOT_METRICS_PORT}:9093"
     depends_on:
       postgres:
         condition: service_healthy

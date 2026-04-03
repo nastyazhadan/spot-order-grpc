@@ -7,7 +7,6 @@ import (
 	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	authsession "github.com/nastyazhadan/spot-order-grpc/shared/auth/session"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	sharedProducer "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka/producer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	outbox "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/kafka"
@@ -22,7 +21,6 @@ import (
 var ServiceProviders = fx.Options(
 	fx.Provide(
 		provideJWTManager,
-		provideSessionStore,
 		provideMarketStateChangedProducer,
 		provideSpotOutboxWorker,
 		provideMarketEventProducer,
@@ -45,10 +43,6 @@ func provideJWTManager(cfg config.SpotConfig) *authjwt.Manager {
 		cfg.Auth.AccessTokenTTL,
 		cfg.Auth.RefreshTokenTTL,
 	)
-}
-
-func provideSessionStore(store *cache.Store) *authsession.Store {
-	return authsession.New(store)
 }
 
 func provideMarketStateChangedProducer(
@@ -131,12 +125,10 @@ func provideMarketPoller(
 
 func provideContainer(
 	jwtManager *authjwt.Manager,
-	sessionStore *authsession.Store,
 	service *spotService.MarketViewer,
 ) *container {
 	return &container{
-		JWTManager:   jwtManager,
-		SessionStore: sessionStore,
-		SpotService:  service,
+		JWTManager:  jwtManager,
+		SpotService: service,
 	}
 }

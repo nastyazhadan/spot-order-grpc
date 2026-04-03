@@ -143,7 +143,7 @@ func (s *CompensationService) ProcessMarketStateChanged(
 		return s.failProcessing(ctx, transaction, op, inboxEvent, err)
 	}
 
-	if err = transaction.Commit(ctx); err != nil {
+	if err = commitTransaction(ctx, transaction, s.config.Timeouts.Service); err != nil {
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: commit transaction: %w", op, err)
 	}
@@ -164,7 +164,7 @@ func (s *CompensationService) handleSkippedEvent(
 ) (bool, error) {
 	s.logSkippedEvent(ctx, event, consumerGroup, currentStatus)
 
-	if err := transaction.Commit(ctx); err != nil {
+	if err := commitTransaction(ctx, transaction, s.config.Timeouts.Service); err != nil {
 		tracing.RecordError(span, err)
 		return false, fmt.Errorf("commit skipped transaction: %w", err)
 	}

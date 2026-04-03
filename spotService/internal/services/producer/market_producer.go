@@ -89,7 +89,7 @@ func (p *MarketProducer) PublishMarketStateChanged(
 		return fmt.Errorf("%s: save cursor: %w", op, err)
 	}
 
-	if err = transaction.Commit(ctx); err != nil {
+	if err = p.commitTransaction(ctx, transaction); err != nil {
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: commit: %w", op, err)
 	}
@@ -144,4 +144,14 @@ func (p *MarketProducer) rollbackTransaction(
 	if err := transaction.Rollback(cleanupCtx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
 		logger.Error(cleanupCtx, message, zap.Error(err))
 	}
+}
+
+func (p *MarketProducer) commitTransaction(
+	ctx context.Context,
+	transaction pgx.Tx,
+) error {
+	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.config.Timeouts.Service)
+	defer cancel()
+
+	return transaction.Commit(commitCtx)
 }

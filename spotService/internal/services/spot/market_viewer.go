@@ -320,9 +320,7 @@ func (s *MarketViewer) getMarketsFromRepo(ctx context.Context) ([]models.Market,
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	slices.SortFunc(allMarkets, func(a, b models.Market) int {
-		return cmp.Compare(a.Name, b.Name)
-	})
+	sortMarketsStable(allMarkets)
 
 	return allMarkets, nil
 }
@@ -339,6 +337,16 @@ func filterByRole(markets []models.Market, roleKey string) []models.Market {
 	return out
 }
 
+func sortMarketsStable(markets []models.Market) {
+	slices.SortFunc(markets, func(a, b models.Market) int {
+		if byName := cmp.Compare(a.Name, b.Name); byName != 0 {
+			return byName
+		}
+
+		return cmp.Compare(a.ID.String(), b.ID.String())
+	})
+}
+
 func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 	const op = "MarketViewer.RefreshAll"
 
@@ -353,9 +361,7 @@ func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	slices.SortFunc(allMarkets, func(a, b models.Market) int {
-		return cmp.Compare(a.Name, b.Name)
-	})
+	sortMarketsStable(allMarkets)
 
 	for _, roleKey := range []string{roleAdminKey, roleViewerKey, roleUserKey} {
 		filtered := filterByRole(allMarkets, roleKey)
