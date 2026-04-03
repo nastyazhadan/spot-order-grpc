@@ -29,6 +29,11 @@ func NewManager(secret string, accessTTL, refreshTTL time.Duration) *Manager {
 func (m *Manager) GenerateAccessToken(userID uuid.UUID, roles []models.UserRole, sessionID string) (string, error) {
 	now := time.Now()
 
+	userRoles, err := UserRolesToClaims(roles)
+	if err != nil {
+		return "", err
+	}
+
 	claims := &Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID.String(),
@@ -37,7 +42,7 @@ func (m *Manager) GenerateAccessToken(userID uuid.UUID, roles []models.UserRole,
 		},
 		TokenType: TokenTypeAccess,
 		SessionID: sessionID,
-		UserRoles: userRolesToClaims(roles),
+		UserRoles: userRoles,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -53,6 +58,11 @@ func (m *Manager) GenerateAccessToken(userID uuid.UUID, roles []models.UserRole,
 func (m *Manager) GenerateRefreshToken(userID uuid.UUID, roles []models.UserRole, jti, sessionID string) (string, error) {
 	now := time.Now()
 
+	userRoles, err := UserRolesToClaims(roles)
+	if err != nil {
+		return "", err
+	}
+
 	claims := &Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
@@ -62,7 +72,7 @@ func (m *Manager) GenerateRefreshToken(userID uuid.UUID, roles []models.UserRole
 		},
 		TokenType: TokenTypeRefresh,
 		SessionID: sessionID,
-		UserRoles: userRolesToClaims(roles),
+		UserRoles: userRoles,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -108,24 +118,4 @@ func (m *Manager) ParseToken(tokenString string, expectedType TokenType) (*Claim
 	}
 
 	return claims, nil
-}
-
-func userRolesToClaims(roles []models.UserRole) []string {
-	if len(roles) == 0 {
-		return nil
-	}
-
-	out := make([]string, 0, len(roles))
-	for _, role := range roles {
-		if role == models.UserRoleUnspecified {
-			continue
-		}
-		out = append(out, role.String())
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-
-	return out
 }

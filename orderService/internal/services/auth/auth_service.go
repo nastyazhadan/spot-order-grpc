@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
+	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
@@ -15,7 +15,7 @@ import (
 type JWTManager interface {
 	GenerateAccessToken(userID uuid.UUID, roles []models.UserRole, sessionID string) (string, error)
 	GenerateRefreshToken(userID uuid.UUID, roles []models.UserRole, jti, sessionID string) (string, error)
-	ParseToken(tokenString string, expectedType jwt.TokenType) (*jwt.Claims, error)
+	ParseToken(tokenString string, expectedType authjwt.TokenType) (*authjwt.Claims, error)
 }
 
 type RefreshTokenStore interface {
@@ -54,7 +54,7 @@ func (s *AuthService) validateRefreshToken(
 	ctx context.Context,
 	refreshToken string,
 ) (uuid.UUID, []models.UserRole, string, string, error) {
-	claims, err := s.jwtManager.ParseToken(refreshToken, jwt.TokenTypeRefresh)
+	claims, err := s.jwtManager.ParseToken(refreshToken, authjwt.TokenTypeRefresh)
 	if err != nil {
 		return uuid.Nil, nil, "", "", err
 	}
@@ -68,7 +68,10 @@ func (s *AuthService) validateRefreshToken(
 		return uuid.Nil, nil, "", "", serviceErrors.ErrInvalidJTI
 	}
 
-	roles := parseUserRolesFromClaims(claims.UserRoles)
+	roles, err := authjwt.ParseUserRolesClaims(claims.UserRoles)
+	if err != nil {
+		return uuid.Nil, nil, "", "", err
+	}
 
 	active, err := s.store.IsSessionActive(ctx, userID, claims.SessionID)
 	if err != nil {
@@ -124,31 +127,4 @@ func (s *AuthService) generateTokenPair(
 	}
 
 	return accessToken, refreshToken, nil
-}
-
-func parseUserRolesFromClaims(rawRoles []string) []models.UserRole {
-	if len(rawRoles) == 0 {
-		return []models.UserRole{models.UserRoleUser}
-	}
-
-	out := make([]models.UserRole, 0, len(rawRoles))
-	seen := make(map[models.UserRole]struct{}, len(rawRoles))
-
-	for _, raw := range rawRoles {
-		role, ok := models.ParseUserRole(raw)
-		if !ok || role == models.UserRoleUnspecified {
-			continue
-		}
-		if _, exists := seen[role]; exists {
-			continue
-		}
-		seen[role] = struct{}{}
-		out = append(out, role)
-	}
-
-	if len(out) == 0 {
-		return []models.UserRole{models.UserRoleUser}
-	}
-
-	return out
 }

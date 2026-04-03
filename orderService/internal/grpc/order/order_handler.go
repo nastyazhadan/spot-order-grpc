@@ -44,9 +44,10 @@ type serverAPI struct {
 	logger  *zapLogger.Logger
 }
 
-func Register(server *grpc.Server, service OrderService) {
+func Register(server *grpc.Server, service OrderService, logger *zapLogger.Logger) {
 	proto.RegisterOrderServiceServer(server, &serverAPI{
 		service: service,
+		logger:  logger,
 	})
 }
 

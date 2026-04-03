@@ -146,7 +146,7 @@ func provideGRPCServer(
 	reflection.Register(grpcServer)
 	health.RegisterService(grpcServer)
 	grpcAuth.Register(grpcServer, container.AuthService)
-	grpcOrder.Register(grpcServer, container.OrderService)
+	grpcOrder.Register(grpcServer, container.OrderService, appLogger)
 
 	return grpcServer, nil
 }

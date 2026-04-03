@@ -128,7 +128,7 @@ func bearerTokenFromContext(ctx context.Context) (string, error) {
 
 func userRolesFromClaims(rawRoles []string) ([]models.UserRole, error) {
 	if len(rawRoles) == 0 {
-		return []models.UserRole{models.UserRoleUser}, nil
+		return nil, status.Error(codes.Unauthenticated, "user_roles not found in token")
 	}
 
 	out := make([]models.UserRole, 0, len(rawRoles))
