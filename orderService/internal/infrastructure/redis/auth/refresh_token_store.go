@@ -60,7 +60,6 @@ func New(store *cache.Store, ttl time.Duration) *RefreshTokenStore {
 	}
 }
 
-// Replace - старый refresh key удаляется только при успешной ротации
 func (s *RefreshTokenStore) Replace(
 	ctx context.Context,
 	userID uuid.UUID,
