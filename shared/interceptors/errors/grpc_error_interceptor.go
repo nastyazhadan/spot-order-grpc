@@ -69,7 +69,7 @@ func mapError(ctx context.Context, err error, logger *zapLogger.Logger) error {
 
 	case errors.Is(err, serviceErrors.ErrUserRoleNotSpecified):
 		logger.Warn(ctx, "user role not specified", zap.Error(err))
-		return status.Error(codes.InvalidArgument, err.Error())
+		return status.Error(codes.Unauthenticated, err.Error())
 
 	case errors.Is(err, serviceErrors.ErrInvalidSubject),
 		errors.Is(err, serviceErrors.ErrInvalidJTI),

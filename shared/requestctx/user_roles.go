@@ -8,13 +8,13 @@ import (
 
 const userRolesKey contextKey = "user_roles"
 
-func ContextWithUserRoles(ctx context.Context, roles []models.UserRole) context.Context {
+func ContextWithUserRoles(ctx context.Context, roles []models.UserRole) (context.Context, bool) {
 	if ctx == nil {
-		ctx = context.Background()
+		return nil, false
 	}
 
 	copied := append([]models.UserRole(nil), roles...)
-	return context.WithValue(ctx, userRolesKey, copied)
+	return context.WithValue(ctx, userRolesKey, copied), true
 }
 
 func UserRolesFromContext(ctx context.Context) ([]models.UserRole, bool) {

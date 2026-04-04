@@ -61,8 +61,14 @@ func UnaryServerInterceptor(
 			return nil, status.Error(codes.Unauthenticated, "invalid user_id in token")
 		}
 
-		ctx = requestctx.ContextWithUserID(ctx, userID)
-		ctx = requestctx.ContextWithUserRoles(ctx, userRoles)
+		ctx, ok := requestctx.ContextWithUserID(ctx, userID)
+		if !ok {
+			return nil, status.Error(codes.Internal, "internal auth context error")
+		}
+		ctx, ok = requestctx.ContextWithUserRoles(ctx, userRoles)
+		if !ok {
+			return nil, status.Error(codes.Internal, "internal auth context error")
+		}
 
 		return handler(ctx, request)
 	}

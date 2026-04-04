@@ -10,12 +10,12 @@ type contextKey string
 
 const userIDKey contextKey = "user_id"
 
-func ContextWithUserID(ctx context.Context, userID uuid.UUID) context.Context {
+func ContextWithUserID(ctx context.Context, userID uuid.UUID) (context.Context, bool) {
 	if ctx == nil {
-		ctx = context.Background()
+		return nil, false
 	}
 
-	return context.WithValue(ctx, userIDKey, userID)
+	return context.WithValue(ctx, userIDKey, userID), true
 }
 
 func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {

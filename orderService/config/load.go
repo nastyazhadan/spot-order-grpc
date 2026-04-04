@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"net"
 	"os"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
@@ -61,10 +60,13 @@ func validateOrderConfig(cfg config.OrderConfig) error {
 	if err := validateOrderRateLimits(cfg); err != nil {
 		return err
 	}
-	if err := validateOrderKafka(cfg); err != nil {
+	if err := config.ValidateTracingConfig("tracing", cfg.Tracing); err != nil {
 		return err
 	}
-	if err := validateOutboxConfig(cfg.Kafka.Outbox); err != nil {
+	if err := config.ValidateMetricsConfig("metrics", cfg.Metrics); err != nil {
+		return err
+	}
+	if err := validateOrderKafka(cfg); err != nil {
 		return err
 	}
 
@@ -86,15 +88,11 @@ func validateOrderService(cfg config.OrderConfig) error {
 		)
 	}
 
-	if err := validateTCPAddress("service.address", cfg.Service.Address, true); err != nil {
+	if err := config.ValidateServiceConfig("service", cfg.Service, true); err != nil {
 		return err
 	}
 
-	if err := validateTCPAddress("metrics.http_address", cfg.Metrics.HTTPAddress, true); err != nil {
-		return err
-	}
-
-	if err := validateTCPAddress("spot_address", cfg.SpotAddress, false); err != nil {
+	if err := config.ValidateTCPAddress("spot_address", cfg.SpotAddress, false); err != nil {
 		return err
 	}
 
@@ -102,19 +100,8 @@ func validateOrderService(cfg config.OrderConfig) error {
 }
 
 func validateOrderRedis(cfg config.OrderConfig) error {
-	if cfg.Redis.ConnectionTimeout <= 0 {
-		return fmt.Errorf(
-			"redis.connection_timeout must be greater than 0, got %s",
-			cfg.Redis.ConnectionTimeout,
-		)
-	}
-
-	if cfg.Redis.ConnectionTimeout >= cfg.Timeouts.Service {
-		return fmt.Errorf(
-			"redis.connection_timeout (%s) must be less than service_timeout (%s)",
-			cfg.Redis.ConnectionTimeout,
-			cfg.Timeouts.Service,
-		)
+	if err := config.ValidateRedisBaseConfig("redis", cfg.Redis, cfg.Timeouts.Service); err != nil {
+		return err
 	}
 
 	if cfg.Redis.MarketBlockTTL <= 0 {
@@ -158,59 +145,12 @@ func validateOrderCircuitBreaker(cfg config.OrderConfig) error {
 }
 
 func validateOrderKeepAlive(cfg config.OrderConfig) error {
-	if cfg.KeepAlive.PingTime <= 0 {
-		return fmt.Errorf(
-			"keep_alive.ping_time must be greater than 0, got %s",
-			cfg.KeepAlive.PingTime,
-		)
-	}
-
-	if cfg.KeepAlive.PingTimeout <= 0 {
-		return fmt.Errorf(
-			"keep_alive.ping_timeout must be greater than 0, got %s",
-			cfg.KeepAlive.PingTimeout,
-		)
-	}
-
-	if cfg.KeepAlive.MinPingInterval <= 0 {
-		return fmt.Errorf(
-			"keep_alive.min_ping_interval must be greater than 0, got %s",
-			cfg.KeepAlive.MinPingInterval,
-		)
-	}
-
-	if cfg.KeepAlive.PingTimeout >= cfg.KeepAlive.PingTime {
-		return fmt.Errorf(
-			"keep_alive.ping_timeout (%s) must be less than ping_time (%s)",
-			cfg.KeepAlive.PingTimeout,
-			cfg.KeepAlive.PingTime,
-		)
-	}
-
-	if cfg.KeepAlive.MinPingInterval >= cfg.KeepAlive.PingTime {
-		return fmt.Errorf(
-			"keep_alive.min_ping_interval (%s) must be less than ping_time (%s)",
-			cfg.KeepAlive.MinPingInterval,
-			cfg.KeepAlive.PingTime,
-		)
-	}
-
-	return nil
+	return config.ValidateKeepAliveConfig("keep_alive", cfg.KeepAlive)
 }
 
 func validateOrderAuth(cfg config.OrderConfig) error {
-	if cfg.Auth.AccessTokenTTL <= 0 {
-		return fmt.Errorf(
-			"auth.access_token_ttl must be greater than 0, got %s",
-			cfg.Auth.AccessTokenTTL,
-		)
-	}
-
-	if cfg.Auth.RefreshTokenTTL <= 0 {
-		return fmt.Errorf(
-			"auth.refresh_token_ttl must be greater than 0, got %s",
-			cfg.Auth.RefreshTokenTTL,
-		)
+	if err := config.ValidateAuthConfig("auth", cfg.Auth); err != nil {
+		return err
 	}
 
 	if cfg.Auth.RefreshTokenTTL <= cfg.Auth.AccessTokenTTL {
@@ -262,8 +202,8 @@ func validateOrderRetry(cfg config.OrderConfig) error {
 }
 
 func validateOrderKafka(cfg config.OrderConfig) error {
-	if len(cfg.Kafka.Brokers) == 0 {
-		return errors.New("kafka.brokers must contain at least one broker")
+	if err := config.ValidateKafkaBrokers("kafka.brokers", cfg.Kafka.Brokers); err != nil {
+		return err
 	}
 
 	if cfg.Kafka.Topics.OrderCreated == "" {
@@ -282,112 +222,16 @@ func validateOrderKafka(cfg config.OrderConfig) error {
 		return errors.New("kafka.topics.market_state_changed_dlq is required when dlq_enabled=true")
 	}
 
-	if cfg.Kafka.Producer.Timeout <= 0 {
-		return fmt.Errorf(
-			"kafka.producer.timeout must be greater than 0, got %s",
-			cfg.Kafka.Producer.Timeout,
-		)
+	if err := config.ValidateKafkaProducerConfig("kafka.producer", cfg.Kafka.Producer); err != nil {
+		return err
 	}
 
-	if cfg.Kafka.Producer.RetryBackoff <= 0 {
-		return fmt.Errorf(
-			"kafka.producer.retry_backoff must be greater than 0, got %s",
-			cfg.Kafka.Producer.RetryBackoff,
-		)
+	if err := config.ValidateKafkaConsumerConfig("kafka.consumer", cfg.Kafka.Consumer); err != nil {
+		return err
 	}
 
-	if cfg.Kafka.Producer.MaxRetries < 0 {
-		return fmt.Errorf(
-			"kafka.producer.max_retries must be greater than or equal to 0, got %d",
-			cfg.Kafka.Producer.MaxRetries,
-		)
-	}
-
-	if cfg.Kafka.Consumer.GroupID == "" {
-		return errors.New("kafka.consumer.group_id is required")
-	}
-
-	if cfg.Kafka.Consumer.SessionTimeout <= 0 {
-		return fmt.Errorf(
-			"kafka.consumer.session_timeout must be greater than 0, got %s",
-			cfg.Kafka.Consumer.SessionTimeout,
-		)
-	}
-
-	if cfg.Kafka.Consumer.HeartbeatInterval <= 0 {
-		return fmt.Errorf(
-			"kafka.consumer.heartbeat_interval must be greater than 0, got %s",
-			cfg.Kafka.Consumer.HeartbeatInterval,
-		)
-	}
-
-	if cfg.Kafka.Consumer.HeartbeatInterval >= cfg.Kafka.Consumer.SessionTimeout {
-		return fmt.Errorf(
-			"kafka.consumer.heartbeat_interval (%s) must be less than session_timeout (%s)",
-			cfg.Kafka.Consumer.HeartbeatInterval,
-			cfg.Kafka.Consumer.SessionTimeout,
-		)
-	}
-
-	if cfg.Kafka.Consumer.RetryBackoff <= 0 {
-		return fmt.Errorf(
-			"kafka.consumer.retry_backoff must be greater than 0, got %s",
-			cfg.Kafka.Consumer.RetryBackoff,
-		)
-	}
-
-	if cfg.Kafka.Consumer.MaxRetries < 0 {
-		return fmt.Errorf(
-			"kafka.consumer.max_retries must be greater than or equal to 0, got %d",
-			cfg.Kafka.Consumer.MaxRetries,
-		)
-	}
-
-	return nil
-}
-
-func validateOutboxConfig(cfg config.OutboxConfig) error {
-	if cfg.PollInterval <= 0 {
-		return fmt.Errorf(
-			"kafka.outbox.poll_interval must be greater than 0, got %s",
-			cfg.PollInterval,
-		)
-	}
-
-	if cfg.ProcessingTimeout <= 0 {
-		return fmt.Errorf(
-			"kafka.outbox.processing_timeout must be greater than 0, got %s",
-			cfg.ProcessingTimeout,
-		)
-	}
-
-	if cfg.BatchTimeout <= 0 {
-		return fmt.Errorf(
-			"kafka.outbox.batch_timeout must be greater than 0, got %s",
-			cfg.BatchTimeout,
-		)
-	}
-
-	if cfg.BatchSize <= 0 {
-		return fmt.Errorf(
-			"kafka.outbox.batch_size must be greater than 0, got %d",
-			cfg.BatchSize,
-		)
-	}
-
-	if cfg.MaxRetries < 0 {
-		return fmt.Errorf(
-			"kafka.outbox.max_retries must be greater than or equal to 0, got %d",
-			cfg.MaxRetries,
-		)
-	}
-
-	if cfg.BatchTimeout >= cfg.ProcessingTimeout {
-		return fmt.Errorf(
-			"kafka.outbox.batch_timeout (%s) must be less than processing_timeout (%s)",
-			cfg.BatchTimeout,
-			cfg.ProcessingTimeout,
-		)
+	if err := config.ValidateOutboxConfig("kafka.outbox", cfg.Kafka.Outbox); err != nil {
+		return err
 	}
 
 	return nil
@@ -434,27 +278,6 @@ func validateOrderRateLimits(cfg config.OrderConfig) error {
 			"rate_limit_by_user.window must be greater than 0, got %s",
 			cfg.RateLimitByUser.Window,
 		)
-	}
-
-	return nil
-}
-
-func validateTCPAddress(fieldName, value string, allowEmptyHost bool) error {
-	if value == "" {
-		return fmt.Errorf("%s is required", fieldName)
-	}
-
-	host, port, err := net.SplitHostPort(value)
-	if err != nil {
-		return fmt.Errorf("%s must be a valid host:port, got %q: %w", fieldName, value, err)
-	}
-
-	if !allowEmptyHost && host == "" {
-		return fmt.Errorf("%s must include host, got %q", fieldName, value)
-	}
-
-	if port == "" {
-		return fmt.Errorf("%s must include port, got %q", fieldName, value)
 	}
 
 	return nil

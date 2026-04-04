@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"net"
 	"os"
 
 	"github.com/spf13/viper"
@@ -62,6 +61,12 @@ func validateSpotConfig(cfg config.SpotConfig) error {
 	if err := validateSpotMarketPoller(cfg); err != nil {
 		return err
 	}
+	if err := config.ValidateTracingConfig("tracing", cfg.Tracing); err != nil {
+		return err
+	}
+	if err := config.ValidateMetricsConfig("metrics", cfg.Metrics); err != nil {
+		return err
+	}
 	if err := validateSpotKafka(cfg); err != nil {
 		return err
 	}
@@ -77,15 +82,15 @@ func validateSpotService(cfg config.SpotConfig) error {
 		)
 	}
 
-	if err := validateTCPAddress("service.address", cfg.Service.Address, true); err != nil {
-		return err
-	}
-
-	if err := validateTCPAddress("metrics.http_address", cfg.Metrics.HTTPAddress, true); err != nil {
+	if err := config.ValidateServiceConfig("service", cfg.Service, true); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func validateSpotAuth(cfg config.SpotConfig) error {
+	return config.ValidateAuthConfig("auth", cfg.Auth)
 }
 
 func validateSpotViewMarkets(cfg config.SpotConfig) error {
@@ -113,30 +118,9 @@ func validateSpotViewMarkets(cfg config.SpotConfig) error {
 	return nil
 }
 
-func validateSpotAuth(cfg config.SpotConfig) error {
-	if cfg.Auth.AccessTokenTTL <= 0 {
-		return fmt.Errorf(
-			"auth.access_token_ttl must be greater than 0, got %s",
-			cfg.Auth.AccessTokenTTL,
-		)
-	}
-
-	if cfg.Auth.RefreshTokenTTL <= 0 {
-		return fmt.Errorf(
-			"auth.refresh_token_ttl must be greater than 0, got %s",
-			cfg.Auth.RefreshTokenTTL,
-		)
-	}
-
-	return nil
-}
-
 func validateSpotRedis(cfg config.SpotConfig) error {
-	if cfg.Redis.ConnectionTimeout <= 0 {
-		return fmt.Errorf(
-			"redis.connection_timeout must be greater than 0, got %s",
-			cfg.Redis.ConnectionTimeout,
-		)
+	if err := config.ValidateRedisBaseConfig("redis", cfg.Redis, cfg.Timeouts.Service); err != nil {
+		return err
 	}
 
 	if cfg.Redis.CacheTTL <= 0 {
@@ -146,56 +130,11 @@ func validateSpotRedis(cfg config.SpotConfig) error {
 		)
 	}
 
-	if cfg.Redis.ConnectionTimeout >= cfg.Timeouts.Service {
-		return fmt.Errorf(
-			"redis.connection_timeout (%s) must be less than service_timeout (%s)",
-			cfg.Redis.ConnectionTimeout,
-			cfg.Timeouts.Service,
-		)
-	}
-
 	return nil
 }
 
 func validateSpotKeepAlive(cfg config.SpotConfig) error {
-	if cfg.KeepAlive.PingTime <= 0 {
-		return fmt.Errorf(
-			"keep_alive.ping_time must be greater than 0, got %s",
-			cfg.KeepAlive.PingTime,
-		)
-	}
-
-	if cfg.KeepAlive.PingTimeout <= 0 {
-		return fmt.Errorf(
-			"keep_alive.ping_timeout must be greater than 0, got %s",
-			cfg.KeepAlive.PingTimeout,
-		)
-	}
-
-	if cfg.KeepAlive.MinPingInterval <= 0 {
-		return fmt.Errorf(
-			"keep_alive.min_ping_interval must be greater than 0, got %s",
-			cfg.KeepAlive.MinPingInterval,
-		)
-	}
-
-	if cfg.KeepAlive.PingTimeout >= cfg.KeepAlive.PingTime {
-		return fmt.Errorf(
-			"keep_alive.ping_timeout (%s) must be less than ping_time (%s)",
-			cfg.KeepAlive.PingTimeout,
-			cfg.KeepAlive.PingTime,
-		)
-	}
-
-	if cfg.KeepAlive.MinPingInterval >= cfg.KeepAlive.PingTime {
-		return fmt.Errorf(
-			"keep_alive.min_ping_interval (%s) must be less than ping_time (%s)",
-			cfg.KeepAlive.MinPingInterval,
-			cfg.KeepAlive.PingTime,
-		)
-	}
-
-	return nil
+	return config.ValidateKeepAliveConfig("keep_alive", cfg.KeepAlive)
 }
 
 func validateSpotMarketPoller(cfg config.SpotConfig) error {
@@ -232,74 +171,20 @@ func validateSpotMarketPoller(cfg config.SpotConfig) error {
 }
 
 func validateSpotKafka(cfg config.SpotConfig) error {
-	if len(cfg.Kafka.Brokers) == 0 {
-		return errors.New("kafka.brokers must contain at least one broker")
+	if err := config.ValidateKafkaBrokers("kafka.brokers", cfg.Kafka.Brokers); err != nil {
+		return err
 	}
 
 	if cfg.Kafka.Topics.MarketStateChanged == "" {
 		return errors.New("kafka.topics.market_state_changed is required")
 	}
 
-	if cfg.Kafka.Producer.Timeout <= 0 {
-		return fmt.Errorf(
-			"kafka.producer.timeout must be greater than 0, got %s",
-			cfg.Kafka.Producer.Timeout,
-		)
+	if err := config.ValidateKafkaProducerConfig("kafka.producer", cfg.Kafka.Producer); err != nil {
+		return err
 	}
 
-	if cfg.Kafka.Producer.MaxRetries < 0 {
-		return fmt.Errorf(
-			"kafka.producer.max_retries must be greater than or equal to 0, got %d",
-			cfg.Kafka.Producer.MaxRetries,
-		)
-	}
-
-	if cfg.Kafka.Producer.RetryBackoff <= 0 {
-		return fmt.Errorf(
-			"kafka.producer.retry_backoff must be greater than 0, got %s",
-			cfg.Kafka.Producer.RetryBackoff,
-		)
-	}
-
-	if cfg.Kafka.Outbox.PollInterval <= 0 {
-		return fmt.Errorf(
-			"kafka.outbox.poll_interval must be greater than 0, got %s",
-			cfg.Kafka.Outbox.PollInterval,
-		)
-	}
-
-	if cfg.Kafka.Outbox.BatchSize <= 0 {
-		return fmt.Errorf(
-			"kafka.outbox.batch_size must be greater than 0, got %d",
-			cfg.Kafka.Outbox.BatchSize,
-		)
-	}
-
-	if cfg.Kafka.Outbox.BatchTimeout <= 0 {
-		return fmt.Errorf(
-			"kafka.outbox.batch_timeout must be greater than 0, got %s",
-			cfg.Kafka.Outbox.BatchTimeout,
-		)
-	}
-
-	if cfg.Kafka.Outbox.MaxRetries < 0 {
-		return fmt.Errorf(
-			"kafka.outbox.max_retries must be greater than or equal to 0, got %d",
-			cfg.Kafka.Outbox.MaxRetries,
-		)
-	}
-
-	if cfg.Kafka.Outbox.ProcessingTimeout <= 0 {
-		return fmt.Errorf("kafka.outbox.processing_timeout must be greater than 0, got %s",
-			cfg.Kafka.Outbox.ProcessingTimeout)
-	}
-
-	if cfg.Kafka.Outbox.BatchTimeout >= cfg.Kafka.Outbox.ProcessingTimeout {
-		return fmt.Errorf(
-			"kafka.outbox.batch_timeout (%s) must be less than processing_timeout (%s)",
-			cfg.Kafka.Outbox.BatchTimeout,
-			cfg.Kafka.Outbox.ProcessingTimeout,
-		)
+	if err := config.ValidateOutboxConfig("kafka.outbox", cfg.Kafka.Outbox); err != nil {
+		return err
 	}
 
 	return nil
@@ -318,27 +203,6 @@ func validateSpotRateLimits(cfg config.SpotConfig) error {
 			"grpc_rate_limit.get_market_by_id must be greater than 0, got %d",
 			cfg.GRPCRateLimit.GetMarketByID,
 		)
-	}
-
-	return nil
-}
-
-func validateTCPAddress(fieldName, value string, allowEmptyHost bool) error {
-	if value == "" {
-		return fmt.Errorf("%s is required", fieldName)
-	}
-
-	host, port, err := net.SplitHostPort(value)
-	if err != nil {
-		return fmt.Errorf("%s must be a valid host:port, got %q: %w", fieldName, value, err)
-	}
-
-	if !allowEmptyHost && host == "" {
-		return fmt.Errorf("%s must include host, got %q", fieldName, value)
-	}
-
-	if port == "" {
-		return fmt.Errorf("%s must include port, got %q", fieldName, value)
 	}
 
 	return nil
