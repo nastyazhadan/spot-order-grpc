@@ -43,8 +43,9 @@ gRPC-методы:
 Что делает:
 - читает рынки из `market_store`
 - фильтрует выдачу по ролям
-- кеширует списки рынков в Redis
-- использует `singleflight` при промахе кеша
+- кеширует списки рынков в Redis по ролям пользователя
+- при `cache miss` использует `singleflight`, загружает данные из PostgreSQL и перепрогревает кэш
+- при повреждённом (`corrupted`) payload в Redis инвалидирует ключ, делает fallback в PostgreSQL и старается удалить stale key, если перепрогрев не удался
 - запускает `MarketPoller`, который отслеживает изменения в БД и складывает события в outbox
 - публикует `market.state.changed` в Kafka
 
@@ -383,17 +384,17 @@ task token:gen
 
 ### Возможные gRPC-статусы
 
-| Код | Причина                                                                                         |
-|---|-------------------------------------------------------------------------------------------------|
-| `OK` | Успешный вызов                                                                                  |
-| `INVALID_ARGUMENT` | пустые или некорректные поля, неверный UUID                            |
-| `UNAUTHENTICATED` | отсутствует или невалиден JWT                                                |
-| `NOT_FOUND` | Рынок или ордер не найден                                                                       |
-| `ALREADY_EXISTS` | Ордер с таким ID уже существует                                                                 |
-| `FAILED_PRECONDITION` | Рынок отключён (`enabled = false`) |
-| `RESOURCE_EXHAUSTED` | Сработал per-user Rate Limiter или глобальный RPS-лимит                                         |
-| `UNAVAILABLE` | Сработал Circuit Breaker или недоступен зависимый сервис                                        |
-| `INTERNAL` | Внутренняя ошибка сервера                                                                       |
+| Код | Причина                                                   |
+|---|-----------------------------------------------------------|
+| `OK` | Успешный вызов                                            |
+| `INVALID_ARGUMENT` | пустые или некорректные поля, неверный UUID               |
+| `UNAUTHENTICATED` | отсутствует или невалиден JWT                             |
+| `NOT_FOUND` | Рынок или ордер не найден                                 |
+| `ALREADY_EXISTS` | Ордер с таким ID уже существует                           |
+| `FAILED_PRECONDITION` | Рынок отключён (`enabled = false`)                        |
+| `RESOURCE_EXHAUSTED` | Сработал per-user Rate Limiter или per-instance RPS-лимит |
+| `UNAVAILABLE` | Сработал Circuit Breaker или недоступен зависимый сервис  |
+| `INTERNAL` | Внутренняя ошибка сервера                                 |
 
 ---
 
@@ -501,7 +502,7 @@ spotOrder/
 │   │   ├── errors/                         # gRPC error mapping
 │   │   ├── logging/                        # gRPC unary logger interceptor
 │   │   ├── metrics/                        # gRPC metrics + OTel meter provider
-│   │   ├── ratelimit/                      # глобальный RPS-лимит
+│   │   ├── ratelimit/                      # per-instance RPS-лимит
 │   │   ├── recovery/                       # перехват паник
 │   │   ├── tracing/                        # tracing interceptors + propagator
 │   │   └── validate/                       # protovalidate interceptor

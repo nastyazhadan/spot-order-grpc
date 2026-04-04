@@ -34,7 +34,7 @@ import (
 
 var GRPCProviders = fx.Options(
 	fx.Provide(
-		health.NewServer(),
+		health.NewServer,
 		provideClientConnection,
 		provideGRPCClient,
 

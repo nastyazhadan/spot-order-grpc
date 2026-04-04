@@ -75,7 +75,7 @@ func (m *MarketCacheRepository) GetAll(
 	if err = json.Unmarshal(data, &redisViews); err != nil {
 		m.invalidateCorruptedCache(ctx, span, roleKey, "json_unmarshal", err)
 
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketCacheCorrupted)
 	}
 
 	markets := make([]models.Market, 0, len(redisViews))
@@ -84,7 +84,7 @@ func (m *MarketCacheRepository) GetAll(
 		if mapError != nil {
 			m.invalidateCorruptedCache(ctx, span, roleKey, "dto_to_domain", mapError)
 
-			return nil, fmt.Errorf("%s: %w", op, mapError)
+			return nil, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketCacheCorrupted)
 		}
 		markets = append(markets, market)
 	}

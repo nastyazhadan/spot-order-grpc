@@ -17,7 +17,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
+	spotv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -154,23 +156,17 @@ func registerMetrics(
 
 			metrics.RecordShutdown(cfg.Service.Name, metrics.ShutdownReasonFromContext(stopCtx))
 
-			timer := time.NewTimer(cfg.Metrics.ShutdownTimeout)
-			defer timer.Stop()
+			shutdownCtx, cancel := context.WithTimeout(stopCtx, cfg.Metrics.ShutdownTimeout)
+			defer cancel()
 
-			select {
-			case <-timer.C:
-			case <-stopCtx.Done():
-				logger.Warn(stopCtx, "Shutdown metrics interrupted by stop context", zap.Error(stopCtx.Err()))
-			}
-
-			if err := httpServer.Shutdown(stopCtx); err != nil {
-				logger.Error(stopCtx, "Failed to shutdown metrics server", zap.Error(err))
+			if err := httpServer.Shutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Failed to shutdown metrics server", zap.Error(err))
 				shutdownErr = errors.Join(shutdownErr, err)
 			}
 
 			if meterProvider != nil {
-				if err := meterProvider.Shutdown(stopCtx); err != nil {
-					logger.Error(stopCtx, "Failed to shutdown metrics provider", zap.Error(err))
+				if err := meterProvider.Shutdown(shutdownCtx); err != nil {
+					logger.Error(shutdownCtx, "Failed to shutdown metrics provider", zap.Error(err))
 					shutdownErr = errors.Join(shutdownErr, err)
 				}
 			}
@@ -327,11 +323,17 @@ func registerReadiness(
 ) {
 	lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			healthServer.SetServing()
+			healthServer.SetServingStatus(
+				"",
+				grpc_health_v1.HealthCheckResponse_SERVING)
+			healthServer.SetServingStatus(
+				spotv1.SpotInstrumentService_ServiceDesc.ServiceName,
+				grpc_health_v1.HealthCheckResponse_SERVING,
+			)
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			healthServer.SetNotServing()
+			healthServer.Shutdown()
 			return nil
 		},
 	})

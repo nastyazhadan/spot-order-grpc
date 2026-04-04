@@ -153,6 +153,9 @@ func validatePrice(request *proto.CreateOrderRequest) (shared.Decimal, error) {
 	}
 
 	price := request.GetPrice()
+	if price == nil {
+		return shared.Decimal{}, status.Error(codes.InvalidArgument, "price is required")
+	}
 
 	validPrice, err := shared.NewDecimal(price.Value)
 	if err != nil {

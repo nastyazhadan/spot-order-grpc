@@ -165,8 +165,16 @@ shared/errors/service/
 └── ErrSaveTokenFailed               — ошибка сохранения токена в Redis
 
 shared/errors/repository/
-└── ErrOrderNotFound, ErrOrderAlreadyExists
+└── ErrOrderNotFound, ErrOrderAlreadyExists, ErrMarketsNotFound, ErrMarketCacheCorrupted
 ```
+
+### Ошибки cache-слоя SpotService
+
+Во внутреннем cache/repository слое SpotService отдельно различаются:
+- `ErrMarketsNotFound` — кэш пуст или ключ отсутствует
+- `ErrMarketCacheCorrupted` — данные в Redis найдены, но не могут быть корректно десериализованы/смэпплены в доменную модель
+
+`ErrMarketCacheCorrupted` не является публичной бизнес-ошибкой API. Эта ошибка используется для выбора специального fallback-пути: чтение из PostgreSQL, попытка warmup Redis и, при необходимости, cleanup stale key.
 
 ### Маппинг ошибок → gRPC-коды
 
@@ -204,15 +212,15 @@ shared/errors/repository/
 recoverer → tracer → meter → logger → auth → rateLimiter → errorMapper → validator
 ```
 
-| Перехватчик | Пакет | Действие |
-|---|---|---|
-| `recoverer` | `interceptors/recovery` | Перехватывает `panic`, возвращает `INTERNAL` |
-| `tracer` | `interceptors/tracing` | Создаёт span, инжектирует W3C TraceContext |
-| `meter` | `interceptors/metrics` | Счётчики, in-flight gauge, histogram длительности |
-| `logger` | `interceptors/logging/zap` | Логирует метод, статус, длительность с trace_id |
-| `auth` | `interceptors/auth` | Парсит JWT, кладёт user_id и roles в контекст |
-| `rateLimiter` | `interceptors/ratelimit` | Глобальный RPS-лимит (токен-бакет) |
-| `errorMapper` | `interceptors/errors` | Переводит доменные ошибки в gRPC-статусы |
+| Перехватчик | Пакет | Действие                                            |
+|---|---|-----------------------------------------------------|
+| `recoverer` | `interceptors/recovery` | Перехватывает `panic`, возвращает `INTERNAL`        |
+| `tracer` | `interceptors/tracing` | Создаёт span, инжектирует W3C TraceContext          |
+| `meter` | `interceptors/metrics` | Счётчики, in-flight gauge, histogram длительности   |
+| `logger` | `interceptors/logging/zap` | Логирует метод, статус, длительность с trace_id     |
+| `auth` | `interceptors/auth` | Парсит JWT, кладёт user_id и roles в контекст       |
+| `rateLimiter` | `interceptors/ratelimit` | Per-instance RPS-лимит (токен-бакет)                |
+| `errorMapper` | `interceptors/errors` | Переводит доменные ошибки в gRPC-статусы            |
 | `validator` | `interceptors/validate` | Protovalidate: проверяет поля запроса по аннотациям |
 
 ### SpotInstrumentService
@@ -222,6 +230,25 @@ recoverer → tracer → meter → logger → auth → rateLimiter → errorMapp
 ```
 
 SpotService тоже использует JWT auth interceptor.
+
+## gRPC Health Checking
+
+Для health-check используется стандартная реализация `google.golang.org/grpc/health`.
+
+Что это означает:
+- поддерживается стандартный gRPC Health Checking Protocol
+- доступны оба метода: `Check` и `Watch`
+- статусы могут выставляться как для пустого service name (`""`), так и для конкретных gRPC-сервисов
+- при остановке приложения вызывается `healthServer.Shutdown()`, чтобы watchers получили корректный переход в `NOT_SERVING`
+
+Используемые service names:
+- `order.v1.OrderService`
+- `auth.v1.AuthService`
+- `spot.v1.SpotInstrumentService`
+
+Текущее ограничение:
+- на текущем этапе health отражает состояние запущенного процесса и регистрации сервисов
+- dependency-aware readiness (с учётом Postgres / Redis / Kafka / downstream) не реализован
 
 ---
 
@@ -679,6 +706,18 @@ type PollerCursor struct {
 | Назначение | Ключ | Формат значения | TTL |
 |---|---|---|---|
 | Кэш рынков (по роли) | `market:cache:<role>` | JSON ([]Market) | spot_cache_ttl (5m) |
+
+### Поведение role-based cache рынков
+
+`MarketViewer` использует Redis-кэш списков рынков по role-based ключам вида `market:cache:<role>`.
+
+Поведение при чтении:
+- при `cache miss` сервис загружает рынки из PostgreSQL, фильтрует их по роли и перепрогревает Redis-кэш
+- при повреждённом (`corrupted`) payload в Redis кэш считается невалидным, и сервис переходит на fallback в PostgreSQL
+- corrupted cache выделяется в отдельный сценарий через sentinel-ошибку `ErrMarketCacheCorrupted`
+- если перепрогрев кэша после обнаружения corrupted payload не удался, сервис дополнительно пытается удалить stale key, чтобы последующие запросы не зацикливались на чтении битого значения
+
+Для защиты от thundering herd загрузка и перепрогрев выполняются через `singleflight`.
 
 ---
 

@@ -18,9 +18,13 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
 	outbox "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/kafka"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/consumer"
+	authv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/auth/v1"
+	orderv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
+	spotv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -73,7 +77,9 @@ func registerInfrastructure(
 			checkCtx, cancel := context.WithTimeout(startCtx, cfg.Timeouts.Check)
 			defer cancel()
 
-			if err := health.CheckHealth(checkCtx, connection); err != nil {
+			if err := health.CheckHealth(checkCtx, connection,
+				spotv1.SpotInstrumentService_ServiceDesc.ServiceName,
+			); err != nil {
 				logger.Error(checkCtx, "Spot startup health check failed",
 					zap.String("spot_address", cfg.SpotAddress),
 					zap.Error(err),
@@ -171,23 +177,17 @@ func registerMetrics(
 
 			metrics.RecordShutdown(cfg.Service.Name, metrics.ShutdownReasonFromContext(stopCtx))
 
-			timer := time.NewTimer(cfg.Metrics.ShutdownTimeout)
-			defer timer.Stop()
+			shutdownCtx, cancel := context.WithTimeout(stopCtx, cfg.Metrics.ShutdownTimeout)
+			defer cancel()
 
-			select {
-			case <-timer.C:
-			case <-stopCtx.Done():
-				logger.Warn(stopCtx, "Shutdown metrics interrupted by stop context", zap.Error(stopCtx.Err()))
-			}
-
-			if err := httpServer.Shutdown(stopCtx); err != nil {
-				logger.Error(stopCtx, "Failed to shutdown metrics server", zap.Error(err))
+			if err := httpServer.Shutdown(shutdownCtx); err != nil {
+				logger.Error(shutdownCtx, "Failed to shutdown metrics server", zap.Error(err))
 				shutdownErr = errors.Join(shutdownErr, err)
 			}
 
 			if meterProvider != nil {
-				if err := meterProvider.Shutdown(stopCtx); err != nil {
-					logger.Error(stopCtx, "Failed to shutdown metrics provider", zap.Error(err))
+				if err := meterProvider.Shutdown(shutdownCtx); err != nil {
+					logger.Error(shutdownCtx, "Failed to shutdown metrics provider", zap.Error(err))
 					shutdownErr = errors.Join(shutdownErr, err)
 				}
 			}
@@ -346,11 +346,21 @@ func registerReadiness(
 ) {
 	lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			healthServer.SetServing()
+			healthServer.SetServingStatus(
+				"",
+				grpc_health_v1.HealthCheckResponse_SERVING)
+			healthServer.SetServingStatus(
+				orderv1.OrderService_ServiceDesc.ServiceName,
+				grpc_health_v1.HealthCheckResponse_SERVING,
+			)
+			healthServer.SetServingStatus(
+				authv1.AuthService_ServiceDesc.ServiceName,
+				grpc_health_v1.HealthCheckResponse_SERVING,
+			)
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			healthServer.SetNotServing()
+			healthServer.Shutdown()
 			return nil
 		},
 	})

@@ -11,6 +11,7 @@ var (
 	ErrOrderAlreadyExists = shared.ErrAlreadyExists{}
 	ErrMarketNotFound     = shared.ErrMarketNotFound{}
 
-	ErrMarketStoreIsEmpty = errors.New("market store is empty")
-	ErrMarketsNotFound    = errors.New("markets cache not found")
+	ErrMarketStoreIsEmpty   = errors.New("market store is empty")
+	ErrMarketsNotFound      = errors.New("markets cache not found")
+	ErrMarketCacheCorrupted = errors.New("market cache corrupted")
 )
