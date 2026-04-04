@@ -183,7 +183,7 @@ shared/errors/repository/
 | `ErrMarketsUnavailable` | `UNAVAILABLE` | `err.Error()` | WARN |
 | `ErrOrderAlreadyExists` | `ALREADY_EXISTS` | `"order already exists"` | WARN |
 | `ErrLimitExceeded` | `RESOURCE_EXHAUSTED` | `err.Error()` (с лимитом и окном) | WARN |
-| `ErrUserRoleNotSpecified` | `INVALID_ARGUMENT` | `err.Error()` | WARN |
+| `ErrUserRoleNotSpecified` | `UNAUTHENTICATED` | `err.Error()` | WARN |
 | `ErrInvalidSubject`, `ErrInvalidJTI`, `ErrTokenRevoked` | `UNAUTHENTICATED` | `"refresh token error"` | WARN |
 | `gobreaker.ErrOpenState`, `ErrTooManyRequests` | `UNAVAILABLE` | `"service temporarily unavailable"` | — |
 | `ErrDisabled` | `FAILED_PRECONDITION` | `"market is disabled"` | WARN |

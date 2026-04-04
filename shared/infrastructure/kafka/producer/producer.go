@@ -119,7 +119,8 @@ func (p *producer) sendMessage(ctx context.Context, msg kafka.Message) error {
 		zap.String("topic", topic),
 		zap.Int32("partition", partition),
 		zap.Int64("offset", offset),
-		zap.String("key", string(msg.Key)),
+		zap.Bool("has_key", len(msg.Key) > 0),
+		zap.Int("key_len", len(msg.Key)),
 	)
 
 	return nil
