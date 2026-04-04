@@ -12,7 +12,6 @@ import (
 
 	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 )
 
@@ -51,7 +50,7 @@ func UnaryServerInterceptor(
 			return nil, err
 		}
 
-		userRoles, err := userRolesFromClaims(claims.UserRoles)
+		userRoles, err := authjwt.ParseUserRolesClaims(claims.UserRoles)
 		if err != nil {
 			return nil, err
 		}
@@ -116,31 +115,4 @@ func bearerTokenFromContext(ctx context.Context) (string, error) {
 	}
 
 	return tokenString, nil
-}
-
-func userRolesFromClaims(rawRoles []string) ([]models.UserRole, error) {
-	if len(rawRoles) == 0 {
-		return nil, status.Error(codes.Unauthenticated, "user_roles not found in token")
-	}
-
-	out := make([]models.UserRole, 0, len(rawRoles))
-	seen := make(map[models.UserRole]struct{}, len(rawRoles))
-
-	for _, raw := range rawRoles {
-		role, ok := models.ParseUserRole(raw)
-		if !ok || role == models.UserRoleUnspecified {
-			return nil, status.Error(codes.Unauthenticated, "invalid user_roles in token")
-		}
-		if _, exists := seen[role]; exists {
-			continue
-		}
-		seen[role] = struct{}{}
-		out = append(out, role)
-	}
-
-	if len(out) == 0 {
-		return nil, status.Error(codes.Unauthenticated, "user_roles not found in token")
-	}
-
-	return out, nil
 }

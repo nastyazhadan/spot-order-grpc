@@ -42,6 +42,8 @@ var Lifecycle = fx.Options(
 		registerKafkaProducer,
 		registerOutboxWorker,
 		registerMarketPoller,
+
+		registerReadiness,
 	),
 )
 
@@ -109,7 +111,6 @@ func registerMetrics(
 	cfg config.SpotConfig,
 	resource *resource.Resource,
 	logger *zapLogger.Logger,
-	healthServer *health.Server,
 ) {
 	appCtx := in.AppCtx
 	var (
@@ -151,7 +152,6 @@ func registerMetrics(
 		OnStop: func(stopCtx context.Context) error {
 			var shutdownErr error
 
-			healthServer.SetNotServing()
 			metrics.RecordShutdown(cfg.Service.Name, metrics.ShutdownReasonFromContext(stopCtx))
 
 			timer := time.NewTimer(cfg.Metrics.ShutdownTimeout)
@@ -316,6 +316,22 @@ func registerKafkaProducer(
 				return err
 			}
 
+			return nil
+		},
+	})
+}
+
+func registerReadiness(
+	lifecycle fx.Lifecycle,
+	healthServer *health.Server,
+) {
+	lifecycle.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			healthServer.SetServing()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			healthServer.SetNotServing()
 			return nil
 		},
 	})

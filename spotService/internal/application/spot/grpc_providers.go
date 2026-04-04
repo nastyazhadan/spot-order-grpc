@@ -106,7 +106,6 @@ func startGRPCServer(
 	server *grpc.Server,
 	listener net.Listener,
 	logger *zapLogger.Logger,
-	healthServer *health.Server,
 ) {
 	appCtx := in.AppCtx
 
@@ -121,13 +120,9 @@ func startGRPCServer(
 				}
 			}()
 
-			healthServer.SetServing()
-
 			return nil
 		},
 		OnStop: func(stopCtx context.Context) error {
-			healthServer.SetNotServing()
-
 			return stopGRPCServer(stopCtx, server, logger, "spot")
 		},
 	})

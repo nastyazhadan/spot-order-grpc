@@ -20,7 +20,7 @@ type Server struct {
 
 func NewServer() *Server {
 	return &Server{
-		status: grpc_health_v1.HealthCheckResponse_SERVING,
+		status: grpc_health_v1.HealthCheckResponse_NOT_SERVING,
 	}
 }
 

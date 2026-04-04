@@ -16,7 +16,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/nastyazhadan/spot-order-grpc/protos v0.0.0-20260323211033-a7216e999bcb
 	github.com/nastyazhadan/spot-order-grpc/shared v0.0.0-20260323211033-a7216e999bcb
-	github.com/nastyazhadan/spot-order-grpc/spotService v0.0.0-20260326005338-7b579da961e9
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/shopspring/decimal v1.4.0

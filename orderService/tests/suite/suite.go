@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	repoPostgres "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/order"
 	repoRedis "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/order"
-	models2 "github.com/nastyazhadan/spot-order-grpc/spotService/internal/domain/models"
 	"github.com/testcontainers/testcontainers-go"
 	pgContainer "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -55,11 +54,11 @@ const (
 )
 
 type MockMarketViewer struct {
-	Markets []models2.Market
+	Markets []models.Market
 	Err     error
 }
 
-func (m *MockMarketViewer) ViewMarkets(_ context.Context, _ []models.UserRole) ([]models2.Market, error) {
+func (m *MockMarketViewer) ViewMarkets(_ context.Context, _ []models.UserRole) ([]models.Market, error) {
 	if m.Err != nil {
 		return nil, m.Err
 	}

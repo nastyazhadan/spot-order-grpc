@@ -148,6 +148,10 @@ func validateCreateRequest(request *proto.CreateOrderRequest) error {
 }
 
 func validatePrice(request *proto.CreateOrderRequest) (shared.Decimal, error) {
+	if request == nil {
+		return shared.Decimal{}, status.Error(codes.InvalidArgument, errors.MsgRequestRequired)
+	}
+
 	price := request.GetPrice()
 
 	validPrice, err := shared.NewDecimal(price.Value)
