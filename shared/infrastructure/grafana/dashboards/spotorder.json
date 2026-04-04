@@ -71,8 +71,8 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(spotorder_grpc_requests_total[1m])) by (service, method)",
-          "legendFormat": "{{service}} \u2014 {{method}}",
+          "expr": "sum(rate(grpc_server_requests_total[1m])) by (service, method)",
+          "legendFormat": "{{service}} — {{method}}",
           "refId": "A"
         }
       ],
@@ -117,7 +117,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(spotorder_grpc_requests_total{status!=\"OK\"}[1m])) by (service) / sum(rate(spotorder_grpc_requests_total[1m])) by (service)",
+          "expr": "sum(rate(grpc_server_requests_total{status!=\"OK\"}[1m])) by (service) / sum(rate(grpc_server_requests_total[1m])) by (service)",
           "legendFormat": "{{service}}",
           "refId": "A"
         }
@@ -173,17 +173,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(spotorder_grpc_request_duration_seconds_bucket[1m])) by (service, method, le))",
+          "expr": "histogram_quantile(0.50, sum(rate(grpc_server_request_duration_seconds_bucket[1m])) by (service, method, le))",
           "legendFormat": "p50 {{service}} {{method}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(spotorder_grpc_request_duration_seconds_bucket[1m])) by (service, method, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(grpc_server_request_duration_seconds_bucket[1m])) by (service, method, le))",
           "legendFormat": "p95 {{service}} {{method}}",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(spotorder_grpc_request_duration_seconds_bucket[1m])) by (service, method, le))",
+          "expr": "histogram_quantile(0.99, sum(rate(grpc_server_request_duration_seconds_bucket[1m])) by (service, method, le))",
           "legendFormat": "p99 {{service}} {{method}}",
           "refId": "C"
         }
@@ -241,8 +241,8 @@
       },
       "targets": [
         {
-          "expr": "spotorder_grpc_in_flight_requests",
-          "legendFormat": "{{service}}",
+          "expr": "sum(grpc_server_in_flight_requests) by (service, method)",
+          "legendFormat": "{{service}} {{method}}",
           "refId": "A"
         }
       ],
@@ -297,7 +297,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(spotorder_orders_created_total[1m])) by (service)",
+          "expr": "sum(rate(grpc_server_orders_created_total[1m])) by (service)",
           "legendFormat": "{{service}}",
           "refId": "A"
         }
@@ -341,9 +341,14 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(spotorder_rate_limit_rejected_total[1m])) by (service, method)",
-          "legendFormat": "{{service}} {{method}}",
+          "expr": "sum(rate(grpc_server_rate_limit_rejected_grpc_total[1m])) by (service, method)",
+          "legendFormat": "grpc {{service}} {{method}}",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(grpc_server_rate_limit_rejected_business_total[1m])) by (service, operation)",
+          "legendFormat": "business {{service}} {{operation}}",
+          "refId": "B"
         }
       ],
       "title": "Rate Limit Rejections",
@@ -407,7 +412,7 @@
       },
       "targets": [
         {
-          "expr": "spotorder_shutdowns_total",
+          "expr": "sum(grpc_server_shutdowns_total) by (service, reason)",
           "legendFormat": "{{service}} ({{reason}})",
           "refId": "A"
         }
@@ -448,7 +453,7 @@
       },
       "targets": [
         {
-          "expr": "increase(spotorder_shutdowns_total[1h])",
+          "expr": "increase(grpc_server_shutdowns_total[1h])",
           "legendFormat": "{{service}} ({{reason}})",
           "refId": "A"
         }
@@ -504,17 +509,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(spotorder_db_query_duration_seconds_bucket[1m])) by (service, operation, le))",
+          "expr": "histogram_quantile(0.50, sum(rate(grpc_server_db_query_duration_seconds_bucket[1m])) by (service, operation, le))",
           "legendFormat": "p50 {{service}} {{operation}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(spotorder_db_query_duration_seconds_bucket[1m])) by (service, operation, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(grpc_server_db_query_duration_seconds_bucket[1m])) by (service, operation, le))",
           "legendFormat": "p95 {{service}} {{operation}}",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(spotorder_db_query_duration_seconds_bucket[1m])) by (service, operation, le))",
+          "expr": "histogram_quantile(0.99, sum(rate(grpc_server_db_query_duration_seconds_bucket[1m])) by (service, operation, le))",
           "legendFormat": "p99 {{service}} {{operation}}",
           "refId": "C"
         }
@@ -558,7 +563,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(spotorder_db_query_duration_seconds_count[1m])) by (service, operation)",
+          "expr": "sum(rate(grpc_server_db_query_duration_seconds_count[1m])) by (service, operation)",
           "legendFormat": "{{service}} {{operation}}",
           "refId": "A"
         }
@@ -614,12 +619,12 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(spotorder_cache_operation_duration_seconds_bucket[1m])) by (service, operation, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(grpc_server_cache_operation_duration_seconds_bucket[1m])) by (service, operation, le))",
           "legendFormat": "p95 {{service}} {{operation}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(spotorder_cache_operation_duration_seconds_bucket[1m])) by (service, operation, le))",
+          "expr": "histogram_quantile(0.99, sum(rate(grpc_server_cache_operation_duration_seconds_bucket[1m])) by (service, operation, le))",
           "legendFormat": "p99 {{service}} {{operation}}",
           "refId": "B"
         }
@@ -665,7 +670,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(spotorder_cache_hits_total[1m])) by (service, operation) / (sum(rate(spotorder_cache_hits_total[1m])) by (service, operation) + sum(rate(spotorder_cache_misses_total[1m])) by (service, operation))",
+          "expr": "sum(rate(grpc_server_cache_hits_total[1m])) by (service, operation) / (sum(rate(grpc_server_cache_hits_total[1m])) by (service, operation) + sum(rate(grpc_server_cache_misses_total[1m])) by (service, operation))",
           "legendFormat": "{{service}} {{operation}}",
           "refId": "A"
         }
@@ -709,12 +714,12 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(spotorder_cache_hits_total[1m])) by (service, operation)",
+          "expr": "sum(rate(grpc_server_cache_hits_total[1m])) by (service, operation)",
           "legendFormat": "hit {{service}} {{operation}}",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(spotorder_cache_misses_total[1m])) by (service, operation)",
+          "expr": "sum(rate(grpc_server_cache_misses_total[1m])) by (service, operation)",
           "legendFormat": "miss {{service}} {{operation}}",
           "refId": "B"
         }
@@ -780,7 +785,7 @@
       },
       "targets": [
         {
-          "expr": "increase(spotorder_circuit_breaker_open_total[5m])",
+          "expr": "increase(grpc_server_circuit_breaker_open_total[5m])",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -821,8 +826,8 @@
       },
       "targets": [
         {
-          "expr": "increase(spotorder_circuit_breaker_state_changes_total[5m])",
-          "legendFormat": "{{name}} {{from}} \u2192 {{to}}",
+          "expr": "increase(grpc_server_circuit_breaker_state_changes_total[5m])",
+          "legendFormat": "{{name}} {{from}} → {{to}}",
           "refId": "A"
         }
       ],
@@ -865,12 +870,547 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(spotorder_orders_created_total[1m])) by (market_id)",
+          "expr": "sum(rate(grpc_server_orders_created_total[1m])) by (market_id)",
           "legendFormat": "market {{market_id}}",
           "refId": "A"
         }
       ],
       "title": "Orders Created by Market",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 68
+      },
+      "id": 107,
+      "title": "Cache Maintenance & Sync",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 69
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(grpc_server_cache_warmups_total[1m])) by (service, operation, role, result)",
+          "legendFormat": "{{service}} {{operation}} {{role}} {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Cache Warmups",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 69
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(grpc_server_cache_invalidations_total[1m])) by (service, reason, role, result)",
+          "legendFormat": "{{service}} {{reason}} {{role}} {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Cache Invalidations",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 69
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(grpc_server_cache_fallbacks_total[1m])) by (service, operation, reason)",
+          "legendFormat": "{{service}} {{operation}} {{reason}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Cache Fallbacks",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 77
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(grpc_server_market_block_state_sync_total[1m])) by (service, reason, blocked, result, updated)",
+          "legendFormat": "{{service}} blocked={{blocked}} updated={{updated}} {{reason}} {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Market Block State Sync",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 85
+      },
+      "id": 108,
+      "title": "Kafka",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 86
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(grpc_server_kafka_messages_published_total[1m])) by (service, topic)",
+          "legendFormat": "{{service}} {{topic}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Publish Success Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 86
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(grpc_server_kafka_publish_errors_total[1m])) by (service, topic)",
+          "legendFormat": "{{service}} {{topic}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Publish Errors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 86
+      },
+      "id": 24,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(grpc_server_kafka_publish_duration_seconds_bucket[1m])) by (service, topic, le))",
+          "legendFormat": "p95 {{service}} {{topic}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(grpc_server_kafka_publish_duration_seconds_bucket[1m])) by (service, topic, le))",
+          "legendFormat": "p99 {{service}} {{topic}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Kafka Publish Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 94
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(grpc_server_kafka_messages_consumed_total[1m])) by (service, topic, result)",
+          "legendFormat": "{{service}} {{topic}} {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Consume Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 94
+      },
+      "id": 26,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(grpc_server_kafka_consume_duration_seconds_bucket[1m])) by (service, topic, le))",
+          "legendFormat": "p95 {{service}} {{topic}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(grpc_server_kafka_consume_duration_seconds_bucket[1m])) by (service, topic, le))",
+          "legendFormat": "p99 {{service}} {{topic}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Kafka Consume Duration",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 102
+      },
+      "id": 109,
+      "title": "Outbox",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 103
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(grpc_server_outbox_events_total[1m])) by (service, event_type, result)",
+          "legendFormat": "{{service}} {{event_type}} {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Outbox Events by Result",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 103
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(grpc_server_outbox_worker_iteration_duration_seconds_bucket[1m])) by (service, le))",
+          "legendFormat": "p95 {{service}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(grpc_server_outbox_worker_iteration_duration_seconds_bucket[1m])) by (service, le))",
+          "legendFormat": "p99 {{service}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Outbox Worker Duration",
       "type": "timeseries"
     }
   ],
@@ -901,7 +1441,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "spotOrder \u2014 gRPC Services",
+  "title": "spotOrder — gRPC Services",
   "uid": "spotorder-grpc",
-  "version": 2
+  "version": 3
 }
