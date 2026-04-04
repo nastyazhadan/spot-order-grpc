@@ -32,6 +32,8 @@ func Load() (*config.SpotConfig, error) {
 		return nil, errors.New("JWT_SECRET is required")
 	}
 
+	cfg.Kafka.Producer.Compression = config.NormalizeKafkaCompression(cfg.Kafka.Producer.Compression)
+
 	if err := validateSpotConfig(cfg); err != nil {
 		return nil, err
 	}

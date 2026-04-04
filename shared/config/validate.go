@@ -90,6 +90,14 @@ func ValidateMetricsConfig(fieldPrefix string, cfg MetricsConfig) error {
 		)
 	}
 
+	if cfg.ShutdownTimeout < 0 {
+		return fmt.Errorf(
+			"%s.shutdown_timeout must be greater than or equal to 0, got %s",
+			fieldPrefix,
+			cfg.ShutdownTimeout,
+		)
+	}
+
 	return nil
 }
 
@@ -287,7 +295,7 @@ func ValidateKafkaProducerConfig(fieldPrefix string, cfg ProducerConfig) error {
 		)
 	}
 
-	compression := strings.ToLower(strings.TrimSpace(cfg.Compression))
+	compression := NormalizeKafkaCompression(cfg.Compression)
 	switch compression {
 	case "none", "gzip", "snappy", "lz4", "zstd":
 		return nil
@@ -298,6 +306,10 @@ func ValidateKafkaProducerConfig(fieldPrefix string, cfg ProducerConfig) error {
 			cfg.Compression,
 		)
 	}
+}
+
+func NormalizeKafkaCompression(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 func ValidateKafkaConsumerConfig(fieldPrefix string, cfg ConsumerConfig) error {

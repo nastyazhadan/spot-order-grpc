@@ -26,11 +26,22 @@ message GetOrderStatusResponse {
 message CreateOrderRequest {
   reserved 1;
   reserved "user_id"; // removed: user_id is now taken from JWT token
+
   string market_id = 2 [(buf.validate.field).string.uuid = true]; // UUID of the market to create
+
   common.v1.OrderType order_type = 3 [
     (buf.validate.field).enum = { defined_only: true, not_in: 0 }
   ]; // Type of the order to create
-  google.type.Decimal price = 4; // Price of the order
+
+  google.type.Decimal price = 4 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).cel = {
+      id: "create_order.price.value.required",
+      message: "price is required",
+      expression: "this.value != ''"
+    }
+  ]; // Price of the order
+
   int64 quantity = 5 [(buf.validate.field).int64.gt = 0]; // Quantity of the order
 }
 

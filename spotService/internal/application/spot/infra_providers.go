@@ -143,7 +143,7 @@ func provideSaramaSyncProducer(cfg config.SpotConfig) (sarama.SyncProducer, erro
 	saramaCfg.Metadata.Retry.Max = cfg.Kafka.Producer.MaxRetries
 	saramaCfg.Metadata.Retry.Backoff = cfg.Kafka.Producer.RetryBackoff
 
-	switch cfg.Kafka.Producer.Compression {
+	switch config.NormalizeKafkaCompression(cfg.Kafka.Producer.Compression) {
 	case "gzip":
 		saramaCfg.Producer.Compression = sarama.CompressionGZIP
 	case "snappy":

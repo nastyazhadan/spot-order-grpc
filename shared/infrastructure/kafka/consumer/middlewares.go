@@ -84,39 +84,6 @@ func RetryMiddleware(
 	}
 }
 
-func MessageSizeLimitMiddleware(
-	maxMessageBytes int,
-	logger *zapLogger.Logger,
-) Middleware {
-	if maxMessageBytes <= 0 {
-		return func(next MessageHandler) MessageHandler {
-			return next
-		}
-	}
-
-	return func(next MessageHandler) MessageHandler {
-		return func(ctx context.Context, message kafka.Message) error {
-			size := messageSize(message)
-			if size <= maxMessageBytes {
-				return next(ctx, message)
-			}
-
-			logger.Error(ctx, "Kafka message exceeds consumer size limit",
-				zap.String("topic", message.Topic),
-				zap.Int("message_size", size),
-				zap.Int("max_message_size", maxMessageBytes),
-				zap.Int32("partition", message.Partition),
-				zap.Int64("offset", message.Offset),
-			)
-
-			return MessageTooLargeError{
-				Size:  size,
-				Limit: maxMessageBytes,
-			}
-		}
-	}
-}
-
 func DLQMiddleware(
 	dlqPublisher DLQPublisher,
 	maxMessageBytes int,

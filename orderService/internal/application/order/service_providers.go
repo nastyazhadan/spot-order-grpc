@@ -229,12 +229,6 @@ func provideConsumerService(
 			logger,
 		),
 	)
-	middlewares = append(middlewares,
-		sharedConsumer.MessageSizeLimitMiddleware(
-			cfg.Kafka.Consumer.MaxMessageBytes,
-			logger,
-		),
-	)
 
 	kafkaConsumer := sharedConsumer.New(
 		group,

@@ -124,6 +124,7 @@ func registerMetrics(
 	cfg config.OrderConfig,
 	resource *resource.Resource,
 	logger *zapLogger.Logger,
+	healthServer *health.Server,
 ) {
 	appCtx := in.AppCtx
 	var (
@@ -165,11 +166,16 @@ func registerMetrics(
 		OnStop: func(stopCtx context.Context) error {
 			var shutdownErr error
 
-			if meterProvider != nil {
-				if err := meterProvider.Shutdown(stopCtx); err != nil {
-					logger.Error(stopCtx, "Failed to shutdown metrics provider", zap.Error(err))
-					shutdownErr = errors.Join(shutdownErr, err)
-				}
+			healthServer.SetNotServing()
+			metrics.RecordShutdown(cfg.Service.Name, metrics.ShutdownReasonFromContext(stopCtx))
+
+			timer := time.NewTimer(cfg.Metrics.ShutdownTimeout)
+			defer timer.Stop()
+
+			select {
+			case <-timer.C:
+			case <-stopCtx.Done():
+				logger.Warn(stopCtx, "Shutdown metrics interrupted by stop context", zap.Error(stopCtx.Err()))
 			}
 
 			if err := httpServer.Shutdown(stopCtx); err != nil {
@@ -177,7 +183,12 @@ func registerMetrics(
 				shutdownErr = errors.Join(shutdownErr, err)
 			}
 
-			metrics.RecordShutdown(cfg.Service.Name, metrics.ShutdownReasonFromError(shutdownErr))
+			if meterProvider != nil {
+				if err := meterProvider.Shutdown(stopCtx); err != nil {
+					logger.Error(stopCtx, "Failed to shutdown metrics provider", zap.Error(err))
+					shutdownErr = errors.Join(shutdownErr, err)
+				}
+			}
 
 			return shutdownErr
 		},

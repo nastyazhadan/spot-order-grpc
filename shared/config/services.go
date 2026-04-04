@@ -111,7 +111,7 @@ type ConsumerConfig struct {
 	HeartbeatInterval  time.Duration `mapstructure:"heartbeat_interval"`
 	MaxRetries         int           `mapstructure:"max_retries"`
 	RetryBackoff       time.Duration `mapstructure:"retry_backoff"`
-	MaxMessageBytes    int           `mapstructure:"max_message_bytes"`
+	MaxMessageBytes    int32         `mapstructure:"max_message_bytes"`
 	DLQEnabled         bool          `mapstructure:"dlq_enabled"`
 	DLQMaxMessageBytes int           `mapstructure:"dlq_max_message_bytes"`
 	RestartBackoff     time.Duration `mapstructure:"restart_backoff"`
@@ -169,6 +169,7 @@ type MetricsConfig struct {
 	WriteTimeout      time.Duration `mapstructure:"write_timeout"`
 	IdleTimeout       time.Duration `mapstructure:"idle_timeout"`
 	ExportInterval    time.Duration `mapstructure:"export_interval"`
+	ShutdownTimeout   time.Duration `mapstructure:"shutdown_timeout"`
 }
 
 type KeepAliveConfig struct {

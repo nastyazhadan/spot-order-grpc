@@ -28,6 +28,7 @@ import (
 
 var GRPCProviders = fx.Options(
 	fx.Provide(
+		health.NewServer(),
 		provideListener,
 		provideGRPCServer,
 	),
@@ -62,6 +63,7 @@ func provideGRPCServer(
 	container *container,
 	cfg config.SpotConfig,
 	appLogger *zapLogger.Logger,
+	healthServer *health.Server,
 ) (*grpc.Server, error) {
 	validator, err := validate.UnaryServerInterceptor()
 	if err != nil {
@@ -92,7 +94,7 @@ func provideGRPCServer(
 	)
 
 	reflection.Register(grpcServer)
-	health.RegisterService(grpcServer)
+	health.RegisterService(grpcServer, healthServer)
 	grpcSpot.Register(grpcServer, container.SpotService)
 
 	return grpcServer, nil
@@ -104,6 +106,7 @@ func startGRPCServer(
 	server *grpc.Server,
 	listener net.Listener,
 	logger *zapLogger.Logger,
+	healthServer *health.Server,
 ) {
 	appCtx := in.AppCtx
 
@@ -114,35 +117,49 @@ func startGRPCServer(
 
 			go func() {
 				if err := server.Serve(listener); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-					logger.Error(appCtx, "gRPC spot server error", zap.Error(err))
+					logger.Error(appCtx, "gRPC spot server stopped unexpectedly", zap.Error(err))
 				}
 			}()
+
+			healthServer.SetServing()
 
 			return nil
 		},
 		OnStop: func(stopCtx context.Context) error {
-			stopGRPCServer(stopCtx, server, logger, "spot")
-			return nil
+			healthServer.SetNotServing()
+
+			return stopGRPCServer(stopCtx, server, logger, "spot")
 		},
 	})
 }
 
-func stopGRPCServer(ctx context.Context, server *grpc.Server, logger *zapLogger.Logger, serviceName string) {
-	stopped := make(chan struct{})
+func stopGRPCServer(
+	ctx context.Context,
+	server *grpc.Server,
+	logger *zapLogger.Logger,
+	serviceName string,
+) error {
+	done := make(chan struct{})
 
 	go func() {
 		server.GracefulStop()
-		close(stopped)
+		close(done)
 	}()
 
 	select {
-	case <-stopped:
+	case <-done:
 		logger.Info(ctx, "gRPC server stopped gracefully",
 			zap.String("service", serviceName))
+		return nil
 	case <-ctx.Done():
-		logger.Warn(ctx, "gRPC graceful stop timed out, forcing stop",
+		logger.Warn(ctx, "gRPC graceful shutdown timed out, forcing stop",
 			zap.String("service", serviceName),
-			zap.Error(ctx.Err()))
+			zap.Error(ctx.Err()),
+		)
 		server.Stop()
+
+		<-done
+
+		return fmt.Errorf("gRPC graceful shutdown timed out: service=%s: %v", serviceName, ctx.Err())
 	}
 }

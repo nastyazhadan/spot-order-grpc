@@ -240,13 +240,14 @@ const file_order_v1_order_proto_rawDesc = "" +
 	"\x15GetOrderStatusRequest\x12#\n" +
 	"\border_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aorderIdJ\x04\b\x02\x10\x03R\auser_id\"H\n" +
 	"\x16GetOrderStatusResponse\x12.\n" +
-	"\x06status\x18\x01 \x01(\x0e2\x16.common.v1.OrderStatusR\x06status\"\xdc\x01\n" +
+	"\x06status\x18\x01 \x01(\x0e2\x16.common.v1.OrderStatusR\x06status\"\xaf\x02\n" +
 	"\x12CreateOrderRequest\x12%\n" +
 	"\tmarket_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bmarketId\x12?\n" +
 	"\n" +
 	"order_type\x18\x03 \x01(\x0e2\x14.common.v1.OrderTypeB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\torderType\x12*\n" +
-	"\x05price\x18\x04 \x01(\v2\x14.google.type.DecimalR\x05price\x12#\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\torderType\x12}\n" +
+	"\x05price\x18\x04 \x01(\v2\x14.google.type.DecimalBQ\xbaHN\xba\x01H\n" +
+	"!create_order.price.value.required\x12\x11price is required\x1a\x10this.value != ''\xc8\x01\x01R\x05price\x12#\n" +
 	"\bquantity\x18\x05 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\bquantityJ\x04\b\x01\x10\x02R\auser_id\"`\n" +
 	"\x13CreateOrderResponse\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12.\n" +

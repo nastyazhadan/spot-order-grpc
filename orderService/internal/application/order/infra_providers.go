@@ -138,7 +138,7 @@ func provideSaramaSyncProducer(cfg config.OrderConfig) (sarama.SyncProducer, err
 	saramaCfg.Metadata.Retry.Max = cfg.Kafka.Producer.MaxRetries
 	saramaCfg.Metadata.Retry.Backoff = cfg.Kafka.Producer.RetryBackoff
 
-	switch cfg.Kafka.Producer.Compression {
+	switch config.NormalizeKafkaCompression(cfg.Kafka.Producer.Compression) {
 	case "gzip":
 		saramaCfg.Producer.Compression = sarama.CompressionGZIP
 	case "snappy":
@@ -165,6 +165,9 @@ func provideConsumerGroup(cfg config.OrderConfig) (sarama.ConsumerGroup, error) 
 	saramaCfg.Consumer.Group.Session.Timeout = cfg.Kafka.Consumer.SessionTimeout
 	saramaCfg.Consumer.Group.Heartbeat.Interval = cfg.Kafka.Consumer.HeartbeatInterval
 	saramaCfg.Consumer.Offsets.Initial = sarama.OffsetOldest
+
+	saramaCfg.Consumer.Fetch.Max = cfg.Kafka.Consumer.MaxMessageBytes
+	saramaCfg.Consumer.Fetch.Default = cfg.Kafka.Consumer.MaxMessageBytes
 
 	group, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.Kafka.Consumer.GroupID, saramaCfg)
 	if err != nil {

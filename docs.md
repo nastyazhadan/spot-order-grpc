@@ -478,10 +478,10 @@ ProcessMarketStateChanged(topic, consumerGroup, rawPayload, event):
 Middleware применяются конструктором через `applyMiddlewares` (обход в обратном порядке), образуя цепочку:
 
 ```
-PanicRecovery → [DLQ] → [RetryMiddleware] → [MessageSizeLimit] → handler
+PanicRecovery → [DLQ] → [RetryMiddleware] → handler
 ```
 
-`PanicRecovery` всегда первый — prepend-ится конструктором автоматически. `DLQ` (если включён) регистрируется следующим и оборачивает `Retry` и `MessageSizeLimit`, за счёт чего перехватывает `RetryExhaustedError`.
+`PanicRecovery` всегда первый — prepend-ится конструктором автоматически. `DLQ` (если включён) регистрируется следующим и оборачивает `Retry`, за счёт чего перехватывает `RetryExhaustedError`.
 
 ### PanicRecoveryMiddleware
 
@@ -492,17 +492,12 @@ PanicRecovery → [DLQ] → [RetryMiddleware] → [MessageSizeLimit] → handler
 ```
 Параметры: maxRetries int, backoff time.Duration
 Стратегия: backoff * (attempt + 1) — линейное увеличение
-Исключения: MessageTooLargeError не ретраится
 При исчерпании попыток: возвращает RetryExhaustedError{Err, RetryCount}
 ```
 
-### MessageSizeLimitMiddleware
-
-Проверяет размер сообщения. При превышении лимита возвращает `MessageTooLargeError` — сигнал для пропуска ретраев и немедленной отправки в DLQ.
-
 ### DLQMiddleware
 
-Оборачивает `Retry` и `MessageSizeLimit`. Перехватывает `RetryExhaustedError` или другие ошибки (кроме `ErrMessageHandledByDLQ`).  
+Оборачивает `Retry`. Перехватывает `RetryExhaustedError` или другие ошибки (кроме `ErrMessageHandledByDLQ`).  
 Публикует сообщение в DLQ-топик, добавляя к оригинальным заголовкам три дополнительных:
 - `dlq-original-topic` — топик, из которого получено сообщение
 - `dlq-retry-count` — количество совершённых попыток
