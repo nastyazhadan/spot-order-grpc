@@ -143,7 +143,7 @@ spot:
     environment: "development"
     service_version: "1.0.0"
   metrics:
-    http_address: ":9092"
+    http_address: ":9093"
     collector_endpoint: "otel-collector:4317"
     read_timeout: 5s
     write_timeout: 10s

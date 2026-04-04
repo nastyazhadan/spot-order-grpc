@@ -109,7 +109,7 @@ type MarketInboxWriter interface {
 
 // MarketOrderCanceler — отмена активных ордеров по рынку
 type MarketOrderCanceler interface {
-    // CancelActiveOrdersByMarket переводит все ордера со статусом CREATED/PROCESSING
+    // CancelActiveOrdersByMarket переводит все ордера со статусом CREATED/PENDING
     // в статус CANCELLED. Возвращает список отменённых order_id.
     CancelActiveOrdersByMarket(ctx context.Context, tx pgx.Tx, marketID uuid.UUID) ([]uuid.UUID, error)
 }
@@ -128,7 +128,7 @@ type MarketReader interface {
 // MarketEventProducer — публикация батча событий через Outbox
 type MarketEventProducer interface {
     // PublishMarketStateChanged записывает события в outbox и сохраняет курсор атомарно.
-    // После успешного коммита инвалидирует Redis-кэш.
+    // Обновление Redis-кэша выполняется отдельно логикой MarketPoller после успешной обработки батча.
     PublishMarketStateChanged(ctx context.Context, events []sharedModels.MarketStateChangedEvent, cursor models.PollerCursor) error
 }
 
@@ -218,10 +218,10 @@ recoverer → tracer → meter → logger → auth → rateLimiter → errorMapp
 ### SpotInstrumentService
 
 ```
-recoverer → tracer → meter → logger → rateLimiter → errorMapper → validator
+recoverer → tracer → meter → logger → auth → rateLimiter → errorMapper → validator
 ```
 
-Перехватчик `auth` отсутствует: SpotService не выполняет аутентификацию входящих запросов. Вызовы авторизованы на уровне сетевой изоляции (контейнерная сеть Docker).
+SpotService тоже использует JWT auth interceptor.
 
 ---
 
@@ -236,37 +236,50 @@ recoverer → tracer → meter → logger → rateLimiter → errorMapper → va
 4. Распарсить токен: jwt.ParseToken(tokenString, TokenTypeAccess)
    - проверить подпись (HS256, JWT_SECRET)
    - проверить exp
-   - проверить type claim == "access"
-5. Извлечь user_id из sub (UUID), roles из claims
-6. Проверить активность сессии: IsSessionActive(ctx, userID, jti)
-   - читает ключ из Redis: "refresh_token:<userID>:<jti>"
-7. Положить userID и roles в контекст через requestctx
-8. Передать управление следующему обработчику
+   - проверить token_type claim == "access"
+5. Извлечь user_id из sub (UUID), roles из claims.UserRoles
+6. Положить userID и roles в контекст через requestctx
+7. Передать управление следующему обработчику
 ```
+
+> **Важно:** JWT-перехватчик **не** проверяет активность сессии в Redis. Это намеренно: проверка сессии (`IsSessionActive`) выполняется только в `AuthService.Refresh` при ротации токенов. Access-токен считается валидным до истечения `exp` — это стандартная stateless-семантика JWT.
 
 ### Skip-методы по умолчанию
 
-Методы, не требующие JWT (настраивается в `config.yaml` → `order.auth.skip_methods`):
+Методы, не требующие JWT, различаются по сервисам.
 
-- `grpc.health.v1.Health/Check`
-- `auth.v1.AuthService/RefreshToken`
+Для `order.auth.skip_methods`:
+- `/grpc.health.v1.Health/Check`
+- `/grpc.health.v1.Health/Watch`
+- `/auth.v1.AuthService/RefreshToken`
+
+Для `spot.auth.skip_methods`:
+- `/grpc.health.v1.Health/Check`
+- `/grpc.health.v1.Health/Watch`
 
 ### Структура Claims
 
 ```go
 type Claims struct {
-    jwt.RegisteredClaims              // sub (user_id), exp, jti
-    UserRoles []string `json:"roles"` // ["ROLE_USER", ...]
-    TokenType string   `json:"type"`  // "access" | "refresh"
+    jwt.RegisteredClaims                            // sub (user_id), exp, jti
+    TokenType TokenType `json:"token_type"`         // "access" | "refresh"
+    SessionID string    `json:"session_id"`         // идентификатор сессии (UUID)
+    UserRoles []string  `json:"user_roles,omitempty"` // больше не передаются в Spot request
 }
 ```
 
-### Хранение refresh-токенов в Redis
+### Хранение refresh-токенов и сессий в Redis
 
-- **Ключ:** `refresh_token:<userID>:<jti>`
-- **Значение:** timestamp в Unix-секундах
-- **TTL:** `refresh_token_ttl` из конфига
-- **Отзыв:** `DEL` ключа при выдаче нового токена или явном logout
+Система использует **два ключа** для управления refresh-токенами:
+
+| Ключ | Значение | TTL |
+|---|---|---|
+| `refresh:<userID>:<jti>` | `"1"` (маркер существования токена) | `refresh_token_ttl` |
+| `auth_session:<userID>` | sessionID (string, UUID) | `refresh_token_ttl` |
+
+- **Ротация** (при `RefreshToken`): атомарным Lua-скриптом проверяется `auth_session:<userID>` == oldSessionID, удаляется старый `refresh:<userID>:<oldJTI>`, создаётся `refresh:<userID>:<newJTI>` и обновляется `auth_session:<userID>` = newSessionID.
+- **Замена** (при первой выдаче токена): создаются оба ключа атомарно.
+- **Валидация сессии** (в `AuthService.Refresh`): `IsSessionActive` сверяет `auth_session:<userID>` с `sessionID` из claims refresh-токена.
 
 ---
 
@@ -290,8 +303,8 @@ return count
 
 | Операция | Ключ | Пример |
 |---|---|---|
-| CreateOrder | `rate_limit:create_order:<userID>` | `rate_limit:create_order:550e8400-...` |
-| GetOrderStatus | `rate_limit:get_order_status:<userID>` | `rate_limit:get_order_status:550e8400-...` |
+| CreateOrder | `rate:order:create:<userID>` | `rate:order:create:550e8400-...` |
+| GetOrderStatus | `rate:order:get:<userID>` | `rate:order:get:550e8400-...` |
 
 ### Лимиты по умолчанию
 
@@ -339,7 +352,11 @@ return 1   -- обновлено
 
 ### Обработка повреждённого состояния
 
-Если значение не соответствует формату `<ts>:<state>`, скрипт возвращает ошибку `"invalid market block state"`. В этом случае:
+Lua-скрипт возвращает ошибку в двух случаях:
+- `"invalid market block state"` — значение не содержит разделителя `:`
+- `"invalid market block timestamp"` — временна́я метка не парсится как число
+
+В обоих случаях:
 1. Ключ удаляется (`DEL market:block:<marketID>`).
 2. Метод возвращает ошибку вызывающей стороне.
 
@@ -347,10 +364,13 @@ return 1   -- обновлено
 
 ### Поведение при отказе Redis
 
-Метод `IsBlocked` при ошибке Redis (за исключением `context.Canceled` / `context.DeadlineExceeded`):
-- Логирует предупреждение.
-- Инкрементирует `grpc_server_cache_fallbacks_total{service, operation="market_is_blocked", reason="lookup_error"}`.
-- Возвращает `(false, nil)` — система разрешает запрос и полагается на последующую проверку через SpotService.
+`IsBlocked` возвращает ошибку при любом сбое (кроме промаха кэша, который даёт `false, nil`). Fallback-логика реализована в приватном методе `OrderService.getMarketBlockedState`, который вызывает `IsBlocked`:
+
+- Если ошибка — `context.Canceled` / `context.DeadlineExceeded` → пробрасывается вызывающей стороне.
+- Любая другая ошибка Redis:
+    - Логирует предупреждение.
+    - Инкрементирует `grpc_server_cache_fallbacks_total{service, operation="market_is_blocked", reason="lookup_error"}`.
+    - Возвращает `blocked=false` → система допускает запрос и полагается на последующую проверку через SpotService.
 
 ---
 
@@ -398,7 +418,7 @@ validateMarket(marketID):
               ┌──────────┴──────────┐
               │ новое событие        │ дубликат
               ▼                     ▼
-         PROCESSING            (пропустить)
+           PENDING            (пропустить)
               │                     │
      ┌────────┴────────┐            └──→ trySyncMarketBlockState
      │ успех           │ ошибка
@@ -444,7 +464,7 @@ ProcessMarketStateChanged(topic, consumerGroup, rawPayload, event):
 
 При получении события с уже известным `(event_id, consumer_group)`:
 - Статус `PROCESSED`: коммит + синхронизация блокировки (idempotent).
-- Статус `PROCESSING`: коммит + синхронизация блокировки (параллельная обработка).
+- Статус `PENDING`: коммит + синхронизация блокировки (параллельная обработка).
 - Логируется с уровнем INFO, метрики не инкрементируются как ошибки.
 
 ### Отказоустойчивость `trySyncMarketBlockState`
@@ -455,13 +475,13 @@ ProcessMarketStateChanged(topic, consumerGroup, rawPayload, event):
 
 ## 10. Kafka Consumer: пайплайн middleware
 
-Middleware применяются в порядке регистрации, образуя цепочку:
+Middleware применяются конструктором через `applyMiddlewares` (обход в обратном порядке), образуя цепочку:
 
 ```
-PanicRecovery → [RetryMiddleware] → [MessageSizeLimit] → [DLQ] → handler
+PanicRecovery → [DLQ] → [RetryMiddleware] → [MessageSizeLimit] → handler
 ```
 
-Перехватчик `PanicRecovery` всегда первый — добавляется конструктором автоматически.
+`PanicRecovery` всегда первый — prepend-ится конструктором автоматически. `DLQ` (если включён) регистрируется следующим и оборачивает `Retry` и `MessageSizeLimit`, за счёт чего перехватывает `RetryExhaustedError`.
 
 ### PanicRecoveryMiddleware
 
@@ -482,12 +502,13 @@ PanicRecovery → [RetryMiddleware] → [MessageSizeLimit] → [DLQ] → handler
 
 ### DLQMiddleware
 
-Получает `RetryExhaustedError` или другие ошибки (кроме `ErrMessageHandledByDLQ`).  
-Публикует в DLQ-топик с дополнительными заголовками:
-- оригинальный топик
-- номер партиции
-- оффсет
-- количество ретраев
+Оборачивает `Retry` и `MessageSizeLimit`. Перехватывает `RetryExhaustedError` или другие ошибки (кроме `ErrMessageHandledByDLQ`).  
+Публикует сообщение в DLQ-топик, добавляя к оригинальным заголовкам три дополнительных:
+- `dlq-original-topic` — топик, из которого получено сообщение
+- `dlq-retry-count` — количество совершённых попыток
+- `dlq-error` — текст последней ошибки (может быть усечён для вписывания в лимит размера)
+
+Partition и offset передаются как поля сообщения, а не как заголовки. При превышении `DLQMaxMessageBytes` поле `dlq-error` и/или payload усекаются, добавляются служебные заголовки `dlq-truncated`, `dlq-original-size`, `dlq-final-size`.
 
 ### Управление сессией Consumer Group
 
@@ -529,7 +550,6 @@ FOR EACH batch (locked_by=worker_id, status='pending', available_at <= NOW()):
 | Метрика | Лейблы |
 |---|---|
 | `grpc_server_outbox_events_total` | `service`, `event_type`, `result` |
-| `grpc_server_outbox_pending_events` | `service` |
 | `grpc_server_outbox_worker_iteration_duration_seconds` | `service` |
 
 ---
@@ -546,26 +566,22 @@ type PollerCursor struct {
 ```
 
 Курсор хранится в таблице `market_poller_cursor`. Имя поллера: `market_state_changed_poller`.
+`MarketPoller` отслеживает изменения в таблице рынков и синхронизирует связанный state приложения.
 
 ### Алгоритм
 
 ```
-Init:
-  1. Загрузить курсор из БД (или использовать zero values)
-  2. RefreshAll кэша (прогрев при старте)
+- при старте `Init()` считывает последний сохранённый cursor
+- далее `poll()` выбирает очередной батч изменений после этого cursor
+- для найденных изменений формируются и сохраняются outbox-события
+- после успешной обработки батча новый cursor сохраняется в хранилище
+- если изменения действительно были, сервис инициирует refresh актуального кэша рынков
 
-Poll-итерация (каждые poll_interval):
-  1. ListUpdatedSince(since=lastSeenAt, afterID=lastSeenID, limit=batchSize)
-     ORDER BY (updated_at ASC, id ASC)
-  2. Batch пуст? → выход из итерации
-  3. Построить []MarketStateChangedEvent
-  4. PublishMarketStateChanged(events, newCursor)
-     → записать события в outbox
-     → обновить cursor
-     → COMMIT
-     → инвалидировать Redis-кэш
-  5. Обновить in-memory lastSeenAt / lastSeenID
-  6. Если batch заполнен (len == batchSize) → немедленно следующая итерация
+Важно:
+
+- `Init()` не вызывает `RefreshAll()`
+- refresh кэша выполняется как часть логики poller-а после обработки изменений
+- outbox worker не инвалидирует Redis-кэш самостоятельно
 ```
 
 ### Атомарность курсора и событий
@@ -574,8 +590,7 @@ Poll-итерация (каждые poll_interval):
 
 ### Инвалидация кэша
 
-После `COMMIT` вызывается `MarketCache.InvalidateAll`. Это сбрасывает кэш **всех** ролей, так как набор видимых рынков мог измениться для любой из них.
-
+После `COMMIT` poller вызывает `MarketCache.RefreshAll`, чтобы перепрогреть role-based Redis cache актуальными данными.
 ---
 
 ## 13. Prometheus-метрики: полный реестр
@@ -638,7 +653,6 @@ Poll-итерация (каждые poll_interval):
 | Метрика | Тип | Лейблы | Описание |
 |---|---|---|---|
 | `grpc_server_outbox_events_total` | Counter | `service`, `event_type`, `result` | Обработанные события outbox |
-| `grpc_server_outbox_pending_events` | Gauge | `service` | Необработанные события в outbox |
 | `grpc_server_outbox_worker_iteration_duration_seconds` | Histogram | `service` | Длительность одной итерации воркера |
 
 ### Прочее
@@ -659,18 +673,17 @@ Poll-итерация (каждые poll_interval):
 
 | Назначение | Ключ | Формат значения | TTL |
 |---|---|---|---|
-| Rate limit (CreateOrder) | `rate_limit:create_order:<userID>` | integer (counter) | window (1h) |
-| Rate limit (GetOrderStatus) | `rate_limit:get_order_status:<userID>` | integer (counter) | window (1h) |
+| Rate limit (CreateOrder) | `rate:order:create:<userID>` | integer (counter) | window (1h) |
+| Rate limit (GetOrderStatus) | `rate:order:get:<userID>` | integer (counter) | window (1h) |
 | Блокировка рынка | `market:block:<marketID>` | `<unix_ms>:<0\|1>` | настраивается |
-| Refresh token | `refresh_token:<userID>:<jti>` | unix timestamp (string) | refresh_token_ttl |
+| Refresh token (маркер) | `refresh:<userID>:<jti>` | `"1"` | refresh_token_ttl |
+| Активная сессия | `auth_session:<userID>` | sessionID (string) | refresh_token_ttl |
 
 ### SpotService
 
 | Назначение | Ключ | Формат значения | TTL |
 |---|---|---|---|
 | Кэш рынков (по роли) | `market:cache:<role>` | JSON ([]Market) | spot_cache_ttl (5m) |
-
-> **Примечание по инвалидации кэша SpotService:** инвалидируется группа ключей `market:cache:*` после публикации батча событий из Outbox Worker.
 
 ---
 
@@ -688,7 +701,7 @@ CREATE TABLE orders (
     type       SMALLINT       NOT NULL,  -- OrderType enum: 1=LIMIT 2=MARKET 3=STOP_LOSS 4=TAKE_PROFIT
     price      NUMERIC(18, 8) NOT NULL,
     quantity   BIGINT         NOT NULL,
-    status     SMALLINT       NOT NULL,  -- OrderStatus enum: 1=CREATED 2=PROCESSING 3=COMPLETED 4=CANCELLED
+    status     SMALLINT       NOT NULL,  -- OrderStatus enum: 1=CREATED 2=PENDING 3=FILLED 4=CANCELLED
     created_at TIMESTAMPTZ    NOT NULL,
 
     CONSTRAINT chk_orders_price_positive    CHECK (price > 0),

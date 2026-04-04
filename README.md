@@ -2,7 +2,7 @@
 
 Два gRPC-сервиса для работы со спотовыми торговыми инструментами и ордерами.
 
-- **SpotInstrumentService** — справочник рынков (`markets`) с фильтрацией по ролям пользователя, Redis-кэшем и `singleflight`. Поллер отслеживает изменения рынков и публикует события через Transactional Outbox. При публикации батча кэш автоматически инвалидируется.
+- **SpotInstrumentService** — справочник рынков (`markets`) с фильтрацией по ролям пользователя, Redis-кэшем и `singleflight`. Поллер отслеживает изменения рынков, записывает события в outbox и после обработки обновлений инициирует refresh role-specific Redis-кэша
 - **OrderService** — создание ордеров и получение статуса, с проверкой рынка через SpotService, JWT-аутентификацией, circuit breaker и per-user rate limiting. При получении события `market.state.changed` компенсирует активные ордера заблокированного рынка.
 
 ## Быстрый старт
@@ -53,7 +53,7 @@ gRPC-методы:
 gRPC-методы:
 - `CreateOrder`
 - `GetOrderStatus`
-- `AuthService/RefreshToken`
+- `RefreshToken`
 
 Что делает:
 - создаёт ордера в PostgreSQL
@@ -177,7 +177,7 @@ PostgreSQL при старте создаёт базы `order_db` и `spot_db`, 
 - `service.address = :50052`
 - `timeouts.service = 5s`
 - `redis.spot_cache_ttl = 5m`
-- `metrics.http_address = :9092`
+- `metrics.http_address = :9093`
 - `market_poller.poll_interval = 1s`, `processing_timeout = 5s`, `batch_size = 100`
 
 ---
@@ -251,9 +251,11 @@ Grafana → Prometheus + Tempo
 
 ```json
 {
-  "user_roles": ["ROLE_USER"]
+  "limit": 100,
+  "offset": 0
 }
 ```
+> `user_roles` больше не передаются в request — они извлекается из JWT токена unary interceptor-ом.
 
 **Логика фильтрации:**
 
@@ -263,7 +265,7 @@ Grafana → Prometheus + Tempo
 | `ROLE_VIEWER` | Все неудалённые рынки (включая disabled) |
 | `ROLE_USER` | Только `enabled: true` и неудалённые |
 
-При передаче нескольких ролей применяется наиболее привилегированная.
+Если в JWT несколько ролей, применяется наиболее привилегированная роль.
 
 **Пример ответа:**
 ```json
@@ -280,8 +282,7 @@ Grafana → Prometheus + Tempo
 
 ```json
 {
-  "market_id": "<uuid>",
-  "user_roles": ["ROLE_USER"]
+  "market_id": "<uuid>"
 }
 ```
 
@@ -292,7 +293,7 @@ Grafana → Prometheus + Tempo
 
 ### OrderService — `localhost:50051`
 
-Для вызовов `OrderService` нужен JWT в metadata / headers:
+Для вызовов `OrderService` и `Spot Service` нужен JWT в metadata / headers:
 
 ```text
 authorization: Bearer <token>
@@ -333,7 +334,7 @@ task token:gen
 |---|---|---|
 | `market_id` | UUID | обязательно, должен существовать в SpotService |
 | `order_type` | enum | `TYPE_LIMIT`, `TYPE_MARKET`, `TYPE_STOP_LOSS`, `TYPE_TAKE_PROFIT` |
-| `price.value` | string | число > 0, не более 18 знаков, до 8 знаков после запятой (NUMERIC(18,8)) |
+| `price.value` | string | число > 0, не более 10 целых цифр и 8 знаков после запятой (NUMERIC(18,8)) |
 | `quantity` | int64 | число > 0 |
 
 > `user_id` больше не передаётся в request — он извлекается из JWT токена unary interceptor-ом.
@@ -372,8 +373,6 @@ task token:gen
 
 #### `RefreshToken`
 
-Метод опубликован тем же OrderService.
-
 ```json
 {
   "refresh_token": "<token>"
@@ -384,17 +383,17 @@ task token:gen
 
 ### Возможные gRPC-статусы
 
-| Код | Причина                                                                                           |
-|---|---------------------------------------------------------------------------------------------------|
-| `OK` | Успешный вызов                                                                                    |
-| `INVALID_ARGUMENT` | пустые или некорректные поля, неверный UUID, пустые/дублирующиеся роли                            |
-| `UNAUTHENTICATED` | отсутствует или невалиден JWT для `OrderService`                                                  |
-| `NOT_FOUND` | Рынок или ордер не найден                                                                         |
-| `ALREADY_EXISTS` | Ордер с таким ID уже существует                                                                   |
-| `FAILED_PRECONDITION` | Рынок временно недоступен для создания ордера (заблокирован из-за события `market.state.changed`) |
-| `RESOURCE_EXHAUSTED` | Сработал per-user Rate Limiter или глобальный RPS-лимит                                           |
-| `UNAVAILABLE` | Сработал Circuit Breaker или недоступен зависимый сервис                                          |
-| `INTERNAL` | Внутренняя ошибка сервера                                                                         |
+| Код | Причина                                                                                         |
+|---|-------------------------------------------------------------------------------------------------|
+| `OK` | Успешный вызов                                                                                  |
+| `INVALID_ARGUMENT` | пустые или некорректные поля, неверный UUID                            |
+| `UNAUTHENTICATED` | отсутствует или невалиден JWT                                                |
+| `NOT_FOUND` | Рынок или ордер не найден                                                                       |
+| `ALREADY_EXISTS` | Ордер с таким ID уже существует                                                                 |
+| `FAILED_PRECONDITION` | Рынок отключён (`enabled = false`) |
+| `RESOURCE_EXHAUSTED` | Сработал per-user Rate Limiter или глобальный RPS-лимит                                         |
+| `UNAVAILABLE` | Сработал Circuit Breaker или недоступен зависимый сервис                                        |
+| `INTERNAL` | Внутренняя ошибка сервера                                                                       |
 
 ---
 
@@ -512,7 +511,7 @@ spotOrder/
 ├── protos/
 │   ├── proto/                              # .proto исходники
 │   ├── gen/go/                             # сгенерированный Go-код
-│   └── lib/                               # зависимости (buf/validate, google/type)
+│   └── lib/                                # зависимости (buf/validate, google/type)
 │
 ├── config.yaml                             # основная конфигурация обоих сервисов
 ├── docker-compose.yml                      # весь локальный стек
@@ -559,7 +558,7 @@ spotOrder/
 │        SpotInstrumentService           │  :50052
 │  interceptors (chain):                 │
 │   recoverer → tracer → meter →         │
-│   logger → rateLimiter →               │
+│   logger → auth → rateLimiter →        │
 │   errorMapper → validator              │
 │────────────────────────────────────────│
 │  SpotInstrumentHandler                 │
@@ -571,7 +570,7 @@ spotOrder/
 │  MarketPoller (cursor-based)           │
 │    └── MarketProducer                  │
 │          ├── OutboxStore (PostgreSQL)  │  ← атомарно с курсором
-│          └── MarketCache.InvalidateAll │  ← сброс кэша после коммита
+│          └── MarketCache.RefreshAll    │  ← refresh role-based cache после обработки изменений
 │                                        │
 │  Outbox Worker → market.state.changed  │
 └────────────────────────────────────────┘

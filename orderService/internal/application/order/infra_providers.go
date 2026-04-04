@@ -14,6 +14,7 @@ import (
 	orderStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/order"
 	outboxStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/outbox"
 	blockStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/market"
+	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
@@ -23,6 +24,7 @@ import (
 var InfraProviders = fx.Options(
 	fx.Provide(
 		provideLogger,
+		provideMigrationsFS,
 
 		providePostgresPool,
 		provideRedisClient,
@@ -56,6 +58,10 @@ func provideLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*zapLogger.L
 	})
 
 	return logger, nil
+}
+
+func provideMigrationsFS() fs.FS {
+	return migrations.Migrations
 }
 
 func providePostgresPool(in postgresPoolIn) (*pgxpool.Pool, error) {

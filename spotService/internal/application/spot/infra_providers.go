@@ -18,11 +18,13 @@ import (
 	outboxStore "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/outbox"
 	spotStore "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/spot"
 	spotCache "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis"
+	"github.com/nastyazhadan/spot-order-grpc/spotService/migrations"
 )
 
 var InfraProviders = fx.Options(
 	fx.Provide(
 		provideLogger,
+		provideMigrationsFS,
 
 		providePostgresPool,
 		provideRedisClient,
@@ -54,6 +56,10 @@ func provideLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (*zapLogger.Lo
 	})
 
 	return logger, nil
+}
+
+func provideMigrationsFS() fs.FS {
+	return migrations.Migrations
 }
 
 func providePostgresPool(in postgresPoolIn) (*pgxpool.Pool, error) {
