@@ -28,12 +28,14 @@ var InfraProviders = fx.Options(
 
 		providePostgresPool,
 		provideRedisClient,
+
 		provideCacheStore,
 		provideMarketStore,
 		provideMarketCursorStore,
 		provideMarketCacheRepository,
-		provideSpotOutboxStore,
+		provideMarketByIDCacheRepository,
 
+		provideOutboxStore,
 		provideSaramaSyncProducer,
 	),
 )
@@ -115,7 +117,14 @@ func provideMarketCacheRepository(
 	return spotCache.NewMarketCacheRepository(store, cfg.Service.Name)
 }
 
-func provideSpotOutboxStore(
+func provideMarketByIDCacheRepository(
+	store *cache.Store,
+	cfg config.SpotConfig,
+) *spotCache.MarketByIDCacheRepository {
+	return spotCache.NewMarketByIDCacheRepository(store, cfg.Service.Name)
+}
+
+func provideOutboxStore(
 	pool *pgxpool.Pool,
 	logger *zapLogger.Logger,
 	cfg config.SpotConfig,

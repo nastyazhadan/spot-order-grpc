@@ -615,7 +615,9 @@ type PollerCursor struct {
 - далее `poll()` выбирает очередной батч изменений после этого cursor
 - для найденных изменений формируются и сохраняются outbox-события
 - после успешной обработки батча новый cursor сохраняется в хранилище
-- если изменения действительно были, сервис инициирует `RefreshAll` для role-based head-cache рынков
+- если изменения действительно были, poller собирает список изменённых `market_id`
+- после успешной обработки батча сервис сначала вызывает `InvalidateByIDs(updatedIDs)` для by-id cache
+- затем сервис инициирует `RefreshAll` для role-based head-cache рынков
 
 Важно:
 
@@ -630,8 +632,9 @@ type PollerCursor struct {
 
 ### Инвалидация кэша
 
-После `COMMIT` poller вызывает `MarketCache.RefreshAll`, чтобы перепрогреть role-based Redis head-cache актуальными данными.
-By-id cache (`market:by_id:<marketID>`) не перепрогревается poller-ом и обновляется лениво при `GetMarketByID` либо истекает по TTL.
+После `COMMIT` poller сначала вызывает `MarketCache.InvalidateByIDs(updatedIDs)`, чтобы удалить stale by-id cache для изменённых рынков, а затем вызывает `MarketCache.RefreshAll`, чтобы перепрогреть role-based Redis head-cache актуальными данными.
+
+By-id cache (`market:by_id:<marketID>`) не перепрогревается poller-ом eagerly: после адресной инвалидации он повторно заполняется лениво при следующем `GetMarketByID` либо естественно истекает по TTL.
 ---
 
 ## 13. Prometheus-метрики: полный реестр
@@ -727,7 +730,7 @@ By-id cache (`market:by_id:<marketID>`) не перепрогревается po
 | Head-cache рынков (по роли) | `market:cache:<role>` | JSON ([]Market) | spot_cache_ttl (5m) |
 | Кэш рынка по ID | `market:by_id:<marketID>` | JSON (Market) | spot_cache_ttl (5m) |
 
-### Поведение кэшарынков SpotService
+### Поведение кэша рынков SpotService
 
 `MarketViewer` использует два независимых Redis-кэша:
 
@@ -741,7 +744,7 @@ By-id cache (`market:by_id:<marketID>`) не перепрогревается po
 Поведение при чтении:
 - head-cache используется только для `ViewMarkets`, когда `offset == 0` и `limit <= cacheLimit`
 - при `cache hit` ответ формируется из Redis
-- при `cache miss` или `corrupted` payload сервис загружает первую страницу из PostgreSQL через `ListPage`, возвращает результат клиенту и выполняет warmup role-based head-cache
+- при `cache miss` или `corrupted` payload сервис загружает первую страницу из PostgreSQL через `GetPage`, возвращает результат клиенту и выполняет warmup role-based head-cache
 - `RefreshAll` перепрогревает role-based head-cache после обработки изменений рынков
 
 Role-based head-cache не использует `singleflight`: конкурентные запросы первой страницы могут независимо сделать fallback в PostgreSQL. Кэш затем прогревается результатом первого успешного чтения или плановым `RefreshAll`.
@@ -755,6 +758,7 @@ Role-based head-cache не использует `singleflight`: конкурен
 - при `cache miss` используется `singleflight`, чтобы только один конкурентный запрос сходил в PostgreSQL и прогрел by-id cache
 - при повреждённом (`corrupted`) payload выполняется повторная попытка загрузки через `singleflight`; если прогрев не удался, сервис старается удалить stale key
 - после получения рынка из кэша или PostgreSQL ролевые ограничения (`admin/viewer/user`) применяются на уровне `MarketViewer`
+- после успешной обработки батча `MarketPoller` адресно инвалидирует by-id cache для изменённых рынков через `InvalidateByIDs(updatedIDs)`; повторный прогрев выполняется лениво при следующем `GetMarketByID`
 ---
 
 ## 15. Схема базы данных: детальная спецификация

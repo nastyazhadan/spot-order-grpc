@@ -31,6 +31,7 @@ type MarketEventProducer interface {
 
 type MarketCacheRefresher interface {
 	RefreshAll(ctx context.Context) error
+	InvalidateByIDs(ctx context.Context, ids []uuid.UUID) error
 }
 
 type MarketPoller struct {
@@ -89,6 +90,22 @@ func (p *MarketPoller) Init(ctx context.Context) error {
 	return nil
 }
 
+func (p *MarketPoller) loadCursor(ctx context.Context) error {
+	cursor, err := p.cursorStore.Get(ctx, p.pollerName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			p.lastSeenAt = time.Time{}
+			p.lastSeenID = uuid.Nil
+			return nil
+		}
+		return err
+	}
+
+	p.lastSeenAt = cursor.LastSeenAt.UTC()
+	p.lastSeenID = cursor.LastSeenID
+	return nil
+}
+
 func (p *MarketPoller) Run(ctx context.Context) error {
 	if ctx == nil {
 		return fmt.Errorf("market poller run: nil context")
@@ -127,69 +144,85 @@ func (p *MarketPoller) Run(ctx context.Context) error {
 	}
 }
 
-func (p *MarketPoller) loadCursor(ctx context.Context) error {
-	cursor, err := p.cursorStore.Get(ctx, p.pollerName)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			p.lastSeenAt = time.Time{}
-			p.lastSeenID = uuid.Nil
-			return nil
-		}
-		return err
-	}
-
-	p.lastSeenAt = cursor.LastSeenAt.UTC()
-	p.lastSeenID = cursor.LastSeenID
-	return nil
-}
-
 func (p *MarketPoller) poll(ctx context.Context) error {
 	pollCtx, cancel := context.WithTimeout(ctx, p.processingTimeout)
 	defer cancel()
 
-	needCacheRefresh := false
+	var updatedIDs []uuid.UUID
+
 	defer func() {
-		p.refreshCache(ctx, needCacheRefresh)
+		p.refreshCache(ctx, updatedIDs)
 	}()
 
 	for {
 		if pollCtx.Err() != nil {
-			if errors.Is(pollCtx.Err(), context.Canceled) || errors.Is(pollCtx.Err(), context.DeadlineExceeded) {
-				return pollCtx.Err()
-			}
 			return nil
 		}
 
-		updated, hasMore, err := p.processNextBatch(pollCtx)
+		batchUpdatedIDs, hasMore, err := p.processNextBatch(pollCtx)
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil
+			}
 			return err
 		}
-		if updated {
-			needCacheRefresh = true
+		if len(batchUpdatedIDs) > 0 {
+			updatedIDs = append(updatedIDs, batchUpdatedIDs...)
 		}
 		if !hasMore {
-			return err
+			return nil
 		}
 	}
 }
 
-func (p *MarketPoller) processNextBatch(ctx context.Context) (updated, hasMore bool, err error) {
+func (p *MarketPoller) refreshCache(
+	ctx context.Context,
+	updatedIDs []uuid.UUID,
+) {
+	if len(updatedIDs) == 0 || p.cacheRefresher == nil {
+		return
+	}
+
+	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.processingTimeout)
+	defer cancel()
+
+	if err := p.cacheRefresher.InvalidateByIDs(refreshCtx, updatedIDs); err != nil {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			p.logger.Warn(refreshCtx, "Failed to invalidate markets by id cache after updates", zap.Error(err))
+		}
+	}
+
+	if err := p.cacheRefresher.RefreshAll(refreshCtx); err != nil {
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			p.logger.Warn(refreshCtx, "Failed to refresh market cache after updates", zap.Error(err))
+		}
+	}
+}
+
+func (p *MarketPoller) processNextBatch(
+	ctx context.Context,
+) (updatedIDs []uuid.UUID, hasMore bool, err error) {
 	markets, err := p.reader.ListUpdatedSince(ctx, p.lastSeenAt, p.lastSeenID, p.batchSize)
 	if err != nil {
 		p.logger.Error(ctx, "Failed to load updated markets", zap.Error(err))
-		return false, false, err
+		return nil, false, err
 	}
 
 	if len(markets) == 0 {
-		return false, false, nil
+		return nil, false, nil
+	}
+
+	updatedIDs = make([]uuid.UUID, 0, len(markets))
+	for _, market := range markets {
+		updatedIDs = append(updatedIDs, market.ID)
 	}
 
 	events, err := p.buildMarketStateChangedEvents(ctx, markets)
 	if err != nil {
-		return true, false, err
+		return updatedIDs, false, err
 	}
 
-	nextCursor := p.buildNextCursor(markets)
+	nextCursor := p.buildNextPollerCursor(markets)
 
 	if err = p.producer.PublishMarketStateChanged(ctx, events, nextCursor); err != nil {
 		p.logger.Error(ctx, "Failed to enqueue market state changed batch",
@@ -198,26 +231,13 @@ func (p *MarketPoller) processNextBatch(ctx context.Context) (updated, hasMore b
 			zap.String("last_seen_id", nextCursor.LastSeenID.String()),
 			zap.Error(err),
 		)
-		return true, false, err
+		return updatedIDs, false, err
 	}
 
 	p.lastSeenAt = nextCursor.LastSeenAt
 	p.lastSeenID = nextCursor.LastSeenID
 
-	return true, len(markets) == p.batchSize, nil
-}
-
-func (p *MarketPoller) refreshCache(ctx context.Context, needRefresh bool) {
-	if !needRefresh || p.cacheRefresher == nil {
-		return
-	}
-
-	refreshCtx, refreshCancel := context.WithTimeout(context.WithoutCancel(ctx), p.processingTimeout)
-	defer refreshCancel()
-
-	if err := p.cacheRefresher.RefreshAll(refreshCtx); err != nil {
-		p.logger.Warn(refreshCtx, "Failed to refresh market cache after updates", zap.Error(err))
-	}
+	return updatedIDs, len(markets) == p.batchSize, nil
 }
 
 func (p *MarketPoller) buildMarketStateChangedEvents(
@@ -245,7 +265,7 @@ func (p *MarketPoller) buildMarketStateChangedEvents(
 	return events, nil
 }
 
-func (p *MarketPoller) buildNextCursor(markets []sharedModels.Market) models.PollerCursor {
+func (p *MarketPoller) buildNextPollerCursor(markets []sharedModels.Market) models.PollerCursor {
 	last := markets[len(markets)-1]
 
 	return models.PollerCursor{

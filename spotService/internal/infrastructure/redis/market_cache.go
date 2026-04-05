@@ -71,26 +71,40 @@ func (m *MarketCacheRepository) GetAll(
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	var redisViews []dto.MarketRedisView
-	if err = json.Unmarshal(data, &redisViews); err != nil {
-		m.invalidateCorruptedCache(ctx, span, roleKey, "json_unmarshal", err)
-
+	markets, reason, err := decodeCachedMarkets(data)
+	if err != nil {
+		m.invalidateCorruptedCache(ctx, span, roleKey, reason, err)
 		return nil, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketCacheCorrupted)
-	}
-
-	markets := make([]models.Market, 0, len(redisViews))
-	for _, redisView := range redisViews {
-		market, mapError := redisView.ToDomain()
-		if mapError != nil {
-			m.invalidateCorruptedCache(ctx, span, roleKey, "dto_to_domain", mapError)
-
-			return nil, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketCacheCorrupted)
-		}
-		markets = append(markets, market)
 	}
 
 	metrics.CacheHitsTotal.WithLabelValues(m.serviceName, "get_all").Inc()
 	return markets, nil
+}
+
+func (m *MarketCacheRepository) invalidateCorruptedCache(
+	ctx context.Context,
+	span trace.Span,
+	roleKey string,
+	reason string,
+	cause error,
+) {
+	span.SetAttributes(
+		attributes.CacheCorruptedValue(true),
+		attributes.CacheCorruptedReasonValue(reason),
+	)
+	tracing.RecordError(span, cause)
+
+	if err := m.DeleteAll(ctx, roleKey); err != nil {
+		span.SetAttributes(attributes.CacheInvalidationFailedValue(true))
+		tracing.RecordError(span, err)
+
+		metrics.CacheInvalidationsTotal.
+			WithLabelValues(m.serviceName, reason, roleKey, "error").Inc()
+		return
+	}
+
+	metrics.CacheInvalidationsTotal.
+		WithLabelValues(m.serviceName, reason, roleKey, "success").Inc()
 }
 
 func (m *MarketCacheRepository) SetAll(
@@ -112,12 +126,7 @@ func (m *MarketCacheRepository) SetAll(
 	)
 	defer span.End()
 
-	redisViews := make([]dto.MarketRedisView, 0, len(markets))
-	for _, market := range markets {
-		redisViews = append(redisViews, dto.FromDomain(market))
-	}
-
-	data, err := json.Marshal(redisViews)
+	data, err := encodeMarkets(markets)
 	if err != nil {
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
@@ -137,49 +146,65 @@ func (m *MarketCacheRepository) SetAll(
 	return nil
 }
 
-func (m *MarketCacheRepository) DeleteAll(ctx context.Context, roleKey string) error {
-	const op = "redis.MarketCacheRepository.Delete"
+func (m *MarketCacheRepository) DeleteAll(
+	ctx context.Context,
+	roleKey string,
+) error {
+	const op = "redis.MarketCacheRepository.DeleteAll"
+
+	ctx, span := tracing.StartSpan(ctx, "redis.delete_markets",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attributes.DBSystemValue(dbSystem),
+			attributes.UserRoleKeyValue(roleKey),
+		),
+	)
+	defer span.End()
 
 	start := time.Now()
 	err := m.cacheStore.Delete(ctx, cacheKey(roleKey))
 	metrics.ObserveWithTrace(ctx,
-		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "delete"),
+		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "delete_all"),
 		time.Since(start).Seconds(),
 	)
 	if err != nil {
+		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	return nil
 }
 
-// Удаление ключей, если возникла ошибка
-func (m *MarketCacheRepository) invalidateCorruptedCache(
-	ctx context.Context,
-	span trace.Span,
-	roleKey string,
-	reason string,
-	cause error,
-) {
-	span.SetAttributes(
-		attributes.CacheCorruptedValue(true),
-		attributes.CacheCorruptedReasonValue(reason),
-	)
-	tracing.RecordError(span, cause)
-
-	if err := m.DeleteAll(ctx, roleKey); err != nil {
-		span.SetAttributes(attributes.CacheInvalidationFailedValue(true))
-		tracing.RecordError(span, err)
-
-		metrics.CacheInvalidationsTotal.
-			WithLabelValues(m.serviceName, reason, roleKey, "error").
-			Inc()
-		return
+func decodeCachedMarkets(data []byte) ([]models.Market, string, error) {
+	var redisViews []dto.MarketRedisView
+	if err := json.Unmarshal(data, &redisViews); err != nil {
+		return nil, "json_unmarshal", err
 	}
 
-	metrics.CacheInvalidationsTotal.
-		WithLabelValues(m.serviceName, reason, roleKey, "success").
-		Inc()
+	markets := make([]models.Market, 0, len(redisViews))
+	for _, redisView := range redisViews {
+		market, err := redisView.ToDomain()
+		if err != nil {
+			return nil, "dto_to_domain", err
+		}
+		markets = append(markets, market)
+	}
+
+	return markets, "", nil
+}
+
+func encodeMarkets(markets []models.Market) ([]byte, error) {
+	redisViews := make([]dto.MarketRedisView, 0, len(markets))
+	for _, market := range markets {
+		redisViews = append(redisViews, dto.FromDomain(market))
+	}
+
+	data, err := json.Marshal(redisViews)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }
 
 func cacheKey(roleKey string) string {

@@ -2,7 +2,7 @@
 
 Два gRPC-сервиса для работы со спотовыми торговыми инструментами и ордерами.
 
-- **SpotInstrumentService** — справочник рынков (`markets`) с фильтрацией по ролям пользователя. Для `ViewMarkets` используется role-based Redis head-cache первой страницы, а для `GetMarketByID` — отдельный Redis cache по `market_id` с `singleflight` на miss-path. Поллер отслеживает изменения рынков, записывает события в outbox и после обработки обновлений инициирует refresh role-specific head-cache.
+- **SpotInstrumentService** — справочник рынков (`markets`) с фильтрацией по ролям пользователя. Для `ViewMarkets` используется role-based Redis head-cache первой страницы, а для `GetMarketByID` — отдельный Redis cache по `market_id` с `singleflight` на miss-path. Поллер отслеживает изменения рынков, записывает события в outbox и после обработки обновлений сначала инвалидирует by-id cache по изменённым `market_id`, а затем инициирует refresh role-specific head-cache.
 - **OrderService** — создание ордеров и получение статуса, с проверкой рынка через SpotService, JWT-аутентификацией, circuit breaker и per-user rate limiting. При получении события `market.state.changed` компенсирует активные ордера заблокированного рынка.
 
 ## Быстрый старт
@@ -49,6 +49,7 @@ gRPC-методы:
 - для `GetMarketByID` использует отдельный Redis by-id cache по ключу `market:by_id:<marketID>`; ролевые ограничения применяются после загрузки рынка
 - при `cache miss` по `market_id` использует `singleflight`, чтобы только один запрос сходил в PostgreSQL и прогрел by-id cache
 - при повреждённом (`corrupted`) payload в by-id cache пытается удалить stale key, если перепрогрев не удался
+- `MarketPoller` после успешной обработки батча адресно инвалидирует by-id cache для изменённых рынков и затем вызывает `RefreshAll` для role-based head-cache
 - запускает `MarketPoller`, который отслеживает изменения в БД и складывает события в outbox
 - публикует `market.state.changed` в Kafka
 
@@ -217,7 +218,7 @@ Grafana → Prometheus + Tempo
 - `UnaryServerInterceptor` / `UnaryClientInterceptor` — каждый gRPC-вызов
 - `order.check_rate_limit`, `order.validate_market`, `order.save_order`, `order.fetch_order`
 - `spot.view_markets`, `spot.get_market_by_id`, `spot.load_market_and_warm_cache`
-- `postgres.save_order`, `postgres.get_order`, `postgres.list_markets_page`, `postgres.market_by_id`, `postgres.list_updated_since`
+- `postgres.get_markets_page`, `postgres.get_market_by_id`, `postgres.list_updated_since`
 - `redis.get_markets`, `redis.set_markets`, `redis.get_market_by_id`, `redis.set_market_by_id`
 - `market_compensation.process` — обработка события `market.state.changed` в OrderService
 - `producer.produce_market_state_changed_batch` — публикация батча событий рынков в SpotService

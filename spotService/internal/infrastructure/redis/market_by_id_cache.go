@@ -34,11 +34,11 @@ func NewMarketByIDCacheRepository(store *cache.Store, serviceName string) *Marke
 	}
 }
 
-func (m *MarketByIDCacheRepository) Get(
+func (m *MarketByIDCacheRepository) GetByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) (models.Market, error) {
-	const op = "redis.MarketByIDCacheRepository.Get"
+	const op = "redis.MarketByIDCacheRepository.GetByID"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.get_market_by_id",
 		trace.WithSpanKind(trace.SpanKindClient),
@@ -51,8 +51,7 @@ func (m *MarketByIDCacheRepository) Get(
 
 	start := time.Now()
 	defer func() {
-		metrics.ObserveWithTrace(
-			ctx,
+		metrics.ObserveWithTrace(ctx,
 			metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "get_by_id"),
 			time.Since(start).Seconds(),
 		)
@@ -62,22 +61,16 @@ func (m *MarketByIDCacheRepository) Get(
 	if err != nil {
 		if errors.Is(err, sharedErrors.ErrCacheNotFound) {
 			metrics.CacheMissesTotal.WithLabelValues(m.serviceName, "get_by_id").Inc()
-			return models.Market{}, repositoryErrors.ErrMarketsNotFound
+			return models.Market{}, repositoryErrors.ErrMarketNotFound
 		}
 
 		tracing.RecordError(span, err)
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	var redisView dto.MarketRedisView
-	if err = json.Unmarshal(data, &redisView); err != nil {
-		m.invalidateCorruptedCache(ctx, span, id, "json_unmarshal", err)
-		return models.Market{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketCacheCorrupted)
-	}
-
-	market, err := redisView.ToDomain()
+	market, reason, err := decodeCachedMarket(data)
 	if err != nil {
-		m.invalidateCorruptedCache(ctx, span, id, "dto_to_domain", err)
+		m.invalidateCorruptedCache(ctx, span, id, reason, err)
 		return models.Market{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketCacheCorrupted)
 	}
 
@@ -85,12 +78,39 @@ func (m *MarketByIDCacheRepository) Get(
 	return market, nil
 }
 
-func (m *MarketByIDCacheRepository) Set(
+func (m *MarketByIDCacheRepository) invalidateCorruptedCache(
+	ctx context.Context,
+	span trace.Span,
+	id uuid.UUID,
+	reason string,
+	cause error,
+) {
+	span.SetAttributes(
+		attributes.CacheCorruptedValue(true),
+		attributes.CacheCorruptedReasonValue(reason),
+		attributes.MarketIDValue(id.String()),
+	)
+	tracing.RecordError(span, cause)
+
+	if err := m.DeleteByID(ctx, id); err != nil {
+		span.SetAttributes(attributes.CacheInvalidationFailedValue(true))
+		tracing.RecordError(span, err)
+
+		metrics.CacheInvalidationsTotal.
+			WithLabelValues(m.serviceName, reason, "market_by_id", "error").Inc()
+		return
+	}
+
+	metrics.CacheInvalidationsTotal.
+		WithLabelValues(m.serviceName, reason, "market_by_id", "success").Inc()
+}
+
+func (m *MarketByIDCacheRepository) SetByID(
 	ctx context.Context,
 	market models.Market,
 	ttl time.Duration,
 ) error {
-	const op = "redis.MarketByIDCacheRepository.Set"
+	const op = "redis.MarketByIDCacheRepository.SetByID"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.set_market_by_id",
 		trace.WithSpanKind(trace.SpanKindClient),
@@ -102,9 +122,7 @@ func (m *MarketByIDCacheRepository) Set(
 	)
 	defer span.End()
 
-	redisView := dto.FromDomain(market)
-
-	data, err := json.Marshal(redisView)
+	data, err := encodeMarket(market)
 	if err != nil {
 		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
@@ -124,11 +142,20 @@ func (m *MarketByIDCacheRepository) Set(
 	return nil
 }
 
-func (m *MarketByIDCacheRepository) Delete(
+func (m *MarketByIDCacheRepository) DeleteByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) error {
-	const op = "redis.MarketByIDCacheRepository.Delete"
+	const op = "redis.MarketByIDCacheRepository.DeleteByID"
+
+	ctx, span := tracing.StartSpan(ctx, "redis.delete_market_by_id",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attributes.DBSystemValue(dbSystem),
+			attributes.MarketIDValue(id.String()),
+		),
+	)
+	defer span.End()
 
 	start := time.Now()
 	err := m.cacheStore.Delete(ctx, cacheByIDKey(id))
@@ -137,38 +164,36 @@ func (m *MarketByIDCacheRepository) Delete(
 		time.Since(start).Seconds(),
 	)
 	if err != nil {
+		tracing.RecordError(span, err)
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	return nil
 }
 
-// Удаление ключей, если возникла ошибка
-func (m *MarketByIDCacheRepository) invalidateCorruptedCache(
-	ctx context.Context,
-	span trace.Span,
-	id uuid.UUID,
-	reason string,
-	cause error,
-) {
-	span.SetAttributes(
-		attributes.CacheCorruptedValue(true),
-		attributes.CacheCorruptedReasonValue(reason),
-		attributes.MarketIDValue(id.String()),
-	)
-	tracing.RecordError(span, cause)
-
-	if err := m.Delete(ctx, id); err != nil {
-		span.SetAttributes(attributes.CacheInvalidationFailedValue(true))
-		tracing.RecordError(span, err)
-
-		metrics.CacheInvalidationsTotal.
-			WithLabelValues(m.serviceName, reason, "market_by_id", "error").Inc()
-		return
+func decodeCachedMarket(data []byte) (models.Market, string, error) {
+	var redisView dto.MarketRedisView
+	if err := json.Unmarshal(data, &redisView); err != nil {
+		return models.Market{}, "json_unmarshal", err
 	}
 
-	metrics.CacheInvalidationsTotal.
-		WithLabelValues(m.serviceName, reason, "market_by_id", "success").Inc()
+	market, err := redisView.ToDomain()
+	if err != nil {
+		return models.Market{}, "dto_to_domain", err
+	}
+
+	return market, "", nil
+}
+
+func encodeMarket(market models.Market) ([]byte, error) {
+	redisView := dto.FromDomain(market)
+
+	data, err := json.Marshal(redisView)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }
 
 func cacheByIDKey(id uuid.UUID) string {

@@ -36,10 +36,14 @@ func NewMarketStore(pool *pgxpool.Pool, cfg config.SpotConfig) *MarketStore {
 	}
 }
 
-func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
-	const op = "postgres.MarketStore.ListAll"
+func (m *MarketStore) GetMarketsPage(
+	ctx context.Context,
+	roleKey string,
+	limit, offset uint64,
+) ([]models.Market, error) {
+	const op = "postgres.MarketStore.GetMarketsPage"
 
-	ctx, span := tracing.StartSpan(ctx, "postgres.list_all_markets",
+	ctx, span := tracing.StartSpan(ctx, "postgres.get_markets_page",
 		trace.WithSpanKind(trace.SpanKindClient),
 	)
 	defer span.End()
@@ -47,41 +51,110 @@ func (m *MarketStore) ListAll(ctx context.Context) ([]models.Market, error) {
 	start := time.Now()
 	defer func() {
 		metrics.ObserveWithTrace(ctx,
-			metrics.DBQueryDuration.WithLabelValues(m.config.Service.Name, "list_all_markets"),
+			metrics.DBQueryDuration.WithLabelValues(m.config.Service.Name, "get_markets_page"),
 			time.Since(start).Seconds(),
 		)
 	}()
 
-	rows, err := m.pool.Query(ctx, `
-		SELECT id, name, enabled, deleted_at, updated_at FROM market_store
-	`)
+	dtoMarkets, loadError := m.loadMarketsPage(ctx, roleKey, limit, offset)
+	if loadError != nil {
+		tracing.RecordError(span, loadError)
+		return nil, fmt.Errorf("%s: %w", op, loadError)
+	}
+
+	if len(dtoMarkets) == 0 {
+		markets, err := m.emptyPageResult(ctx, offset)
+		if err != nil {
+			tracing.RecordError(span, err)
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		return markets, nil
+	}
+
+	return dtoMarketsToDomain(dtoMarkets), nil
+}
+
+func (m *MarketStore) loadMarketsPage(
+	ctx context.Context,
+	roleKey string,
+	limit, offset uint64,
+) ([]dto.Market, error) {
+	const op = "postgres.MarketStore.loadMarketsPage"
+
+	whereClause := "deleted_at IS NULL AND enabled = TRUE"
+	switch roleKey {
+	case roleAdminKey:
+		whereClause = "TRUE"
+	case roleViewerKey:
+		whereClause = "deleted_at IS NULL"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id, name, enabled, deleted_at, updated_at 
+		FROM market_store
+		WHERE %s
+		ORDER BY name, id
+		LIMIT $1 OFFSET $2
+	`, whereClause)
+
+	rows, err := m.pool.Query(ctx, query, int(limit+1), int(offset))
 	if err != nil {
-		tracing.RecordError(span, err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
+	defer rows.Close()
 
 	marketsDTO, err := pgx.CollectRows(rows, pgx.RowToStructByName[dto.Market])
 	if err != nil {
-		tracing.RecordError(span, err)
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if len(marketsDTO) == 0 {
-		return nil, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketStoreIsEmpty)
-	}
-
-	out := make([]models.Market, 0, len(marketsDTO))
-	for _, marketDTO := range marketsDTO {
-		out = append(out, marketDTO.ToDomain())
-	}
-
-	return out, nil
+	return marketsDTO, nil
 }
 
-func (m *MarketStore) GetByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
-	const op = "postgres.MarketStore.GetById"
+func (m *MarketStore) emptyPageResult(
+	ctx context.Context,
+	offset uint64,
+) ([]models.Market, error) {
+	if offset > 0 {
+		return []models.Market{}, nil
+	}
 
-	ctx, span := tracing.StartSpan(ctx, "postgres.market_by_id",
+	exists, err := m.hasAnyMarkets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, repositoryErrors.ErrMarketStoreIsEmpty
+	}
+
+	return []models.Market{}, nil
+}
+
+func (m *MarketStore) hasAnyMarkets(
+	ctx context.Context,
+) (bool, error) {
+	var exists bool
+
+	err := m.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM market_store
+		)
+	`).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+func (m *MarketStore) GetMarketByID(
+	ctx context.Context,
+	id uuid.UUID,
+) (models.Market, error) {
+	const op = "postgres.MarketStore.GetMarketById"
+
+	ctx, span := tracing.StartSpan(ctx, "postgres.get_market_by_id",
 		trace.WithSpanKind(trace.SpanKindClient),
 	)
 	defer span.End()
@@ -103,6 +176,7 @@ func (m *MarketStore) GetByID(ctx context.Context, id uuid.UUID) (models.Market,
 
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
+	defer rows.Close()
 
 	marketDTO, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[dto.Market])
 	if err != nil {
@@ -139,7 +213,8 @@ func (m *MarketStore) ListUpdatedSince(
 	}()
 
 	rows, err := m.pool.Query(ctx, `
-		SELECT id, name, enabled, deleted_at, updated_at FROM market_store
+		SELECT id, name, enabled, deleted_at, updated_at 
+		FROM market_store
 		WHERE (updated_at, id) > ($1, $2)
 		ORDER BY updated_at, id
 		LIMIT $3
@@ -156,114 +231,13 @@ func (m *MarketStore) ListUpdatedSince(
 		return nil, fmt.Errorf("%s: collect rows: %w", op, err)
 	}
 
+	return dtoMarketsToDomain(dtoMarkets), nil
+}
+
+func dtoMarketsToDomain(dtoMarkets []dto.Market) []models.Market {
 	markets := make([]models.Market, 0, len(dtoMarkets))
 	for _, dtoMarket := range dtoMarkets {
 		markets = append(markets, dtoMarket.ToDomain())
 	}
-
-	return markets, nil
-}
-
-func (m *MarketStore) ListPage(
-	ctx context.Context,
-	roleKey string,
-	limit, offset uint64,
-) ([]models.Market, error) {
-	const op = "postgres.MarketStore.ListPage"
-
-	ctx, span := tracing.StartSpan(ctx, "postgres.list_markets_page",
-		trace.WithSpanKind(trace.SpanKindClient),
-	)
-	defer span.End()
-
-	start := time.Now()
-	defer func() {
-		metrics.ObserveWithTrace(ctx,
-			metrics.DBQueryDuration.WithLabelValues(m.config.Service.Name, "list_markets_page"),
-			time.Since(start).Seconds(),
-		)
-	}()
-
-	dtoMarkets, err := m.loadMarketsPage(ctx, roleKey, limit, offset)
-	if err != nil {
-		tracing.RecordError(span, err)
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	markets, err := m.buildPageResult(ctx, dtoMarkets)
-	if err != nil {
-		tracing.RecordError(span, err)
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	return markets, nil
-}
-
-func (m *MarketStore) loadMarketsPage(
-	ctx context.Context,
-	roleKey string,
-	limit, offset uint64,
-) ([]dto.Market, error) {
-	const op = "postgres.MarketStore.loadMarketsPage"
-
-	whereClause := "deleted_at IS NULL AND enabled = TRUE"
-	switch roleKey {
-	case roleAdminKey:
-		whereClause = "TRUE"
-	case roleViewerKey:
-		whereClause = "deleted_at IS NULL"
-	}
-
-	query := fmt.Sprintf(`
-		SELECT id, name, enabled, deleted_at, updated_at FROM market_store
-		WHERE %s
-		ORDER BY name, id
-		LIMIT $1 OFFSET $2
-	`, whereClause)
-
-	rows, err := m.pool.Query(ctx, query, int(limit+1), int(offset))
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-	defer rows.Close()
-
-	marketsDTO, err := pgx.CollectRows(rows, pgx.RowToStructByName[dto.Market])
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	return marketsDTO, nil
-}
-
-func (m *MarketStore) buildPageResult(
-	ctx context.Context,
-	dtoMarkets []dto.Market,
-) ([]models.Market, error) {
-	const op = "postgres.MarketStore.buildPageResult"
-
-	if len(dtoMarkets) == 0 {
-		var exists bool
-		err := m.pool.QueryRow(ctx, `
-			SELECT EXISTS (
-				SELECT 1
-				FROM market_store
-			)
-		`).Scan(&exists)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", op, err)
-		}
-
-		if !exists {
-			return nil, repositoryErrors.ErrMarketStoreIsEmpty
-		}
-
-		return []models.Market{}, nil
-	}
-
-	markets := make([]models.Market, 0, len(dtoMarkets))
-	for _, dtoMarket := range dtoMarkets {
-		markets = append(markets, dtoMarket.ToDomain())
-	}
-
-	return markets, nil
+	return markets
 }
