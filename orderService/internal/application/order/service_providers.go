@@ -55,6 +55,7 @@ var ServiceProviders = fx.Options(
 
 type container struct {
 	JWTManager        *authjwt.Manager
+	SessionStore      *authsession.Store
 	RefreshTokenStore *authStore.RefreshTokenStore
 	AuthService       *authService.AuthService
 	OrderService      *orderService.OrderService
@@ -248,12 +249,14 @@ func provideConsumerService(
 
 func provideContainer(
 	jwtManager *authjwt.Manager,
+	sessionStore *authsession.Store,
 	tokenStore *authStore.RefreshTokenStore,
 	authService *authService.AuthService,
 	orderService *orderService.OrderService,
 ) *container {
 	return &container{
 		JWTManager:        jwtManager,
+		SessionStore:      sessionStore,
 		RefreshTokenStore: tokenStore,
 		AuthService:       authService,
 		OrderService:      orderService,

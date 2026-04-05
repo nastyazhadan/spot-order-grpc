@@ -34,11 +34,11 @@ func NewMarketByIDCacheRepository(store *cache.Store, serviceName string) *Marke
 	}
 }
 
-func (m *MarketByIDCacheRepository) GetByID(
+func (m *MarketByIDCacheRepository) GetMarketByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) (models.Market, error) {
-	const op = "redis.MarketByIDCacheRepository.GetByID"
+	const op = "redis.MarketByIDCacheRepository.GetMarketByID"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.get_market_by_id",
 		trace.WithSpanKind(trace.SpanKindClient),
@@ -92,25 +92,25 @@ func (m *MarketByIDCacheRepository) invalidateCorruptedCache(
 	)
 	tracing.RecordError(span, cause)
 
-	if err := m.DeleteByID(ctx, id); err != nil {
+	if err := m.DeleteMarketByID(ctx, id); err != nil {
 		span.SetAttributes(attributes.CacheInvalidationFailedValue(true))
 		tracing.RecordError(span, err)
 
 		metrics.CacheInvalidationsTotal.
-			WithLabelValues(m.serviceName, reason, "market_by_id", "error").Inc()
+			WithLabelValues(m.serviceName, reason, "get_by_id", "error").Inc()
 		return
 	}
 
 	metrics.CacheInvalidationsTotal.
-		WithLabelValues(m.serviceName, reason, "market_by_id", "success").Inc()
+		WithLabelValues(m.serviceName, reason, "get_by_id", "success").Inc()
 }
 
-func (m *MarketByIDCacheRepository) SetByID(
+func (m *MarketByIDCacheRepository) SetMarketByID(
 	ctx context.Context,
 	market models.Market,
 	ttl time.Duration,
 ) error {
-	const op = "redis.MarketByIDCacheRepository.SetByID"
+	const op = "redis.MarketByIDCacheRepository.SetMarketByID"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.set_market_by_id",
 		trace.WithSpanKind(trace.SpanKindClient),
@@ -142,11 +142,11 @@ func (m *MarketByIDCacheRepository) SetByID(
 	return nil
 }
 
-func (m *MarketByIDCacheRepository) DeleteByID(
+func (m *MarketByIDCacheRepository) DeleteMarketByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) error {
-	const op = "redis.MarketByIDCacheRepository.DeleteByID"
+	const op = "redis.MarketByIDCacheRepository.DeleteMarketByID"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.delete_market_by_id",
 		trace.WithSpanKind(trace.SpanKindClient),

@@ -36,11 +36,11 @@ func NewMarketCacheRepository(store *cache.Store, serviceName string) *MarketCac
 	}
 }
 
-func (m *MarketCacheRepository) GetAll(
+func (m *MarketCacheRepository) GetMarkets(
 	ctx context.Context,
 	roleKey string,
 ) ([]models.Market, error) {
-	const op = "redis.MarketCacheRepository.GetAll"
+	const op = "redis.MarketCacheRepository.GetMarkets"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.get_markets",
 		trace.WithSpanKind(trace.SpanKindClient),
@@ -55,7 +55,7 @@ func (m *MarketCacheRepository) GetAll(
 	defer func() {
 		metrics.ObserveWithTrace(
 			ctx,
-			metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "get_all"),
+			metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "get_markets"),
 			time.Since(start).Seconds(),
 		)
 	}()
@@ -63,7 +63,7 @@ func (m *MarketCacheRepository) GetAll(
 	data, err := m.cacheStore.Get(ctx, cacheKey(roleKey))
 	if err != nil {
 		if errors.Is(err, sharedErrors.ErrCacheNotFound) {
-			metrics.CacheMissesTotal.WithLabelValues(m.serviceName, "get_all").Inc()
+			metrics.CacheMissesTotal.WithLabelValues(m.serviceName, "get_markets").Inc()
 			return nil, repositoryErrors.ErrMarketsNotFound
 		}
 
@@ -77,7 +77,7 @@ func (m *MarketCacheRepository) GetAll(
 		return nil, fmt.Errorf("%s: %w", op, repositoryErrors.ErrMarketCacheCorrupted)
 	}
 
-	metrics.CacheHitsTotal.WithLabelValues(m.serviceName, "get_all").Inc()
+	metrics.CacheHitsTotal.WithLabelValues(m.serviceName, "get_markets").Inc()
 	return markets, nil
 }
 
@@ -94,7 +94,7 @@ func (m *MarketCacheRepository) invalidateCorruptedCache(
 	)
 	tracing.RecordError(span, cause)
 
-	if err := m.DeleteAll(ctx, roleKey); err != nil {
+	if err := m.DeleteMarkets(ctx, roleKey); err != nil {
 		span.SetAttributes(attributes.CacheInvalidationFailedValue(true))
 		tracing.RecordError(span, err)
 
@@ -107,13 +107,13 @@ func (m *MarketCacheRepository) invalidateCorruptedCache(
 		WithLabelValues(m.serviceName, reason, roleKey, "success").Inc()
 }
 
-func (m *MarketCacheRepository) SetAll(
+func (m *MarketCacheRepository) SetMarkets(
 	ctx context.Context,
 	markets []models.Market,
 	roleKey string,
 	ttl time.Duration,
 ) error {
-	const op = "redis.MarketCacheRepository.SetAll"
+	const op = "redis.MarketCacheRepository.SetMarkets"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.set_markets",
 		trace.WithSpanKind(trace.SpanKindClient),
@@ -135,7 +135,7 @@ func (m *MarketCacheRepository) SetAll(
 	start := time.Now()
 	err = m.cacheStore.SetWithTTL(ctx, cacheKey(roleKey), data, ttl)
 	metrics.ObserveWithTrace(ctx,
-		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "set_all"),
+		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "set_markets"),
 		time.Since(start).Seconds(),
 	)
 	if err != nil {
@@ -146,11 +146,11 @@ func (m *MarketCacheRepository) SetAll(
 	return nil
 }
 
-func (m *MarketCacheRepository) DeleteAll(
+func (m *MarketCacheRepository) DeleteMarkets(
 	ctx context.Context,
 	roleKey string,
 ) error {
-	const op = "redis.MarketCacheRepository.DeleteAll"
+	const op = "redis.MarketCacheRepository.DeleteMarkets"
 
 	ctx, span := tracing.StartSpan(ctx, "redis.delete_markets",
 		trace.WithSpanKind(trace.SpanKindClient),
@@ -164,7 +164,7 @@ func (m *MarketCacheRepository) DeleteAll(
 	start := time.Now()
 	err := m.cacheStore.Delete(ctx, cacheKey(roleKey))
 	metrics.ObserveWithTrace(ctx,
-		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "delete_all"),
+		metrics.CacheOperationDuration.WithLabelValues(m.serviceName, "delete_markets"),
 		time.Since(start).Seconds(),
 	)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"go.uber.org/fx"
 
 	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
+	authsession "github.com/nastyazhadan/spot-order-grpc/shared/auth/session"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	sharedProducer "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka/producer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -31,8 +32,9 @@ var ServiceProviders = fx.Options(
 )
 
 type container struct {
-	JWTManager  *authjwt.Manager
-	SpotService *spotService.MarketViewer
+	JWTManager   *authjwt.Manager
+	SessionStore *authsession.Store
+	SpotService  *spotService.MarketViewer
 }
 
 func provideJWTManager(cfg config.SpotConfig) *authjwt.Manager {
@@ -126,10 +128,12 @@ func provideMarketPoller(
 
 func provideContainer(
 	jwtManager *authjwt.Manager,
+	sessionStore *authsession.Store,
 	service *spotService.MarketViewer,
 ) *container {
 	return &container{
-		JWTManager:  jwtManager,
-		SpotService: service,
+		JWTManager:   jwtManager,
+		SessionStore: sessionStore,
+		SpotService:  service,
 	}
 }

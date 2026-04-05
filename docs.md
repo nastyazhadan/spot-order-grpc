@@ -118,18 +118,18 @@ type MarketOrderCanceler interface {
 ### SpotService (бизнес-логика)
 
 ```go
-// MarketCacheRepository — role-based head-cache первой страницы
+// Role-based head-cache хранит не полный список рынков, а только head-срез до `cacheLimit + 1` элементов для первой страницы и расчёта `hasMore`.
 type MarketCacheRepository interface {
-    GetAll(ctx context.Context, roleKey string) ([]sharedModels.Market, error)
-    SetAll(ctx context.Context, markets []sharedModels.Market, roleKey string, ttl time.Duration) error
-    DeleteAll(ctx context.Context, roleKey string) error
+    GetMarkets(ctx context.Context, roleKey string) ([]sharedModels.Market, error)
+    SetMarkets(ctx context.Context, markets []sharedModels.Market, roleKey string, ttl time.Duration) error
+    DeleteMarkets(ctx context.Context, roleKey string) error
 }
 
 // MarketByIDCacheRepository — кэш рынка по market_id
 type MarketByIDCacheRepository interface {
-    Get(ctx context.Context, id uuid.UUID) (sharedModels.Market, error)
-    Set(ctx context.Context, market sharedModels.Market, ttl time.Duration) error
-    Delete(ctx context.Context, id uuid.UUID) error
+    GetMarketByID(ctx context.Context, id uuid.UUID) (sharedModels.Market, error)
+    SetMarketByID(ctx context.Context, market sharedModels.Market, ttl time.Duration) error
+    DeleteMarketByID(ctx context.Context, id uuid.UUID) error
 }
 
 // MarketReader — чтение рынков с поддержкой cursor-based пагинации

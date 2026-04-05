@@ -38,15 +38,15 @@ type MarketRepository interface {
 }
 
 type MarketCacheRepository interface {
-	GetAll(ctx context.Context, roleKey string) ([]models.Market, error)
-	SetAll(ctx context.Context, market []models.Market, roleKey string, ttl time.Duration) error
-	DeleteAll(ctx context.Context, roleKey string) error
+	GetMarkets(ctx context.Context, roleKey string) ([]models.Market, error)
+	SetMarkets(ctx context.Context, market []models.Market, roleKey string, ttl time.Duration) error
+	DeleteMarkets(ctx context.Context, roleKey string) error
 }
 
 type MarketByIDCacheRepository interface {
-	GetByID(ctx context.Context, id uuid.UUID) (models.Market, error)
-	SetByID(ctx context.Context, market models.Market, ttl time.Duration) error
-	DeleteByID(ctx context.Context, id uuid.UUID) error
+	GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error)
+	SetMarketByID(ctx context.Context, market models.Market, ttl time.Duration) error
+	DeleteMarketByID(ctx context.Context, id uuid.UUID) error
 }
 
 type MarketViewer struct {
@@ -149,9 +149,9 @@ func (s *MarketViewer) tryLoadHeadPage(
 	roleKey string,
 	limit uint64,
 ) ([]models.Market, uint64, bool, error) {
-	allMarkets, err := s.marketCacheRepository.GetAll(ctx, roleKey)
+	headMarkets, err := s.marketCacheRepository.GetMarkets(ctx, roleKey)
 	if err == nil {
-		markets, nextOffset, hasMore, buildError := buildPageResponse(allMarkets, limit, 0)
+		markets, nextOffset, hasMore, buildError := buildPageResponse(headMarkets, limit, 0)
 		if buildError != nil {
 			return markets, nextOffset, hasMore, buildError
 		}
@@ -159,7 +159,7 @@ func (s *MarketViewer) tryLoadHeadPage(
 	}
 	cacheError := err
 
-	headMarkets, err := s.marketRepository.GetMarketsPage(ctx, roleKey, s.cacheLimit+1, 0)
+	headMarkets, err = s.marketRepository.GetMarketsPage(ctx, roleKey, s.cacheLimit+1, 0)
 	if err != nil {
 		if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
 			return nil, 0, false, serviceErrors.ErrMarketsNotFound
@@ -190,7 +190,7 @@ func (s *MarketViewer) warmHeadCache(
 	roleKey string,
 	markets []models.Market,
 ) error {
-	if err := s.marketCacheRepository.SetAll(ctx, markets, roleKey, s.cacheTTL); err != nil {
+	if err := s.marketCacheRepository.SetMarkets(ctx, markets, roleKey, s.cacheTTL); err != nil {
 		metrics.CacheWarmupsTotal.
 			WithLabelValues(s.serviceName, "view_markets_lazy_warmup", roleKey, "error").
 			Inc()
@@ -252,7 +252,7 @@ func (s *MarketViewer) getMarketActual(
 ) (models.Market, error) {
 	const op = "MarketViewer.getMarketActual"
 
-	market, err := s.marketByIDCacheRepository.GetByID(ctx, id)
+	market, err := s.marketByIDCacheRepository.GetMarketByID(ctx, id)
 	if err == nil {
 		return market, nil
 	}
@@ -344,7 +344,7 @@ func (s *MarketViewer) loadMarketAndWarmCache(
 	)
 	defer span.End()
 
-	market, err := s.marketByIDCacheRepository.GetByID(ctx, id)
+	market, err := s.marketByIDCacheRepository.GetMarketByID(ctx, id)
 	if err == nil {
 		return market, nil
 	}
@@ -358,7 +358,7 @@ func (s *MarketViewer) loadMarketAndWarmCache(
 		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err = s.marketByIDCacheRepository.SetByID(ctx, market, s.cacheTTL); err != nil {
+	if err = s.marketByIDCacheRepository.SetMarketByID(ctx, market, s.cacheTTL); err != nil {
 		return s.handleWarmupSetError(ctx, id, market, err, cleanupCorruptedCache), nil
 	}
 
@@ -386,7 +386,7 @@ func (s *MarketViewer) handleWarmupSetError(
 		return market
 	}
 
-	deleteError := s.marketByIDCacheRepository.DeleteByID(ctx, id)
+	deleteError := s.marketByIDCacheRepository.DeleteMarketByID(ctx, id)
 	if deleteError != nil {
 		metrics.CacheInvalidationsTotal.
 			WithLabelValues(s.serviceName, "corrupted_cache_cleanup", "market_by_id", "error").Inc()
@@ -423,7 +423,7 @@ func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 		markets, err := s.marketRepository.GetMarketsPage(refreshCtx, roleKey, s.cacheLimit+1, 0)
 		if err != nil {
 			if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
-				return s.invalidateAllCache(refreshCtx)
+				return s.invalidateMarketsCache(refreshCtx)
 			}
 
 			metrics.CacheWarmupsTotal.
@@ -432,7 +432,7 @@ func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 			return fmt.Errorf("%s: load head cache for role %s: %w", op, roleKey, err)
 		}
 
-		if err = s.marketCacheRepository.SetAll(refreshCtx, markets, roleKey, s.cacheTTL); err != nil {
+		if err = s.marketCacheRepository.SetMarkets(refreshCtx, markets, roleKey, s.cacheTTL); err != nil {
 			metrics.CacheWarmupsTotal.
 				WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
 
@@ -447,11 +447,11 @@ func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 }
 
 // Удаление всех ключей при пустом market store
-func (s *MarketViewer) invalidateAllCache(ctx context.Context) error {
+func (s *MarketViewer) invalidateMarketsCache(ctx context.Context) error {
 	const op = "MarketViewer.invalidateAllCache"
 
 	for _, roleKey := range cacheRoleKeys {
-		if err := s.marketCacheRepository.DeleteAll(ctx, roleKey); err != nil {
+		if err := s.marketCacheRepository.DeleteMarkets(ctx, roleKey); err != nil {
 			metrics.CacheInvalidationsTotal.
 				WithLabelValues(s.serviceName, "refresh_empty_store", roleKey, "error").
 				Inc()
@@ -483,7 +483,7 @@ func (s *MarketViewer) InvalidateByIDs(ctx context.Context, ids []uuid.UUID) err
 		}
 		seen[id] = struct{}{}
 
-		if err := s.marketByIDCacheRepository.DeleteByID(ctx, id); err != nil {
+		if err := s.marketByIDCacheRepository.DeleteMarketByID(ctx, id); err != nil {
 			metrics.CacheInvalidationsTotal.
 				WithLabelValues(s.serviceName, "market_updated", "market_by_id", "error").
 				Inc()

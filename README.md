@@ -43,7 +43,7 @@ gRPC-методы:
 Что делает:
 - читает рынки из `market_store`
 - фильтрует выдачу по ролям
-- для `ViewMarkets` использует role-based Redis head-cache первой страницы (`market:cache:<role>`)
+- Redis key `market:cache:<role>` хранит head-срез списка рынков для первой страницы, а не полный снимок всех markets
 - при запросе первой страницы сначала пытается читать head-cache; при cache miss или corrupted payload загружает первую страницу из PostgreSQL, возвращает её клиенту и прогревает head-cache
 - `RefreshAll` перепрогревает role-based head-cache после обработки изменений рынков
 - для `GetMarketByID` использует отдельный Redis by-id cache по ключу `market:by_id:<marketID>`; ролевые ограничения применяются после загрузки рынка
