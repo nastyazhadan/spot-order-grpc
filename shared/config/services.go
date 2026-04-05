@@ -49,6 +49,7 @@ type ServiceConfig struct {
 type ViewMarketsConfig struct {
 	DefaultLimit uint64 `mapstructure:"default_limit"`
 	MaxLimit     uint64 `mapstructure:"max_limit"`
+	CacheLimit   uint64 `mapstructure:"cache_limit"`
 }
 
 type LoggingConfig struct {

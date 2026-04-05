@@ -137,7 +137,7 @@ func (m *MarketCacheRepository) SetAll(
 	return nil
 }
 
-func (m *MarketCacheRepository) Delete(ctx context.Context, roleKey string) error {
+func (m *MarketCacheRepository) DeleteAll(ctx context.Context, roleKey string) error {
 	const op = "redis.MarketCacheRepository.Delete"
 
 	start := time.Now()
@@ -167,7 +167,7 @@ func (m *MarketCacheRepository) invalidateCorruptedCache(
 	)
 	tracing.RecordError(span, cause)
 
-	if err := m.Delete(ctx, roleKey); err != nil {
+	if err := m.DeleteAll(ctx, roleKey); err != nil {
 		span.SetAttributes(attributes.CacheInvalidationFailedValue(true))
 		tracing.RecordError(span, err)
 

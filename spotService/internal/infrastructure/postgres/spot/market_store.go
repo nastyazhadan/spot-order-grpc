@@ -19,6 +19,11 @@ import (
 	dto "github.com/nastyazhadan/spot-order-grpc/spotService/internal/application/dto/outbound/postgres"
 )
 
+const (
+	roleAdminKey  = "admin"
+	roleViewerKey = "viewer"
+)
+
 type MarketStore struct {
 	pool   *pgxpool.Pool
 	config config.SpotConfig
@@ -149,6 +154,110 @@ func (m *MarketStore) ListUpdatedSince(
 	if err != nil {
 		tracing.RecordError(span, err)
 		return nil, fmt.Errorf("%s: collect rows: %w", op, err)
+	}
+
+	markets := make([]models.Market, 0, len(dtoMarkets))
+	for _, dtoMarket := range dtoMarkets {
+		markets = append(markets, dtoMarket.ToDomain())
+	}
+
+	return markets, nil
+}
+
+func (m *MarketStore) ListPage(
+	ctx context.Context,
+	roleKey string,
+	limit, offset uint64,
+) ([]models.Market, error) {
+	const op = "postgres.MarketStore.ListPage"
+
+	ctx, span := tracing.StartSpan(ctx, "postgres.list_markets_page",
+		trace.WithSpanKind(trace.SpanKindClient),
+	)
+	defer span.End()
+
+	start := time.Now()
+	defer func() {
+		metrics.ObserveWithTrace(ctx,
+			metrics.DBQueryDuration.WithLabelValues(m.config.Service.Name, "list_markets_page"),
+			time.Since(start).Seconds(),
+		)
+	}()
+
+	dtoMarkets, err := m.loadMarketsPage(ctx, roleKey, limit, offset)
+	if err != nil {
+		tracing.RecordError(span, err)
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	markets, err := m.buildPageResult(ctx, dtoMarkets)
+	if err != nil {
+		tracing.RecordError(span, err)
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return markets, nil
+}
+
+func (m *MarketStore) loadMarketsPage(
+	ctx context.Context,
+	roleKey string,
+	limit, offset uint64,
+) ([]dto.Market, error) {
+	const op = "postgres.MarketStore.loadMarketsPage"
+
+	whereClause := "deleted_at IS NULL AND enabled = TRUE"
+	switch roleKey {
+	case roleAdminKey:
+		whereClause = "TRUE"
+	case roleViewerKey:
+		whereClause = "deleted_at IS NULL"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id, name, enabled, deleted_at, updated_at FROM market_store
+		WHERE %s
+		ORDER BY name, id
+		LIMIT $1 OFFSET $2
+	`, whereClause)
+
+	rows, err := m.pool.Query(ctx, query, int(limit+1), int(offset))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	marketsDTO, err := pgx.CollectRows(rows, pgx.RowToStructByName[dto.Market])
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return marketsDTO, nil
+}
+
+func (m *MarketStore) buildPageResult(
+	ctx context.Context,
+	dtoMarkets []dto.Market,
+) ([]models.Market, error) {
+	const op = "postgres.MarketStore.buildPageResult"
+
+	if len(dtoMarkets) == 0 {
+		var exists bool
+		err := m.pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1
+				FROM market_store
+			)
+		`).Scan(&exists)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+
+		if !exists {
+			return nil, repositoryErrors.ErrMarketStoreIsEmpty
+		}
+
+		return []models.Market{}, nil
 	}
 
 	markets := make([]models.Market, 0, len(dtoMarkets))

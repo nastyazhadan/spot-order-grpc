@@ -49,6 +49,51 @@ func ValidateServiceConfig(fieldPrefix string, cfg ServiceConfig, allowEmptyHost
 	return nil
 }
 
+func ValidatePostgresPoolConfig(fieldPrefix string, cfg PostgresPoolConfig) error {
+	if cfg.MaxConnections < 0 {
+		return fmt.Errorf(
+			"%s.max_conns must be greater than or equal to 0, got %d",
+			fieldPrefix,
+			cfg.MaxConnections,
+		)
+	}
+
+	if cfg.MinConnections < 0 {
+		return fmt.Errorf(
+			"%s.min_conns must be greater than or equal to 0, got %d",
+			fieldPrefix,
+			cfg.MinConnections,
+		)
+	}
+
+	if cfg.MaxConnLifetime < 0 {
+		return fmt.Errorf(
+			"%s.max_conn_lifetime must be greater than or equal to 0, got %s",
+			fieldPrefix,
+			cfg.MaxConnLifetime,
+		)
+	}
+
+	if cfg.MaxConnIdleTime < 0 {
+		return fmt.Errorf(
+			"%s.max_conn_idle_time must be greater than or equal to 0, got %s",
+			fieldPrefix,
+			cfg.MaxConnIdleTime,
+		)
+	}
+
+	if cfg.MaxConnections > 0 && cfg.MinConnections > cfg.MaxConnections {
+		return fmt.Errorf(
+			"%s.min_conns (%d) must be less than or equal to max_conns (%d)",
+			fieldPrefix,
+			cfg.MinConnections,
+			cfg.MaxConnections,
+		)
+	}
+
+	return nil
+}
+
 func ValidateMetricsConfig(fieldPrefix string, cfg MetricsConfig) error {
 	if err := ValidateTCPAddress(fieldPrefix+".http_address", cfg.HTTPAddress, true); err != nil {
 		return err

@@ -44,6 +44,9 @@ func validateOrderConfig(cfg config.OrderConfig) error {
 	if err := validateOrderService(cfg); err != nil {
 		return err
 	}
+	if err := config.ValidatePostgresPoolConfig("postgres_pool", cfg.PostgresPool); err != nil {
+		return err
+	}
 	if err := validateOrderRedis(cfg); err != nil {
 		return err
 	}

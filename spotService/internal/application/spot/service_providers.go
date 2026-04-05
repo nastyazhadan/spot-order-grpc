@@ -86,16 +86,19 @@ func provideMarketEventProducer(
 func provideSpotService(
 	repository *spotStore.MarketStore,
 	cacheRepository *spotCache.MarketCacheRepository,
+	cacheByIDRepository *spotCache.MarketByIDCacheRepository,
 	cfg config.SpotConfig,
 	logger *zapLogger.Logger,
 ) *spotService.MarketViewer {
 	return spotService.NewMarketViewer(
 		repository,
 		cacheRepository,
+		cacheByIDRepository,
 		cfg.Redis.CacheTTL,
 		cfg.Timeouts.Service,
 		cfg.ViewMarkets.DefaultLimit,
 		cfg.ViewMarkets.MaxLimit,
+		cfg.ViewMarkets.CacheLimit,
 		cfg.Service.Name,
 		logger,
 	)

@@ -1,11 +1,9 @@
 package spot
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,52 +23,64 @@ import (
 )
 
 const (
-	singleFlightKey = "load_markets"
-	roleAdminKey    = "admin"
-	roleViewerKey   = "viewer"
-	roleUserKey     = "user"
+	singleFlightKeyPrefix = "market_by_id:"
+	roleAdminKey          = "admin"
+	roleViewerKey         = "viewer"
+	roleUserKey           = "user"
 )
 
 type MarketRepository interface {
 	ListAll(ctx context.Context) ([]models.Market, error)
+	ListPage(ctx context.Context, roleKey string, limit, offset uint64) ([]models.Market, error)
 	GetByID(ctx context.Context, id uuid.UUID) (models.Market, error)
 }
 
 type MarketCacheRepository interface {
 	GetAll(ctx context.Context, roleKey string) ([]models.Market, error)
 	SetAll(ctx context.Context, market []models.Market, roleKey string, ttl time.Duration) error
-	Delete(ctx context.Context, roleKey string) error
+	DeleteAll(ctx context.Context, roleKey string) error
+}
+
+type MarketByIDCacheRepository interface {
+	Get(ctx context.Context, id uuid.UUID) (models.Market, error)
+	Set(ctx context.Context, market models.Market, ttl time.Duration) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 type MarketViewer struct {
-	marketRepository      MarketRepository
-	marketCacheRepository MarketCacheRepository
-	cacheTTL              time.Duration
-	serviceTimeout        time.Duration
-	defaultLimit          uint64
-	maxLimit              uint64
-	serviceName           string
-	singleFlight          singleflight.Group
-	logger                *zapLogger.Logger
+	marketRepository          MarketRepository
+	marketCacheRepository     MarketCacheRepository
+	marketByIDCacheRepository MarketByIDCacheRepository
+	cacheTTL                  time.Duration
+	serviceTimeout            time.Duration
+	defaultLimit              uint64
+	maxLimit                  uint64
+	cacheLimit                uint64
+	serviceName               string
+	singleFlight              singleflight.Group
+	logger                    *zapLogger.Logger
 }
 
 func NewMarketViewer(
 	repo MarketRepository,
 	cacheRepo MarketCacheRepository,
+	byIDCacheRepo MarketByIDCacheRepository,
 	ttl, timeout time.Duration,
-	defaultLimit, maxLimit uint64,
+	defaultLimit, maxLimit, cacheLimit uint64,
 	serviceName string,
 	logger *zapLogger.Logger,
 ) *MarketViewer {
 	return &MarketViewer{
-		marketRepository:      repo,
-		marketCacheRepository: cacheRepo,
-		cacheTTL:              ttl,
-		serviceTimeout:        timeout,
-		defaultLimit:          defaultLimit,
-		maxLimit:              maxLimit,
-		serviceName:           serviceName,
-		logger:                logger,
+		marketRepository:          repo,
+		marketCacheRepository:     cacheRepo,
+		marketByIDCacheRepository: byIDCacheRepo,
+		cacheTTL:                  ttl,
+		serviceTimeout:            timeout,
+		defaultLimit:              defaultLimit,
+		maxLimit:                  maxLimit,
+		cacheLimit:                cacheLimit,
+		serviceName:               serviceName,
+		logger:                    logger,
 	}
 }
 
@@ -110,16 +120,51 @@ func (s *MarketViewer) ViewMarkets(
 		limit = s.maxLimit
 	}
 
-	markets, err := s.getMarkets(ctx, roleKey)
+	if offset == 0 && limit <= s.cacheLimit {
+		markets, nextOffset, hasMore, err := s.viewMarketsFromHeadCache(ctx, roleKey, limit)
+		if err == nil {
+			span.SetAttributes(attributes.MarketsCountValue(len(markets)))
+			return markets, nextOffset, hasMore, nil
+		}
+
+		headMarkets, headErr := s.loadHeadMarketsAndWarmCache(ctx, roleKey)
+		if headErr == nil {
+			markets, nextOffset, hasMore = s.buildHeadPageResponse(headMarkets, limit)
+			span.SetAttributes(attributes.MarketsCountValue(len(markets)))
+			return markets, nextOffset, hasMore, nil
+		}
+
+		if !errors.Is(err, repositoryErrors.ErrMarketsNotFound) &&
+			!errors.Is(err, repositoryErrors.ErrMarketCacheCorrupted) {
+			s.logger.Error(ctx, "head cache read failed", zap.Error(err))
+		}
+
+		s.logger.Warn(ctx, "failed to warm head cache from db, falling back to direct page query", zap.Error(headErr))
+	}
+
+	markets, err := s.marketRepository.ListPage(ctx, roleKey, limit, offset)
 	if err != nil {
+		if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
+			err = serviceErrors.ErrMarketsNotFound
+		}
+
 		tracing.RecordError(span, err)
 		return nil, 0, false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	page, nextOffset, hasMore := paginateMarkets(markets, limit, offset)
-	span.SetAttributes(attributes.MarketsCountValue(len(page)))
+	hasMore := len(markets) > int(limit)
+	if hasMore {
+		markets = markets[:limit]
+	}
 
-	return page, nextOffset, hasMore, nil
+	var nextOffset uint64
+	if hasMore {
+		nextOffset = offset + limit
+	}
+
+	span.SetAttributes(attributes.MarketsCountValue(len(markets)))
+
+	return markets, nextOffset, hasMore, nil
 }
 
 func (s *MarketViewer) GetMarketByID(
@@ -192,7 +237,19 @@ func (s *MarketViewer) getMarketActual(
 ) (models.Market, error) {
 	const op = "MarketViewer.getMarketActual"
 
-	market, err := s.marketRepository.GetByID(ctx, id)
+	market, err := s.marketByIDCacheRepository.Get(ctx, id)
+	if err == nil {
+		return market, nil
+	}
+
+	cleanupCorruptedCache := false
+	if errors.Is(err, repositoryErrors.ErrMarketCacheCorrupted) {
+		cleanupCorruptedCache = true
+	} else if !errors.Is(err, repositoryErrors.ErrMarketNotFound) {
+		s.logger.Error(ctx, "failed to read market by id from cache", zap.Error(err))
+	}
+
+	market, err = s.getMarketWithSingleFlight(ctx, id, cleanupCorruptedCache)
 	if err != nil {
 		if errors.Is(err, repositoryErrors.ErrMarketNotFound) {
 			return models.Market{}, sharedErrors.ErrMarketNotFound{ID: id}
@@ -225,193 +282,145 @@ func effectiveUserRole(
 	return resultRole, resultRole != ""
 }
 
-func canViewMarketByRoleKey(
-	market models.Market,
-	roleKey string,
-) bool {
-	switch roleKey {
-	case roleAdminKey:
-		// Админ видит все рынки (включая disabled и deleted)
-		return true
-	case roleViewerKey:
-		// Viewer видит все неудаленные рынки (включая disabled)
-		return market.DeletedAt == nil
-	default:
-		// User видит только enabled и неудаленные рынки
-		return market.DeletedAt == nil && market.Enabled
-	}
-}
-
-func (s *MarketViewer) getMarkets(
+func (s *MarketViewer) viewMarketsFromHeadCache(
 	ctx context.Context,
 	roleKey string,
-) ([]models.Market, error) {
+	limit uint64,
+) ([]models.Market, uint64, bool, error) {
 	markets, err := s.marketCacheRepository.GetAll(ctx, roleKey)
-	if err == nil {
-		return markets, nil
+	if err != nil {
+		return nil, 0, false, err
 	}
 
-	if errors.Is(err, repositoryErrors.ErrMarketsNotFound) {
-		return s.getMarketsWithSingleFlight(ctx, roleKey, false)
+	hasMore := len(markets) > int(limit)
+	if hasMore {
+		markets = markets[:limit]
 	}
 
-	if errors.Is(err, repositoryErrors.ErrMarketCacheCorrupted) {
-		s.logger.Warn(ctx,
-			"corrupted market cache payload, falling back to repo",
-			zap.String("role_key", roleKey),
-			zap.Error(err),
-		)
-
-		metrics.CacheFallbacksTotal.
-			WithLabelValues(s.serviceName, "get_all", "corrupted_cache").
-			Inc()
-
-		return s.getMarketsWithSingleFlight(ctx, roleKey, true)
+	var nextOffset uint64
+	if hasMore {
+		nextOffset = limit
 	}
 
-	s.logger.Error(ctx, "internal cache error", zap.Error(err))
-	metrics.CacheFallbacksTotal.
-		WithLabelValues(s.serviceName, "get_all", "internal_cache_error").
-		Inc()
-
-	return s.getMarketsWithSingleFlight(ctx, roleKey, false)
+	return markets, nextOffset, hasMore, nil
 }
 
-func (s *MarketViewer) getMarketsWithSingleFlight(
+func (s *MarketViewer) getMarketWithSingleFlight(
 	ctx context.Context,
-	roleKey string,
+	id uuid.UUID,
 	cleanupCorruptedCache bool,
-) ([]models.Market, error) {
-	const op = "MarketViewer.getMarketsWithSingleFlight"
+) (models.Market, error) {
+	const op = "MarketViewer.getMarketWithSingleFlight"
 
-	resultKey := singleFlightKey + ":" + roleKey
+	resultKey := singleFlightKeyPrefix + id.String()
 
 	result, err, _ := s.singleFlight.Do(resultKey, func() (any, error) {
 		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.serviceTimeout)
 		defer cancel()
 
-		return s.loadAndWarmCache(loadCtx, roleKey, cleanupCorruptedCache)
+		return s.loadMarketAndWarmCache(loadCtx, id, cleanupCorruptedCache)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return models.Market{}, fmt.Errorf("%s: %w", op, err)
 	}
 
-	markets, ok := result.([]models.Market)
+	market, ok := result.(models.Market)
 	if !ok {
-		return nil, fmt.Errorf("%s: unexpected result type %T", op, result)
+		return models.Market{}, fmt.Errorf("%s: unexpected result type %T", op, result)
 	}
 
-	return markets, nil
+	return market, nil
 }
 
-func (s *MarketViewer) loadAndWarmCache(
+func (s *MarketViewer) loadMarketAndWarmCache(
 	ctx context.Context,
-	roleKey string,
+	id uuid.UUID,
 	cleanupCorruptedCache bool,
-) ([]models.Market, error) {
-	const op = "MarketViewer.loadAndWarmCache"
+) (models.Market, error) {
+	const op = "MarketViewer.loadMarketAndWarmCache"
 
-	ctx, span := tracing.StartSpan(ctx, "spot.load_and_warm_cache",
-		trace.WithAttributes(attributes.UserRoleKeyValue(roleKey)),
+	ctx, span := tracing.StartSpan(ctx, "spot.load_market_and_warm_cache",
+		trace.WithAttributes(attributes.MarketIDValue(id.String())),
 	)
 	defer span.End()
 
-	allMarkets, err := s.getMarketsFromRepo(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+	market, err := s.marketByIDCacheRepository.Get(ctx, id)
+	if err == nil {
+		return market, nil
 	}
 
-	filtered := filterByRole(allMarkets, roleKey)
+	if !errors.Is(err, repositoryErrors.ErrMarketNotFound) &&
+		!errors.Is(err, repositoryErrors.ErrMarketCacheCorrupted) {
+		s.logger.Error(ctx, "failed to re-check market by id cache", zap.Error(err))
+	}
 
-	if err = s.marketCacheRepository.SetAll(ctx, filtered, roleKey, s.cacheTTL); err != nil {
+	market, err = s.marketRepository.GetByID(ctx, id)
+	if err != nil {
+		return models.Market{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if err = s.marketByIDCacheRepository.Set(ctx, market, s.cacheTTL); err != nil {
 		// При обычной ошибке записи возвращаем данные из repo без очистки ключа.
 		// Если запрос пришёл после обнаружения corrupted cache, пытаемся удалить stale key.
-		metrics.CacheWarmupsTotal.WithLabelValues(s.serviceName, "load_and_warm_cache", roleKey, "error").Inc()
+		metrics.CacheWarmupsTotal.WithLabelValues(s.serviceName, "load_and_warm_cache", "market_by_id", "error").Inc()
 
 		if cleanupCorruptedCache {
-			deleteErr := s.marketCacheRepository.Delete(ctx, roleKey)
+			deleteErr := s.marketByIDCacheRepository.Delete(ctx, id)
 			if deleteErr != nil {
 				metrics.CacheInvalidationsTotal.
-					WithLabelValues(s.serviceName, "corrupted_cache_cleanup", roleKey, "error").
-					Inc()
+					WithLabelValues(s.serviceName, "corrupted_cache_cleanup", "market_by_id", "error").Inc()
 
 				s.logger.Error(ctx,
 					"failed to update cache and failed to remove stale corrupted cache",
-					zap.String("role_key", roleKey),
+					zap.String("market_id", id.String()),
 					zap.Error(err),
 					zap.NamedError("cleanup_error", deleteErr),
 				)
 			} else {
 				metrics.CacheInvalidationsTotal.
-					WithLabelValues(s.serviceName, "corrupted_cache_cleanup", roleKey, "success").
-					Inc()
+					WithLabelValues(s.serviceName, "corrupted_cache_cleanup", "market_by_id", "success").Inc()
 
 				s.logger.Warn(ctx,
 					"failed to update cache, removed stale corrupted cache instead",
-					zap.String("role_key", roleKey),
+					zap.String("market_id", id.String()),
 					zap.Error(err),
 				)
 			}
-			return filtered, nil
+			return market, nil
 		}
 
-		s.logger.Warn(ctx, "failed to update cache", zap.String("role_key", roleKey), zap.Error(err))
-		return filtered, nil
+		s.logger.Warn(ctx, "failed to update cache", zap.String("market_id", id.String()), zap.Error(err))
+		return market, nil
 	}
 
-	metrics.CacheWarmupsTotal.WithLabelValues(s.serviceName, "load_and_warm_cache", roleKey, "success").Inc()
-	return filtered, nil
+	metrics.CacheWarmupsTotal.WithLabelValues(s.serviceName, "load_and_warm_cache", "market_by_id", "success").Inc()
+	return market, nil
 }
 
-func (s *MarketViewer) getMarketsFromRepo(
+func (s *MarketViewer) loadHeadMarketsAndWarmCache(
 	ctx context.Context,
+	roleKey string,
 ) ([]models.Market, error) {
-	const op = "MarketViewer.getMarketsFromRepo"
+	const op = "MarketViewer.loadHeadMarketsAndWarmCache"
 
-	ctx, span := tracing.StartSpan(ctx, "spot.get_markets_from_repo")
-	defer span.End()
-
-	allMarkets, err := s.marketRepository.ListAll(ctx)
+	markets, err := s.marketRepository.ListPage(ctx, roleKey, s.cacheLimit+1, 0)
 	if err != nil {
-		tracing.RecordError(span, err)
-
 		if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
 			return nil, serviceErrors.ErrMarketsNotFound
 		}
-
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	sortMarketsStable(allMarkets)
-
-	return allMarkets, nil
-}
-
-func filterByRole(
-	markets []models.Market,
-	roleKey string,
-) []models.Market {
-	out := make([]models.Market, 0, len(markets))
-
-	for _, market := range markets {
-		if canViewMarketByRoleKey(market, roleKey) {
-			out = append(out, market)
-		}
+	if err = s.marketCacheRepository.SetAll(ctx, markets, roleKey, s.cacheTTL); err != nil {
+		s.logger.Warn(ctx, "failed to warm head cache", zap.String("role_key", roleKey), zap.Error(err))
+		return markets, nil
 	}
 
-	return out
-}
+	metrics.CacheWarmupsTotal.
+		WithLabelValues(s.serviceName, "view_markets_lazy_warmup", roleKey, "success").
+		Inc()
 
-func sortMarketsStable(
-	markets []models.Market,
-) {
-	slices.SortFunc(markets, func(a, b models.Market) int {
-		if byName := cmp.Compare(a.Name, b.Name); byName != 0 {
-			return byName
-		}
-
-		return cmp.Compare(a.ID.String(), b.ID.String())
-	})
+	return markets, nil
 }
 
 func (s *MarketViewer) RefreshAll(
@@ -422,26 +431,28 @@ func (s *MarketViewer) RefreshAll(
 	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.serviceTimeout)
 	defer cancel()
 
-	allMarkets, err := s.marketRepository.ListAll(refreshCtx)
-	if err != nil {
-		if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
-			return s.invalidateAll(refreshCtx)
-		}
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	sortMarketsStable(allMarkets)
-
 	for _, roleKey := range []string{roleAdminKey, roleViewerKey, roleUserKey} {
-		filtered := filterByRole(allMarkets, roleKey)
+		markets, err := s.marketRepository.ListPage(refreshCtx, roleKey, s.cacheLimit+1, 0)
+		if err != nil {
+			if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
+				return s.invalidateAll(refreshCtx)
+			}
 
-		if err = s.marketCacheRepository.SetAll(refreshCtx, filtered, roleKey, s.cacheTTL); err != nil {
-			metrics.CacheWarmupsTotal.WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
+			metrics.CacheWarmupsTotal.
+				WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
+
+			return fmt.Errorf("%s: load head cache for role %s: %w", op, roleKey, err)
+		}
+
+		if err = s.marketCacheRepository.SetAll(refreshCtx, markets, roleKey, s.cacheTTL); err != nil {
+			metrics.CacheWarmupsTotal.
+				WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
 
 			return fmt.Errorf("%s: set cache for role %s: %w", op, roleKey, err)
 		}
 
-		metrics.CacheWarmupsTotal.WithLabelValues(s.serviceName, "refresh_all", roleKey, "success").Inc()
+		metrics.CacheWarmupsTotal.
+			WithLabelValues(s.serviceName, "refresh_all", roleKey, "success").Inc()
 	}
 
 	return nil
@@ -454,7 +465,7 @@ func (s *MarketViewer) invalidateAll(
 	const op = "MarketViewer.invalidateAll"
 
 	for _, roleKey := range []string{roleAdminKey, roleViewerKey, roleUserKey} {
-		if err := s.marketCacheRepository.Delete(ctx, roleKey); err != nil {
+		if err := s.marketCacheRepository.DeleteAll(ctx, roleKey); err != nil {
 			metrics.CacheInvalidationsTotal.
 				WithLabelValues(s.serviceName, "refresh_empty_store", roleKey, "error").
 				Inc()
@@ -470,27 +481,19 @@ func (s *MarketViewer) invalidateAll(
 	return nil
 }
 
-func paginateMarkets(markets []models.Market,
-	limit, offset uint64,
+func (s *MarketViewer) buildHeadPageResponse(
+	markets []models.Market,
+	limit uint64,
 ) ([]models.Market, uint64, bool) {
-	if limit <= 0 {
-		return []models.Market{}, 0, false
+	hasMore := len(markets) > int(limit)
+	if hasMore {
+		markets = markets[:limit]
 	}
 
-	if len(markets) == 0 || offset >= uint64(len(markets)) {
-		return []models.Market{}, 0, false
+	var nextOffset uint64
+	if hasMore {
+		nextOffset = limit
 	}
 
-	start := int(offset)
-	end := start + int(limit)
-	if end > len(markets) {
-		end = len(markets)
-	}
-
-	hasMore := end < len(markets)
-	if !hasMore {
-		return markets[start:end], 0, false
-	}
-
-	return markets[start:end], uint64(end), true
+	return markets, nextOffset, hasMore
 }

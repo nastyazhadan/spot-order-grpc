@@ -45,6 +45,9 @@ func validateSpotConfig(cfg config.SpotConfig) error {
 	if err := validateSpotService(cfg); err != nil {
 		return err
 	}
+	if err := config.ValidatePostgresPoolConfig("postgres_pool", cfg.PostgresPool); err != nil {
+		return err
+	}
 	if err := validateSpotViewMarkets(cfg); err != nil {
 		return err
 	}
@@ -166,6 +169,13 @@ func validateSpotMarketPoller(cfg config.SpotConfig) error {
 			"market_poller.processing_timeout (%s) must be greater than or equal to market_poller.poll_interval (%s)",
 			cfg.MarketPoller.ProcessingTimeout,
 			cfg.MarketPoller.PollInterval,
+		)
+	}
+
+	if cfg.MarketPoller.RestartBackoff <= 0 {
+		return fmt.Errorf(
+			"market_poller.restart_backoff must be greater than 0, got %s",
+			cfg.MarketPoller.RestartBackoff,
 		)
 	}
 

@@ -52,9 +52,7 @@ func newPostgresPool(
 		return nil, fmt.Errorf("%s: parse config: %w", op, err)
 	}
 
-	if err = applyPoolConfig(cfg, config); err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
+	applyPoolConfig(cfg, config)
 
 	// При нормальном завершении программы закрывается в lifecycle.go, при ошибке - в postgres.go
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
@@ -80,29 +78,11 @@ func newPostgresPool(
 func applyPoolConfig(
 	cfg *pgxpool.Config,
 	poolConfig PoolConfig,
-) error {
-	if poolConfig.MaxConnections > 0 {
-		cfg.MaxConns = poolConfig.MaxConnections
-	}
-
-	if poolConfig.MinConnections > 0 {
-		cfg.MinConns = poolConfig.MinConnections
-	}
-
-	if poolConfig.MaxConnLifetime > 0 {
-		cfg.MaxConnLifetime = poolConfig.MaxConnLifetime
-	}
-
-	if poolConfig.MaxConnIdleTime > 0 {
-		cfg.MaxConnIdleTime = poolConfig.MaxConnIdleTime
-	}
-
-	if cfg.MaxConns > 0 && cfg.MinConns > cfg.MaxConns {
-		return fmt.Errorf("invalid pool config: MinConns (%d) > MaxConns (%d)",
-			cfg.MinConns, cfg.MaxConns)
-	}
-
-	return nil
+) {
+	cfg.MaxConns = poolConfig.MaxConnections
+	cfg.MinConns = poolConfig.MinConnections
+	cfg.MaxConnLifetime = poolConfig.MaxConnLifetime
+	cfg.MaxConnIdleTime = poolConfig.MaxConnIdleTime
 }
 
 func runPostgresMigrations(

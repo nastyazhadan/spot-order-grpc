@@ -2,7 +2,7 @@
 
 Два gRPC-сервиса для работы со спотовыми торговыми инструментами и ордерами.
 
-- **SpotInstrumentService** — справочник рынков (`markets`) с фильтрацией по ролям пользователя, Redis-кэшем и `singleflight`. Поллер отслеживает изменения рынков, записывает события в outbox и после обработки обновлений инициирует refresh role-specific Redis-кэша
+- **SpotInstrumentService** — справочник рынков (`markets`) с фильтрацией по ролям пользователя. Для `ViewMarkets` используется role-based Redis head-cache первой страницы, а для `GetMarketByID` — отдельный Redis cache по `market_id` с `singleflight` на miss-path. Поллер отслеживает изменения рынков, записывает события в outbox и после обработки обновлений инициирует refresh role-specific head-cache.
 - **OrderService** — создание ордеров и получение статуса, с проверкой рынка через SpotService, JWT-аутентификацией, circuit breaker и per-user rate limiting. При получении события `market.state.changed` компенсирует активные ордера заблокированного рынка.
 
 ## Быстрый старт
@@ -43,9 +43,12 @@ gRPC-методы:
 Что делает:
 - читает рынки из `market_store`
 - фильтрует выдачу по ролям
-- кеширует списки рынков в Redis по ролям пользователя
-- при `cache miss` использует `singleflight`, загружает данные из PostgreSQL и перепрогревает кэш
-- при повреждённом (`corrupted`) payload в Redis инвалидирует ключ, делает fallback в PostgreSQL и старается удалить stale key, если перепрогрев не удался
+- для `ViewMarkets` использует role-based Redis head-cache первой страницы (`market:cache:<role>`)
+- при запросе первой страницы сначала пытается читать head-cache; при cache miss или corrupted payload загружает первую страницу из PostgreSQL, возвращает её клиенту и прогревает head-cache
+- `RefreshAll` перепрогревает role-based head-cache после обработки изменений рынков
+- для `GetMarketByID` использует отдельный Redis by-id cache по ключу `market:by_id:<marketID>`; ролевые ограничения применяются после загрузки рынка
+- при `cache miss` по `market_id` использует `singleflight`, чтобы только один запрос сходил в PostgreSQL и прогрел by-id cache
+- при повреждённом (`corrupted`) payload в by-id cache пытается удалить stale key, если перепрогрев не удался
 - запускает `MarketPoller`, который отслеживает изменения в БД и складывает события в outbox
 - публикует `market.state.changed` в Kafka
 
@@ -213,9 +216,9 @@ Grafana → Prometheus + Tempo
 **Покрытые операции:**
 - `UnaryServerInterceptor` / `UnaryClientInterceptor` — каждый gRPC-вызов
 - `order.check_rate_limit`, `order.validate_market`, `order.save_order`, `order.fetch_order`
-- `spot.view_markets`, `spot.load_and_warm_cache`, `spot.get_markets_from_repo`
-- `postgres.save_order`, `postgres.get_order`, `postgres.list_all_markets`, `postgres.list_updated_since`
-- `redis.get_markets`, `redis.set_markets`
+- `spot.view_markets`, `spot.get_market_by_id`, `spot.load_market_and_warm_cache`
+- `postgres.save_order`, `postgres.get_order`, `postgres.list_markets_page`, `postgres.market_by_id`, `postgres.list_updated_since`
+- `redis.get_markets`, `redis.set_markets`, `redis.get_market_by_id`, `redis.set_market_by_id`
 - `market_compensation.process` — обработка события `market.state.changed` в OrderService
 - `producer.produce_market_state_changed_batch` — публикация батча событий рынков в SpotService
 
@@ -256,7 +259,7 @@ Grafana → Prometheus + Tempo
   "offset": 0
 }
 ```
-> `user_roles` больше не передаются в request — они извлекается из JWT токена unary interceptor-ом.
+> `user_roles` больше не передаются в request — они извлекаются из JWT токена unary interceptor-ом.
 
 **Логика фильтрации:**
 
@@ -268,7 +271,7 @@ Grafana → Prometheus + Tempo
 
 Если в JWT несколько ролей, применяется наиболее привилегированная роль.
 
-**Пример ответа:**
+**Пример ответа для ROLE_ADMIN:**
 ```json
 {
   "markets": [
@@ -464,9 +467,10 @@ spotOrder/
 │   │   │   ├── postgres/cursor_store.go    # курсор поллера (позиция чтения)
 │   │   │   ├── postgres/outbox_store.go    # Transactional Outbox
 │   │   │   ├── kafka/outbox_worker.go      # воркер публикации событий из outbox
-│   │   │   └── redis/market_cache.go       # кэш рынков (TTL, по ролям, инвалидация)
+│   │   │   ├── redis/market_cache.go       # role-based head-cache первой страницы
+│   │   │   └── redis/market_by_id_cache.go # кэш рынка по market_id
 │   │   └── services/
-│   │       ├── spot/market_viewer.go       # бизнес-логика + singleflight
+│   │       ├── spot/market_viewer.go       # бизнес-логика ViewMarkets (head-cache) и GetMarketByID (by-id cache + singleflight)
 │   │       ├── spot/market_poller.go       # поллер изменений рынков (cursor-based)
 │   │       └── producer/market_producer.go # outbox-продюсер + инвалидация кэша
 │   ├── migrations/                         # SQL-миграции + init DB scripts
@@ -563,15 +567,16 @@ spotOrder/
 │   errorMapper → validator              │
 │────────────────────────────────────────│
 │  SpotInstrumentHandler                 │
-│  MarketViewer (business)               │
-│    ├── MarketCache (Redis)             │  ← TTL-кэш, инвалидируется при изменениях
-│    │   └── singleflight                │
+│  MarketViewer (business)               │  ← при miss первой страницы может лениво прогревать head-cache из PostgreSQL
+│    ├── MarketCache (Redis)             │  ← role-based head-cache первой страницы (используется только для offset=0)
+│    ├── MarketByIDCache (Redis)         │  ← cache по market_id
+│    │   └── singleflight                │  ← только для by-id miss path
 │    └── MarketStore (PostgreSQL)        │
 │                                        │
 │  MarketPoller (cursor-based)           │
 │    └── MarketProducer                  │
 │          ├── OutboxStore (PostgreSQL)  │  ← атомарно с курсором
-│          └── MarketCache.RefreshAll    │  ← refresh role-based cache после обработки изменений
+│          └── MarketCache.RefreshAll    │  ← refresh role-based head-cache после обработки изменений
 │                                        │
 │  Outbox Worker → market.state.changed  │
 └────────────────────────────────────────┘

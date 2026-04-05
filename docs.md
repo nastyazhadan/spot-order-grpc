@@ -118,6 +118,20 @@ type MarketOrderCanceler interface {
 ### SpotService (бизнес-логика)
 
 ```go
+// MarketCacheRepository — role-based head-cache первой страницы
+type MarketCacheRepository interface {
+    GetAll(ctx context.Context, roleKey string) ([]sharedModels.Market, error)
+    SetAll(ctx context.Context, markets []sharedModels.Market, roleKey string, ttl time.Duration) error
+    DeleteAll(ctx context.Context, roleKey string) error
+}
+
+// MarketByIDCacheRepository — кэш рынка по market_id
+type MarketByIDCacheRepository interface {
+    Get(ctx context.Context, id uuid.UUID) (sharedModels.Market, error)
+    Set(ctx context.Context, market sharedModels.Market, ttl time.Duration) error
+    Delete(ctx context.Context, id uuid.UUID) error
+}
+
 // MarketReader — чтение рынков с поддержкой cursor-based пагинации
 type MarketReader interface {
     // ListUpdatedSince возвращает рынки, изменённые после since с курсором (afterID).
@@ -171,10 +185,14 @@ shared/errors/repository/
 ### Ошибки cache-слоя SpotService
 
 Во внутреннем cache/repository слое SpotService отдельно различаются:
-- `ErrMarketsNotFound` — кэш пуст или ключ отсутствует
+
+- `ErrMarketsNotFound` — role-based head-cache пуст или role-key отсутствует
+- `ErrMarketNotFound` — by-id cache пуст или ключ `market:by_id:<marketID>` отсутствует
 - `ErrMarketCacheCorrupted` — данные в Redis найдены, но не могут быть корректно десериализованы/смэпплены в доменную модель
 
-`ErrMarketCacheCorrupted` не является публичной бизнес-ошибкой API. Эта ошибка используется для выбора специального fallback-пути: чтение из PostgreSQL, попытка warmup Redis и, при необходимости, cleanup stale key.
+`ErrMarketCacheCorrupted` не является публичной бизнес-ошибкой API. Эта ошибка используется для выбора специального fallback-пути:
+- для `ViewMarkets` — чтение первой страницы из PostgreSQL и последующий warmup role-based head-cache
+- для `GetMarketByID` — повторная загрузка через `singleflight`, попытка warmup by-id cache и, при необходимости, cleanup stale key
 
 ### Маппинг ошибок → gRPC-коды
 
@@ -597,7 +615,7 @@ type PollerCursor struct {
 - далее `poll()` выбирает очередной батч изменений после этого cursor
 - для найденных изменений формируются и сохраняются outbox-события
 - после успешной обработки батча новый cursor сохраняется в хранилище
-- если изменения действительно были, сервис инициирует refresh актуального кэша рынков
+- если изменения действительно были, сервис инициирует `RefreshAll` для role-based head-cache рынков
 
 Важно:
 
@@ -612,7 +630,8 @@ type PollerCursor struct {
 
 ### Инвалидация кэша
 
-После `COMMIT` poller вызывает `MarketCache.RefreshAll`, чтобы перепрогреть role-based Redis cache актуальными данными.
+После `COMMIT` poller вызывает `MarketCache.RefreshAll`, чтобы перепрогреть role-based Redis head-cache актуальными данными.
+By-id cache (`market:by_id:<marketID>`) не перепрогревается poller-ом и обновляется лениво при `GetMarketByID` либо истекает по TTL.
 ---
 
 ## 13. Prometheus-метрики: полный реестр
@@ -643,9 +662,9 @@ type PollerCursor struct {
 | `grpc_server_cache_hits_total` | Counter | `service`, `operation` | Попадания в кэш |
 | `grpc_server_cache_misses_total` | Counter | `service`, `operation` | Промахи кэша |
 | `grpc_server_cache_operation_duration_seconds` | Histogram | `service`, `operation` | Латентность операций Redis (buckets: 0.1ms–100ms) |
-| `grpc_server_cache_invalidations_total` | Counter | `service`, `reason`, `role`, `result` | Инвалидации кэша |
 | `grpc_server_cache_fallbacks_total` | Counter | `service`, `operation`, `reason` | Fallback при ошибке Redis |
-| `grpc_server_cache_warmups_total` | Counter | `service`, `operation`, `role`, `result` | Прогревы кэша |
+| `grpc_server_cache_invalidations_total` | Counter | `service`, `reason`, `scope`, `result` | Инвалидации кэша (`role` или `market_by_id`) |
+| `grpc_server_cache_warmups_total` | Counter | `service`, `operation`, `scope`, `result` | Прогревы кэша (`role` или `market_by_id`) |
 
 ### Database (PostgreSQL)
 
@@ -705,20 +724,37 @@ type PollerCursor struct {
 
 | Назначение | Ключ | Формат значения | TTL |
 |---|---|---|---|
-| Кэш рынков (по роли) | `market:cache:<role>` | JSON ([]Market) | spot_cache_ttl (5m) |
+| Head-cache рынков (по роли) | `market:cache:<role>` | JSON ([]Market) | spot_cache_ttl (5m) |
+| Кэш рынка по ID | `market:by_id:<marketID>` | JSON (Market) | spot_cache_ttl (5m) |
 
-### Поведение role-based cache рынков
+### Поведение кэшарынков SpotService
 
-`MarketViewer` использует Redis-кэш списков рынков по role-based ключам вида `market:cache:<role>`.
+`MarketViewer` использует два независимых Redis-кэша:
+
+- role-based head-cache списков рынков по ключам `market:cache:<role>`
+- by-id cache рынков по ключам `market:by_id:<marketID>`
+
+### Role-based head-cache (`ViewMarkets`)
+
+`ViewMarkets` использует offset-based pagination. Для ускорения чтения первая страница (`offset = 0`) может обслуживаться из role-based head-cache; все остальные страницы читаются напрямую из PostgreSQL.
 
 Поведение при чтении:
-- при `cache miss` сервис загружает рынки из PostgreSQL, фильтрует их по роли и перепрогревает Redis-кэш
-- при повреждённом (`corrupted`) payload в Redis кэш считается невалидным, и сервис переходит на fallback в PostgreSQL
-- corrupted cache выделяется в отдельный сценарий через sentinel-ошибку `ErrMarketCacheCorrupted`
-- если перепрогрев кэша после обнаружения corrupted payload не удался, сервис дополнительно пытается удалить stale key, чтобы последующие запросы не зацикливались на чтении битого значения
+- head-cache используется только для `ViewMarkets`, когда `offset == 0` и `limit <= cacheLimit`
+- при `cache hit` ответ формируется из Redis
+- при `cache miss` или `corrupted` payload сервис загружает первую страницу из PostgreSQL через `ListPage`, возвращает результат клиенту и выполняет warmup role-based head-cache
+- `RefreshAll` перепрогревает role-based head-cache после обработки изменений рынков
 
-Для защиты от thundering herd загрузка и перепрогрев выполняются через `singleflight`.
+Role-based head-cache не использует `singleflight`: конкурентные запросы первой страницы могут независимо сделать fallback в PostgreSQL. Кэш затем прогревается результатом первого успешного чтения или плановым `RefreshAll`.
 
+### By-id cache (`GetMarketByID`)
+
+`GetMarketByID` использует отдельный by-id cache (`market:by_id:<marketID>`). При конкурентном `cache miss` загрузка из PostgreSQL дедуплицируется через `singleflight`, после чего результат прогревает Redis.
+
+Поведение при чтении:
+- при `cache hit` рынок возвращается из Redis
+- при `cache miss` используется `singleflight`, чтобы только один конкурентный запрос сходил в PostgreSQL и прогрел by-id cache
+- при повреждённом (`corrupted`) payload выполняется повторная попытка загрузки через `singleflight`; если прогрев не удался, сервис старается удалить stale key
+- после получения рынка из кэша или PostgreSQL ролевые ограничения (`admin/viewer/user`) применяются на уровне `MarketViewer`
 ---
 
 ## 15. Схема базы данных: детальная спецификация
@@ -747,8 +783,6 @@ CREATE TABLE orders (
 CREATE INDEX idx_orders_market_id          ON orders (market_id);
 CREATE INDEX idx_orders_user_id_created_at ON orders (user_id, created_at DESC);
 ```
-
-Индекс `idx_orders_user_id_created_at` используется в `GetOrderStatus` (поиск по `user_id + order_id`) и в `CancelActiveOrdersByMarket` (поиск по `market_id`).
 
 #### outbox (OrderService)
 
@@ -883,16 +917,17 @@ Outbox Worker
 ```
 SpotInstrumentHandler
   └── MarketViewer (service)
-        ├── MarketCache   ← redis/market_cache
-        │     └── singleflight
-        └── MarketStore   ← postgres/market_store
+        ├── MarketCache       ← redis/market_cache
+        ├── MarketByIDCache   ← redis/market_by_id_cache
+        │     └── singleflight (by-id miss path)
+        └── MarketStore       ← postgres/market_store
 
 MarketPoller
   ├── MarketReader    ← postgres/market_store
   ├── CursorStore     ← postgres/cursor_store
   └── MarketProducer
         ├── OutboxStore      ← postgres/outbox_store
-        └── CacheRefresher   ← redis/market_cache
+        └── CacheRefresher   ← redis/market_cache (role-based head-cache)
 
 Outbox Worker
   └── outbox_store + kafka/producer
@@ -903,7 +938,7 @@ Outbox Worker
 | Компонент | OrderService | SpotService |
 |---|---|---|
 | PostgreSQL | `order_db` | `spot_db` |
-| Redis | Токены, блокировки, rate limit | Кэш рынков |
+| Redis | Токены, блокировки, rate limit | Role-based head-cache рынков и by-id cache |
 | Kafka | Producer (outbox), Consumer (market.state.changed) | Producer (outbox) |
 | SpotService gRPC | ← клиент | — |
 | OTel Collector | OTLP gRPC :4317 | OTLP gRPC :4317 |

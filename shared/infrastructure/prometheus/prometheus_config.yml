@@ -29,4 +29,4 @@ scrape_configs:
       - OpenMetricsText0.0.1
       - PrometheusText0.0.4
     static_configs:
-      - targets: [ "spot-service:9092" ]
+      - targets: [ "spot-service:9093" ]
