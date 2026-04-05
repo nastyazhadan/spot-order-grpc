@@ -28,7 +28,8 @@ var (
 	ErrRevokeTokenFailed = errors.New("failed to revoke refresh token")
 	ErrSaveTokenFailed   = errors.New("failed to save refresh token")
 
-	ErrNilContext = errors.New("outbox worker: nil context")
+	ErrNilContext        = errors.New("outbox worker: nil context")
+	ErrInvalidPagination = errors.New("invalid pagination parameters")
 )
 
 type ErrLimitExceeded struct {

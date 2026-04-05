@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/spf13/viper"
@@ -99,6 +100,8 @@ func validateSpotAuth(cfg config.SpotConfig) error {
 }
 
 func validateSpotViewMarkets(cfg config.SpotConfig) error {
+	maxInt := uint64(math.MaxInt)
+
 	if cfg.ViewMarkets.DefaultLimit <= 0 {
 		return fmt.Errorf(
 			"view_markets.default_limit must be greater than 0, got %d",
@@ -109,6 +112,27 @@ func validateSpotViewMarkets(cfg config.SpotConfig) error {
 		return fmt.Errorf(
 			"view_markets.max_limit must be greater than 0, got %d",
 			cfg.ViewMarkets.MaxLimit,
+		)
+	}
+	if cfg.ViewMarkets.DefaultLimit > maxInt {
+		return fmt.Errorf(
+			"view_markets.default_limit must be less than or equal to %d, got %d",
+			maxInt,
+			cfg.ViewMarkets.DefaultLimit,
+		)
+	}
+	if cfg.ViewMarkets.MaxLimit > maxInt {
+		return fmt.Errorf(
+			"view_markets.max_limit must be less than or equal to %d, got %d",
+			maxInt,
+			cfg.ViewMarkets.MaxLimit,
+		)
+	}
+	if cfg.ViewMarkets.CacheLimit > maxInt {
+		return fmt.Errorf(
+			"view_markets.cache_limit must be less than or equal to %d, got %d",
+			maxInt,
+			cfg.ViewMarkets.CacheLimit,
 		)
 	}
 	if cfg.ViewMarkets.DefaultLimit > cfg.ViewMarkets.MaxLimit {

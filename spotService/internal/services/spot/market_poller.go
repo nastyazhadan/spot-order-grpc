@@ -155,14 +155,27 @@ func (p *MarketPoller) poll(ctx context.Context) error {
 	}()
 
 	for {
-		if pollCtx.Err() != nil {
-			return nil
+		if err := pollCtx.Err(); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				p.logger.Warn(ctx, "Market poll timed out before completion",
+					zap.Duration("processing_timeout", p.processingTimeout),
+					zap.Int("updated_ids_count", len(updatedIDs)),
+					zap.Time("last_seen_at", p.lastSeenAt),
+					zap.String("last_seen_id", p.lastSeenID.String()),
+				)
+			}
+			return err
 		}
 
 		batchUpdatedIDs, hasMore, err := p.processNextBatch(pollCtx)
 		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return nil
+			if errors.Is(err, context.DeadlineExceeded) {
+				p.logger.Warn(ctx, "Market poll batch processing timed out",
+					zap.Duration("processing_timeout", p.processingTimeout),
+					zap.Int("updated_ids_count", len(updatedIDs)),
+					zap.Time("last_seen_at", p.lastSeenAt),
+					zap.String("last_seen_id", p.lastSeenID.String()),
+				)
 			}
 			return err
 		}
@@ -204,7 +217,9 @@ func (p *MarketPoller) processNextBatch(
 ) (updatedIDs []uuid.UUID, hasMore bool, err error) {
 	markets, err := p.reader.ListUpdatedSince(ctx, p.lastSeenAt, p.lastSeenID, p.batchSize)
 	if err != nil {
-		p.logger.Error(ctx, "Failed to load updated markets", zap.Error(err))
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			p.logger.Error(ctx, "Failed to load updated markets", zap.Error(err))
+		}
 		return nil, false, err
 	}
 

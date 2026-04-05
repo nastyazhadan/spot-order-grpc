@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -107,30 +108,37 @@ func (s *MarketViewer) ViewMarkets(
 	}
 
 	limit = normalizeLimit(limit, s.defaultLimit, s.maxLimit)
+	if offset > math.MaxInt {
+		return nil, 0, false, fmt.Errorf("%s: %w", op, serviceErrors.ErrInvalidPagination)
+	}
 
 	if offset == 0 && limit <= s.cacheLimit {
-		markets, nextOffset, hasMore, headErr := s.tryLoadHeadPage(ctx, roleKey, limit)
-		if headErr == nil {
+		markets, nextOffset, hasMore, headError := s.tryLoadHeadPage(ctx, roleKey, limit)
+		if headError == nil {
 			span.SetAttributes(attributes.MarketsCountValue(len(markets)))
 			return markets, nextOffset, hasMore, nil
 		}
 
-		tracing.RecordError(span, headErr)
-		s.logger.Warn(ctx, "failed to load head page", zap.Error(headErr))
-		return nil, 0, false, fmt.Errorf("%s: %w", op, headErr)
+		tracing.RecordError(span, headError)
+		s.logger.Warn(ctx, "failed to load head page", zap.Error(headError))
+		return nil, 0, false, fmt.Errorf("%s: %w", op, headError)
 	}
 
-	markets, pageErr := s.marketRepository.GetMarketsPage(ctx, roleKey, limit, offset)
-	if pageErr != nil {
-		if errors.Is(pageErr, repositoryErrors.ErrMarketStoreIsEmpty) {
-			pageErr = serviceErrors.ErrMarketsNotFound
+	markets, pageError := s.marketRepository.GetMarketsPage(ctx, roleKey, limit, offset)
+	if pageError != nil {
+		if errors.Is(pageError, repositoryErrors.ErrMarketStoreIsEmpty) {
+			pageError = serviceErrors.ErrMarketsNotFound
 		}
 
-		tracing.RecordError(span, pageErr)
-		return nil, 0, false, fmt.Errorf("%s: %w", op, pageErr)
+		tracing.RecordError(span, pageError)
+		return nil, 0, false, fmt.Errorf("%s: %w", op, pageError)
 	}
 
-	markets, nextOffset, hasMore := buildPageResponse(markets, limit, offset)
+	markets, nextOffset, hasMore, buildError := buildPageResponse(markets, limit, offset)
+	if buildError != nil {
+		tracing.RecordError(span, buildError)
+		return nil, 0, false, fmt.Errorf("%s: %w", op, buildError)
+	}
 	span.SetAttributes(attributes.MarketsCountValue(len(markets)))
 
 	return markets, nextOffset, hasMore, nil
@@ -143,7 +151,10 @@ func (s *MarketViewer) tryLoadHeadPage(
 ) ([]models.Market, uint64, bool, error) {
 	allMarkets, err := s.marketCacheRepository.GetAll(ctx, roleKey)
 	if err == nil {
-		markets, nextOffset, hasMore := buildPageResponse(allMarkets, limit, 0)
+		markets, nextOffset, hasMore, buildError := buildPageResponse(allMarkets, limit, 0)
+		if buildError != nil {
+			return markets, nextOffset, hasMore, buildError
+		}
 		return markets, nextOffset, hasMore, nil
 	}
 	cacheError := err
@@ -162,9 +173,12 @@ func (s *MarketViewer) tryLoadHeadPage(
 		return nil, 0, false, err
 	}
 
-	markets, nextOffset, hasMore := buildPageResponse(headMarkets, limit, 0)
+	markets, nextOffset, hasMore, buildError := buildPageResponse(headMarkets, limit, 0)
+	if buildError != nil {
+		return markets, nextOffset, hasMore, buildError
+	}
 
-	if warmErr := s.warmHeadCache(ctx, roleKey, headMarkets); warmErr != nil {
+	if warmError := s.warmHeadCache(ctx, roleKey, headMarkets); warmError != nil {
 		return markets, nextOffset, hasMore, nil
 	}
 
@@ -372,8 +386,8 @@ func (s *MarketViewer) handleWarmupSetError(
 		return market
 	}
 
-	deleteErr := s.marketByIDCacheRepository.DeleteByID(ctx, id)
-	if deleteErr != nil {
+	deleteError := s.marketByIDCacheRepository.DeleteByID(ctx, id)
+	if deleteError != nil {
 		metrics.CacheInvalidationsTotal.
 			WithLabelValues(s.serviceName, "corrupted_cache_cleanup", "market_by_id", "error").Inc()
 
@@ -381,7 +395,7 @@ func (s *MarketViewer) handleWarmupSetError(
 			"failed to update cache and failed to remove stale corrupted cache",
 			zap.String("market_id", id.String()),
 			zap.Error(cacheSetError),
-			zap.NamedError("cleanup_error", deleteErr),
+			zap.NamedError("cleanup_error", deleteError),
 		)
 
 		return market
@@ -490,8 +504,11 @@ func (s *MarketViewer) InvalidateByIDs(ctx context.Context, ids []uuid.UUID) err
 	return nil
 }
 
-func buildPageResponse(markets []models.Market, limit, offset uint64) ([]models.Market, uint64, bool) {
+func buildPageResponse(markets []models.Market, limit, offset uint64) ([]models.Market, uint64, bool, error) {
 	hasMore := len(markets) > int(limit)
+	if hasMore && offset > math.MaxUint64-limit {
+		return nil, 0, false, fmt.Errorf("%w: next offset overflow", serviceErrors.ErrInvalidPagination)
+	}
 	if hasMore {
 		markets = markets[:limit]
 	}
@@ -501,7 +518,7 @@ func buildPageResponse(markets []models.Market, limit, offset uint64) ([]models.
 		nextOffset = offset + limit
 	}
 
-	return markets, nextOffset, hasMore
+	return markets, nextOffset, hasMore, nil
 }
 
 func getRoleKeyFromContext(ctx context.Context) (string, error) {
