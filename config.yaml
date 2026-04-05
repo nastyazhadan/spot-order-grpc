@@ -11,11 +11,12 @@ order:
     level: "info"
     format: "console"
     context_fields_max: 10
-  auth:
+  auth_verifier:
     skip_methods:
       - "/grpc.health.v1.Health/Check"
       - "/grpc.health.v1.Health/Watch"
       - "/auth.v1.AuthService/RefreshToken"
+  auth_issuer:
     access_token_ttl: 15m
     refresh_token_ttl: 24h
   circuit_breaker:
@@ -53,11 +54,9 @@ order:
     service_version: "1.0.0"
   metrics:
     http_address: ":9091"
-    collector_endpoint: "otel-collector:4317"
     read_timeout: 5s
     write_timeout: 10s
     idle_timeout: 60s
-    export_interval: 10s
     shutdown_timeout: 10s
   keep_alive:
     ping_time: 20s
@@ -115,12 +114,10 @@ spot:
     level: "info"
     format: "console"
     context_fields_max: 10
-  auth:
+  auth_verifier:
     skip_methods:
       - "/grpc.health.v1.Health/Check"
       - "/grpc.health.v1.Health/Watch"
-    access_token_ttl: 15m
-    refresh_token_ttl: 24h
   grpc_rate_limit:
     view_markets: 1000
     get_market_by_id: 2000
@@ -146,11 +143,9 @@ spot:
     service_version: "1.0.0"
   metrics:
     http_address: ":9093"
-    collector_endpoint: "otel-collector:4317"
     read_timeout: 5s
     write_timeout: 10s
     idle_timeout: 60s
-    export_interval: 10s
     shutdown_timeout: 10s
   keep_alive:
     ping_time: 20s

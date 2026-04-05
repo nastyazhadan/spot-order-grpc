@@ -90,6 +90,10 @@ func mapError(ctx context.Context, err error, logger *zapLogger.Logger) error {
 		logger.Error(ctx, "token store failure", zap.Error(err))
 		return status.Error(codes.Internal, "internal error")
 
+	case errors.Is(err, serviceErrors.ErrSessionValidationFailed):
+		logger.Error(ctx, "session validation failure", zap.Error(err))
+		return status.Error(codes.Internal, "internal error")
+
 	default:
 		logger.Error(ctx, "unhandled error", zap.Error(err))
 		return status.Error(codes.Internal, "internal error")

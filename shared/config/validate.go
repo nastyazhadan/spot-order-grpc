@@ -99,10 +99,6 @@ func ValidateMetricsConfig(fieldPrefix string, cfg MetricsConfig) error {
 		return err
 	}
 
-	if err := ValidateTCPAddress(fieldPrefix+".collector_endpoint", cfg.CollectorEndpoint, false); err != nil {
-		return err
-	}
-
 	if cfg.ReadTimeout <= 0 {
 		return fmt.Errorf(
 			"%s.read_timeout must be greater than 0, got %s",
@@ -124,14 +120,6 @@ func ValidateMetricsConfig(fieldPrefix string, cfg MetricsConfig) error {
 			"%s.idle_timeout must be greater than 0, got %s",
 			fieldPrefix,
 			cfg.IdleTimeout,
-		)
-	}
-
-	if cfg.ExportInterval <= 0 {
-		return fmt.Errorf(
-			"%s.export_interval must be greater than 0, got %s",
-			fieldPrefix,
-			cfg.ExportInterval,
 		)
 	}
 
@@ -202,30 +190,6 @@ func ValidateKeepAliveConfig(fieldPrefix string, cfg KeepAliveConfig) error {
 			fieldPrefix,
 			cfg.MinPingInterval,
 			cfg.PingTime,
-		)
-	}
-
-	return nil
-}
-
-func ValidateAuthConfig(fieldPrefix string, cfg AuthConfig) error {
-	if strings.TrimSpace(cfg.JWTSecret) == "" {
-		return fmt.Errorf("%s.jwt_secret is required", fieldPrefix)
-	}
-
-	if cfg.AccessTokenTTL <= 0 {
-		return fmt.Errorf(
-			"%s.access_token_ttl must be greater than 0, got %s",
-			fieldPrefix,
-			cfg.AccessTokenTTL,
-		)
-	}
-
-	if cfg.RefreshTokenTTL <= 0 {
-		return fmt.Errorf(
-			"%s.refresh_token_ttl must be greater than 0, got %s",
-			fieldPrefix,
-			cfg.RefreshTokenTTL,
 		)
 	}
 

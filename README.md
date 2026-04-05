@@ -191,18 +191,18 @@ PostgreSQL при старте создаёт базы `order_db` и `spot_db`, 
 
 Что происходит сейчас:
 
-- трейсы экспортируются в `otel-collector`, а дальше уходят в `Tempo`
-- метрики сервисов доступны по HTTP на `:9091/metrics` и `:9093/metrics`
-- OTel metrics также экспортируются через collector в Prometheus Remote Write
+- трейсы экспортируются по OTLP gRPC в `otel-collector`, а дальше уходят в `Tempo`
+- сервисные метрики публикуются по HTTP на `:9091/metrics` и `:9093/metrics` через Prometheus client
+- Prometheus скрейпит оба сервиса и метрики самого `otel-collector`
 - Grafana подключена к `Prometheus` и `Tempo` через provisioning
 
 **Архитектура:**
-```
+```text
 OrderService / SpotService
-        ↓ OTLP gRPC (otel-collector:4317)
+        ↓ OTLP gRPC (traces)
   otel-collector
-    ├── traces  → Tempo
-    └── metrics → Prometheus Remote Write
+        ↓
+      Tempo
 
 Prometheus ← scrape:
   - order-service:9091
@@ -243,6 +243,7 @@ Grafana → Prometheus + Tempo
 |---|---|
 | Спецификация OrderService | `protos/proto/order/v1/order.proto` |
 | Спецификация SpotService | `protos/proto/spot/v1/spot.proto` |
+| Спецификация AuthService | `protos/proto/auth/v1/auth.proto` |
 
 > Альтернатива: используйте gRPC Server Reflection — оба сервиса регистрируют reflection и gRPC Health Checking, поэтому `grpcurl`, `grpcui` и Postman могут получить схему без ручного импорта proto.
 
@@ -499,7 +500,7 @@ spotOrder/
 │   │   ├── kafka/
 │   │   │   ├── consumer/                   # Kafka consumer group + middleware
 │   │   │   └── producer/                   # Kafka sync producer
-│   │   ├── otel/otel_collector_config.yaml # конфиг OTel Collector
+│   │   ├── otel/otel_collector_config.yaml # конфиг OTel Collector для trace pipeline и его metrics
 │   │   ├── prometheus/prometheus_config.yml
 │   │   └── tempo/tempo.yaml
 │   ├── interceptors/
@@ -591,7 +592,7 @@ spotOrder/
     └── MarketBlockStore.Block/Unblock (Redis)
 
 Оба сервиса:
-  - экспортируют traces и metrics через OTel
+  - экспортируют traces через OTel, метрики через Prometheus
   - отдают Prometheus metrics по HTTP
   - регистрируют gRPC reflection и health check
   - наблюдаются через Prometheus + Grafana + Tempo

@@ -28,8 +28,8 @@ func Load() (*config.SpotConfig, error) {
 		return nil, errors.New("SPOT_DB_URI is required")
 	}
 
-	cfg.Auth.JWTSecret = os.Getenv("JWT_SECRET")
-	if cfg.Auth.JWTSecret == "" {
+	cfg.AuthVerifier.JWTSecret = os.Getenv("JWT_SECRET")
+	if cfg.AuthVerifier.JWTSecret == "" {
 		return nil, errors.New("JWT_SECRET is required")
 	}
 
@@ -50,9 +50,6 @@ func validateSpotConfig(cfg config.SpotConfig) error {
 		return err
 	}
 	if err := validateSpotViewMarkets(cfg); err != nil {
-		return err
-	}
-	if err := validateSpotAuth(cfg); err != nil {
 		return err
 	}
 	if err := validateSpotRedis(cfg); err != nil {
@@ -95,10 +92,6 @@ func validateSpotService(cfg config.SpotConfig) error {
 	return nil
 }
 
-func validateSpotAuth(cfg config.SpotConfig) error {
-	return config.ValidateAuthConfig("auth", cfg.Auth)
-}
-
 func validateSpotViewMarkets(cfg config.SpotConfig) error {
 	maxInt := uint64(math.MaxInt)
 
@@ -112,6 +105,12 @@ func validateSpotViewMarkets(cfg config.SpotConfig) error {
 		return fmt.Errorf(
 			"view_markets.max_limit must be greater than 0, got %d",
 			cfg.ViewMarkets.MaxLimit,
+		)
+	}
+	if cfg.ViewMarkets.CacheLimit <= 0 {
+		return fmt.Errorf(
+			"view_markets.cache_limit must be greater than 0, got %d",
+			cfg.ViewMarkets.CacheLimit,
 		)
 	}
 	if cfg.ViewMarkets.DefaultLimit > maxInt {
@@ -141,6 +140,14 @@ func validateSpotViewMarkets(cfg config.SpotConfig) error {
 				"got default_limit=%d max_limit=%d",
 			cfg.ViewMarkets.DefaultLimit,
 			cfg.ViewMarkets.MaxLimit,
+		)
+	}
+	if cfg.ViewMarkets.CacheLimit < cfg.ViewMarkets.DefaultLimit {
+		return fmt.Errorf(
+			"view_markets.cache_limit must be greater than or equal to view_markets.default_limit, "+
+				"got cache_limit=%d default_limit=%d",
+			cfg.ViewMarkets.CacheLimit,
+			cfg.ViewMarkets.DefaultLimit,
 		)
 	}
 

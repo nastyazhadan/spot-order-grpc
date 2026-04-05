@@ -86,7 +86,7 @@ func (s *AuthService) validateRefreshToken(
 	active, err := s.sessionStore.IsSessionActive(ctx, userID, claims.SessionID)
 	if err != nil {
 		s.logger.Error(ctx, "failed to validate refresh token session", zap.Error(err))
-		return uuid.Nil, nil, "", "", serviceErrors.ErrSaveTokenFailed
+		return uuid.Nil, nil, "", "", serviceErrors.ErrSessionValidationFailed
 	}
 	if !active {
 		return uuid.Nil, nil, "", "", serviceErrors.ErrTokenRevoked

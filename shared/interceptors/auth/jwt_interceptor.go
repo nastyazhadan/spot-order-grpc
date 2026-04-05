@@ -31,7 +31,7 @@ type SessionStore interface {
 func UnaryServerInterceptor(
 	jwtManager TokenParser,
 	sessionStore SessionStore,
-	cfg config.AuthConfig,
+	cfg config.AuthVerifierConfig,
 ) grpc.UnaryServerInterceptor {
 	skipMethods := makeSkipMethods(cfg.SkipMethods)
 

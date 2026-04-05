@@ -13,7 +13,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -23,7 +22,6 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
-	metricInterceptor "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/metrics"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
@@ -111,14 +109,10 @@ func registerMetrics(
 	in appCtxIn,
 	lifeCycle fx.Lifecycle,
 	cfg config.SpotConfig,
-	resource *resource.Resource,
 	logger *zapLogger.Logger,
 ) {
 	appCtx := in.AppCtx
-	var (
-		meterProvider *sdkmetric.MeterProvider
-		listener      net.Listener
-	)
+	var listener net.Listener
 
 	httpServer := &http.Server{
 		Addr: cfg.Metrics.HTTPAddress,
@@ -134,10 +128,6 @@ func registerMetrics(
 	lifeCycle.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
 			var err error
-			meterProvider, err = metricInterceptor.InitOpenTelemetry(startCtx, cfg.Metrics, resource, logger)
-			if err != nil {
-				return err
-			}
 
 			listener, err = net.Listen("tcp", cfg.Metrics.HTTPAddress)
 			if err != nil {
@@ -145,33 +135,28 @@ func registerMetrics(
 			}
 
 			go func() {
-				if serveErr := httpServer.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-					logger.Error(appCtx, "Failed to serve metrics server", zap.Error(serveErr))
+				if serveError := httpServer.Serve(listener); serveError != nil && !errors.Is(serveError, http.ErrServerClosed) {
+					logger.Error(appCtx, "Failed to serve metrics server", zap.Error(serveError))
 				}
 			}()
 			return nil
 		},
 		OnStop: func(stopCtx context.Context) error {
-			var shutdownErr error
-
-			metrics.RecordShutdown(cfg.Service.Name, metrics.ShutdownReasonFromContext(stopCtx))
-
-			shutdownCtx, cancel := context.WithTimeout(stopCtx, cfg.Metrics.ShutdownTimeout)
+			shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(stopCtx), cfg.Metrics.ShutdownTimeout)
 			defer cancel()
 
-			if err := httpServer.Shutdown(shutdownCtx); err != nil {
-				logger.Error(shutdownCtx, "Failed to shutdown metrics server", zap.Error(err))
-				shutdownErr = errors.Join(shutdownErr, err)
-			}
+			metrics.ShutdownsTotal.WithLabelValues(cfg.Service.Name, "graceful").Inc()
 
-			if meterProvider != nil {
-				if err := meterProvider.Shutdown(shutdownCtx); err != nil {
-					logger.Error(shutdownCtx, "Failed to shutdown metrics provider", zap.Error(err))
-					shutdownErr = errors.Join(shutdownErr, err)
+			var shutdownError error
+
+			if httpServer != nil {
+				if err := httpServer.Shutdown(shutdownCtx); err != nil {
+					logger.Error(shutdownCtx, "Failed to shutdown metrics server", zap.Error(err))
+					shutdownError = errors.Join(shutdownError, err)
 				}
 			}
 
-			return shutdownErr
+			return shutdownError
 		},
 	})
 }

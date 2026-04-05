@@ -20,7 +20,6 @@ import (
 
 var ServiceProviders = fx.Options(
 	fx.Provide(
-		provideJWTManager,
 		provideMarketStateChangedProducer,
 		provideSpotOutboxWorker,
 		provideMarketEventProducer,
@@ -35,14 +34,6 @@ type container struct {
 	JWTManager   *authjwt.Manager
 	SessionStore *authsession.Store
 	SpotService  *spotService.MarketViewer
-}
-
-func provideJWTManager(cfg config.SpotConfig) *authjwt.Manager {
-	return authjwt.NewManager(
-		cfg.Auth.JWTSecret,
-		cfg.Auth.AccessTokenTTL,
-		cfg.Auth.RefreshTokenTTL,
-	)
 }
 
 func provideMarketStateChangedProducer(

@@ -176,7 +176,8 @@ shared/errors/service/
 ├── ErrInvalidJTI                    — невалидный jti refresh token
 ├── ErrTokenRevoked                  — refresh token отозван или не найден
 ├── ErrRevokeTokenFailed             — ошибка отзыва токена в Redis
-└── ErrSaveTokenFailed               — ошибка сохранения токена в Redis
+├── ErrSaveTokenFailed               — ошибка сохранения токена в Redis
+└── ErrSessionValidationFailed       — ошибка проверки активной сессии в Redis ErrSessionValidationFailed       — ошибка проверки активной сессии в Redis
 
 shared/errors/repository/
 └── ErrOrderNotFound, ErrOrderAlreadyExists, ErrMarketsNotFound, ErrMarketCacheCorrupted
@@ -213,7 +214,7 @@ shared/errors/repository/
 | `ErrInvalidSubject`, `ErrInvalidJTI`, `ErrTokenRevoked` | `UNAUTHENTICATED` | `"refresh token error"` | WARN |
 | `gobreaker.ErrOpenState`, `ErrTooManyRequests` | `UNAVAILABLE` | `"service temporarily unavailable"` | — |
 | `ErrDisabled` | `FAILED_PRECONDITION` | `"market is disabled"` | WARN |
-| `ErrRevokeTokenFailed`, `ErrSaveTokenFailed` | `INTERNAL` | `"internal error"` | ERROR |
+| `ErrSessionValidationFailed`, `ErrRevokeTokenFailed`, `ErrSaveTokenFailed` | `INTERNAL` | `"internal error"` | ERROR |
 | Прочие | `INTERNAL` | `"internal error"` | ERROR |
 
 > **Важно:** Сообщения `NOT_FOUND` и `ALREADY_EXISTS` намеренно не раскрывают внутренние детали. Только `ErrLimitExceeded` возвращает клиенту конкретные значения лимита и окна.
@@ -639,7 +640,7 @@ By-id cache (`market:by_id:<marketID>`) не перепрогревается po
 
 ## 13. Prometheus-метрики: полный реестр
 
-Все метрики объявлены в пакете `shared/metrics`. Экспортируются по HTTP на `:9091` (OrderService) и `:9093` (SpotService).
+Все прикладные метрики объявлены в пакете `shared/metrics` через Prometheus client и экспортируются по HTTP на `:9091` (OrderService) и `:9093` (SpotService). OpenTelemetry в проекте используется для трейсинга и передачи trace context, а не как основной API для объявления сервисных метрик.
 
 ### gRPC
 
@@ -945,4 +946,4 @@ Outbox Worker
 | Redis | Токены, блокировки, rate limit | Role-based head-cache рынков и by-id cache |
 | Kafka | Producer (outbox), Consumer (market.state.changed) | Producer (outbox) |
 | SpotService gRPC | ← клиент | — |
-| OTel Collector | OTLP gRPC :4317 | OTLP gRPC :4317 |
+| OTel Collector | OTLP gRPC :4317 (traces) | OTLP gRPC :4317 (traces) |

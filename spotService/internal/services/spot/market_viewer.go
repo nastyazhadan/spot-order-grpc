@@ -416,33 +416,40 @@ func (s *MarketViewer) handleWarmupSetError(
 func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 	const op = "MarketViewer.RefreshAll"
 
-	refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.serviceTimeout)
-	defer cancel()
+	refreshCtx := context.WithoutCancel(ctx)
 
 	for _, roleKey := range cacheRoleKeys {
-		markets, err := s.marketRepository.GetMarketsPage(refreshCtx, roleKey, s.cacheLimit+1, 0)
-		if err != nil {
-			if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
-				return s.invalidateMarketsCache(refreshCtx)
+		if err := func() error {
+			roleCtx, cancel := context.WithTimeout(refreshCtx, s.serviceTimeout)
+			defer cancel()
+
+			markets, err := s.marketRepository.GetMarketsPage(roleCtx, roleKey, s.cacheLimit+1, 0)
+			if err != nil {
+				if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
+					return s.invalidateMarketsCache(refreshCtx)
+				}
+
+				metrics.CacheWarmupsTotal.
+					WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
+
+				return fmt.Errorf("%s: load head cache for role %s: %w", op, roleKey, err)
+			}
+
+			if err = s.marketCacheRepository.SetMarkets(refreshCtx, markets, roleKey, s.cacheTTL); err != nil {
+				metrics.CacheWarmupsTotal.
+					WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
+
+				return fmt.Errorf("%s: set cache for role %s: %w", op, roleKey, err)
 			}
 
 			metrics.CacheWarmupsTotal.
-				WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
+				WithLabelValues(s.serviceName, "refresh_all", roleKey, "success").Inc()
 
-			return fmt.Errorf("%s: load head cache for role %s: %w", op, roleKey, err)
+			return nil
+		}(); err != nil {
+			return err
 		}
-
-		if err = s.marketCacheRepository.SetMarkets(refreshCtx, markets, roleKey, s.cacheTTL); err != nil {
-			metrics.CacheWarmupsTotal.
-				WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
-
-			return fmt.Errorf("%s: set cache for role %s: %w", op, roleKey, err)
-		}
-
-		metrics.CacheWarmupsTotal.
-			WithLabelValues(s.serviceName, "refresh_all", roleKey, "success").Inc()
 	}
-
 	return nil
 }
 

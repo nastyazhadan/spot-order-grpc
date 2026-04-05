@@ -28,7 +28,7 @@ import (
 const (
 	prefixCreateLimiter = "rate:order:create:"
 	prefixGetLimiter    = "rate:order:get:"
-	middlewaresCount    = 3
+	middlewaresCount    = 2
 )
 
 var ServiceProviders = fx.Options(
@@ -80,14 +80,14 @@ func provideRateLimiters(store *cache.Store, cfg config.OrderConfig) orderServic
 
 func provideJWTManager(cfg config.OrderConfig) *authjwt.Manager {
 	return authjwt.NewManager(
-		cfg.Auth.JWTSecret,
-		cfg.Auth.AccessTokenTTL,
-		cfg.Auth.RefreshTokenTTL,
+		cfg.AuthVerifier.JWTSecret,
+		cfg.AuthIssuer.AccessTokenTTL,
+		cfg.AuthIssuer.RefreshTokenTTL,
 	)
 }
 
 func provideRefreshTokenStore(store *cache.Store, cfg config.OrderConfig) *authStore.RefreshTokenStore {
-	return authStore.New(store, cfg.Auth.RefreshTokenTTL)
+	return authStore.New(store, cfg.AuthIssuer.RefreshTokenTTL)
 }
 
 func provideSessionStore(store *cache.Store) *authsession.Store {

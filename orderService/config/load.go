@@ -26,8 +26,8 @@ func Load() (*config.OrderConfig, error) {
 		return nil, errors.New("ORDER_DB_URI is required")
 	}
 
-	cfg.Auth.JWTSecret = os.Getenv("JWT_SECRET")
-	if cfg.Auth.JWTSecret == "" {
+	cfg.AuthVerifier.JWTSecret = os.Getenv("JWT_SECRET")
+	if cfg.AuthVerifier.JWTSecret == "" {
 		return nil, errors.New("JWT_SECRET is required")
 	}
 
@@ -154,15 +154,25 @@ func validateOrderKeepAlive(cfg config.OrderConfig) error {
 }
 
 func validateOrderAuth(cfg config.OrderConfig) error {
-	if err := config.ValidateAuthConfig("auth", cfg.Auth); err != nil {
-		return err
-	}
-
-	if cfg.Auth.RefreshTokenTTL <= cfg.Auth.AccessTokenTTL {
+	if cfg.AuthIssuer.RefreshTokenTTL <= cfg.AuthIssuer.AccessTokenTTL {
 		return fmt.Errorf(
 			"auth.refresh_token_ttl (%s) must be greater than access_token_ttl (%s)",
-			cfg.Auth.RefreshTokenTTL,
-			cfg.Auth.AccessTokenTTL,
+			cfg.AuthIssuer.RefreshTokenTTL,
+			cfg.AuthIssuer.AccessTokenTTL,
+		)
+	}
+
+	if cfg.AuthIssuer.AccessTokenTTL <= 0 {
+		return fmt.Errorf(
+			"auth.access_token_ttl must be greater than 0, got %s",
+			cfg.AuthIssuer.AccessTokenTTL,
+		)
+	}
+
+	if cfg.AuthIssuer.RefreshTokenTTL <= 0 {
+		return fmt.Errorf(
+			"auth.refresh_token_ttl must be greater than 0, got %s",
+			cfg.AuthIssuer.RefreshTokenTTL,
 		)
 	}
 

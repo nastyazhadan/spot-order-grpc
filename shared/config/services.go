@@ -10,7 +10,8 @@ type OrderConfig struct {
 	SpotAddress     string                   `mapstructure:"spot_address"`
 	Timeouts        TimeoutsConfig           `mapstructure:"timeouts"`
 	Log             LoggingConfig            `mapstructure:"log"`
-	Auth            AuthConfig               `mapstructure:"auth"`
+	AuthVerifier    AuthVerifierConfig       `mapstructure:"auth_verifier"`
+	AuthIssuer      AuthIssuerConfig         `mapstructure:"auth_issuer"`
 	CircuitBreaker  CircuitBreakerConfig     `mapstructure:"circuit_breaker"`
 	PostgresPool    PostgresPoolConfig       `mapstructure:"postgres_pool"`
 	GRPCRateLimit   OrderGRPCRateLimitConfig `mapstructure:"grpc_rate_limit"`
@@ -27,7 +28,7 @@ type SpotConfig struct {
 	Service       ServiceConfig           `mapstructure:"service"`
 	ViewMarkets   ViewMarketsConfig       `mapstructure:"view_markets"`
 	Log           LoggingConfig           `mapstructure:"log"`
-	Auth          AuthConfig              `mapstructure:"auth"`
+	AuthVerifier  AuthVerifierConfig      `mapstructure:"auth_verifier"`
 	Timeouts      TimeoutsConfig          `mapstructure:"timeouts"`
 	PostgresPool  PostgresPoolConfig      `mapstructure:"postgres_pool"`
 	GRPCRateLimit SpotGRPCRateLimitConfig `mapstructure:"grpc_rate_limit"`
@@ -164,13 +165,11 @@ type TracingConfig struct {
 }
 
 type MetricsConfig struct {
-	HTTPAddress       string        `mapstructure:"http_address"`
-	CollectorEndpoint string        `mapstructure:"collector_endpoint"`
-	ReadTimeout       time.Duration `mapstructure:"read_timeout"`
-	WriteTimeout      time.Duration `mapstructure:"write_timeout"`
-	IdleTimeout       time.Duration `mapstructure:"idle_timeout"`
-	ExportInterval    time.Duration `mapstructure:"export_interval"`
-	ShutdownTimeout   time.Duration `mapstructure:"shutdown_timeout"`
+	HTTPAddress     string        `mapstructure:"http_address"`
+	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
+	IdleTimeout     time.Duration `mapstructure:"idle_timeout"`
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
 }
 
 type KeepAliveConfig struct {
@@ -180,9 +179,12 @@ type KeepAliveConfig struct {
 	PermitWithoutStream bool          `mapstructure:"permit_without_stream"`
 }
 
-type AuthConfig struct {
-	JWTSecret       string        `mapstructure:"jwt_secret"`
-	SkipMethods     []string      `mapstructure:"skip_methods"`
+type AuthVerifierConfig struct {
+	JWTSecret   string   `mapstructure:"jwt_secret"`
+	SkipMethods []string `mapstructure:"skip_methods"`
+}
+
+type AuthIssuerConfig struct {
 	AccessTokenTTL  time.Duration `mapstructure:"access_token_ttl"`
 	RefreshTokenTTL time.Duration `mapstructure:"refresh_token_ttl"`
 }
