@@ -118,7 +118,7 @@ func (w *Worker) processBatch(ctx context.Context) {
 
 	start := time.Now()
 	defer func() {
-		metrics.ObserveWithTrace(ctx,
+		metrics.ObserveWithTrace(claimCtx,
 			metrics.OutboxWorkerDuration.WithLabelValues(w.cfg.Service.Name),
 			time.Since(start).Seconds(),
 		)
