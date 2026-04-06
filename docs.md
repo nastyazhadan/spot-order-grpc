@@ -266,8 +266,9 @@ SpotService тоже использует JWT auth interceptor.
 - `spot.v1.SpotInstrumentService`
 
 Текущее ограничение:
-- на текущем этапе health отражает состояние запущенного процесса и регистрации сервисов
-- dependency-aware readiness (с учётом Postgres / Redis / Kafka / downstream) не реализован
+- `order-service` больше не выполняет обязательный startup health-check `spot-service`
+- сервис стартует независимо от доступности downstream-зависимостей
+- текущий health по-прежнему не является dependency-aware readiness: статус `SERVING` отражает факт запуска процесса и регистрации gRPC-сервисов, а не доступность Redis / Postgres / Kafka / `spot-service`
 
 ---
 
@@ -288,18 +289,21 @@ SpotService тоже использует JWT auth interceptor.
 7. Передать управление следующему обработчику
 ```
 
-> **Важно:** JWT-перехватчик **не** проверяет активность сессии в Redis. Это намеренно: проверка сессии (`IsSessionActive`) выполняется только в `AuthService.Refresh` при ротации токенов. Access-токен считается валидным до истечения `exp` — это стандартная stateless-семантика JWT.
+> **Важно:** JWT-перехватчик не проверяет активность сессии в Redis.
+> Для access token используется stateless-проверка: подпись, срок жизни, token_type и claims.
+> Проверка активной сессии (`IsSessionActive`) выполняется только в `AuthService.Refresh` для refresh token.
+> Поэтому access token остаётся валидным до истечения `exp`, даже если после него уже был выполнен refresh.
 
 ### Skip-методы по умолчанию
 
 Методы, не требующие JWT, различаются по сервисам.
 
-Для `order.auth.skip_methods`:
+Для `order.auth_verifier.skip_methods`:
 - `/grpc.health.v1.Health/Check`
 - `/grpc.health.v1.Health/Watch`
 - `/auth.v1.AuthService/RefreshToken`
 
-Для `spot.auth.skip_methods`:
+Для `spot.auth_verifier.skip_methods`:
 - `/grpc.health.v1.Health/Check`
 - `/grpc.health.v1.Health/Watch`
 
@@ -323,7 +327,7 @@ type Claims struct {
 | `refresh:<userID>:<jti>` | `"1"` (маркер существования токена) | `refresh_token_ttl` |
 | `auth_session:<userID>` | sessionID (string, UUID) | `refresh_token_ttl` |
 
-- **Ротация** (при `RefreshToken`): атомарным Lua-скриптом проверяется `auth_session:<userID>` == oldSessionID, удаляется старый `refresh:<userID>:<oldJTI>`, создаётся `refresh:<userID>:<newJTI>` и обновляется `auth_session:<userID>` = newSessionID.
+- **Ротация** (при `RefreshToken`): атомарным Lua-скриптом проверяется `auth_session:<userID>` == oldSessionID, удаляется старый `refresh:<userID>:<oldJTI>`, создаётся `refresh:<userID>:<newJTI>` и сохраняется тот же `auth_session:<userID>` = oldsessionID, но TTL продлевается вместе с refresh-chain.
 - **Замена** (при первой выдаче токена): создаются оба ключа атомарно.
 - **Валидация сессии** (в `AuthService.Refresh`): `IsSessionActive` сверяет `auth_session:<userID>` с `sessionID` из claims refresh-токена.
 

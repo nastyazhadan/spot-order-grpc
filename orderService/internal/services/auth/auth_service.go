@@ -102,7 +102,7 @@ func (s *AuthService) rotateTokens(
 	oldJTI, oldSessionID string,
 ) (newAccessToken, newRefreshToken string, err error) {
 	newJTI := uuid.NewString()
-	newSessionID := uuid.NewString()
+	newSessionID := oldSessionID
 
 	newAccessToken, newRefreshToken, err = s.generateTokenPair(userID, roles, newJTI, newSessionID)
 	if err != nil {

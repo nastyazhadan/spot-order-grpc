@@ -23,7 +23,6 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/consumer"
 	authv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/auth/v1"
 	orderv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
-	spotv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -72,20 +71,6 @@ func registerInfrastructure(
 				return fmt.Errorf("redis.Ping: %w", err)
 			}
 
-			checkCtx, cancel := context.WithTimeout(startCtx, cfg.Timeouts.Check)
-			defer cancel()
-
-			if err := health.CheckHealth(checkCtx, connection,
-				spotv1.SpotInstrumentService_ServiceDesc.ServiceName,
-			); err != nil {
-				logger.Error(checkCtx, "Spot startup health check failed",
-					zap.String("spot_address", cfg.SpotAddress),
-					zap.Error(err),
-				)
-
-				return fmt.Errorf("spot startup health check: %w", err)
-			}
-
 			return nil
 		},
 		OnStop: func(stopCtx context.Context) error {
@@ -95,7 +80,7 @@ func registerInfrastructure(
 				logger.Error(stopCtx, "failed to close redis", zap.Error(err))
 			}
 			if err := connection.Close(); err != nil {
-				logger.Error(stopCtx, "failed to close spot grpc connection", zap.Error(err))
+				logger.Error(stopCtx, "failed to close spot gRPC connection", zap.Error(err))
 			}
 
 			return nil

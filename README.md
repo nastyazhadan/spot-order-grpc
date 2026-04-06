@@ -110,6 +110,10 @@ Docker Compose поднимает весь стек целиком:
 | `tempo` | Tempo | `3200` |
 
 PostgreSQL при старте создаёт базы `order_db` и `spot_db`, а сами сервисы затем автоматически применяют SQL-миграции через Goose. Seed-данные рынков загружаются миграцией `spotService`.
+Примечание:
+- `order-service` и `spot-service` стартуют независимо друг от друга
+- `order-service` может успешно запуститься, даже если `spot-service` ещё недоступен
+- при этом запросы, которым нужен вызов `SpotInstrumentService`, будут временно завершаться ошибкой до восстановления downstream-зависимости
 
 Полезные адреса после запуска:
 
@@ -154,7 +158,8 @@ PostgreSQL при старте создаёт базы `order_db` и `spot_db`, 
 | `service` | `address`, `name`, `max_recv_msg_size` |
 | `spot_address` | адрес SpotService |
 | `timeouts` | `service`, `check` |
-| `auth` | `skip_methods`, `access_token_ttl`, `refresh_token_ttl` |
+| `auth_verifier` | `skip_methods` |
+| `auth_issuer` | `access_token_ttl`, `refresh_token_ttl` |
 | `circuit_breaker` | `max_requests`, `interval`, `timeout`, `max_failures` |
 | `rate_limit_by_user` | `create_order`, `get_order_status`, `window` |
 | `kafka` | `brokers`, `producer`, `consumer`, `topics`, `outbox` |
@@ -277,10 +282,10 @@ Grafana → Prometheus + Tempo
 ```json
 {
   "markets": [
-    { "id": "d0cc356d-e52c-4237-9d83-53eb86d98c51", "name": "ADA-USDT", "enabled": false },
-    { "id": "89052438-c599-4953-83a0-d26af775a23f", "name": "BTC-USDT", "enabled": true },
-    { "id": "6a90185b-6c4a-4b06-b0bf-2aa079c82c6e", "name": "ETH-USDT", "enabled": false },
-    { "id": "9d8ccf49-fd84-40c2-b784-2b50553dfcc0", "name": "SOL-USDT", "enabled": true }
+    { "id": "<uuid>", "name": "ADA-USDT", "enabled": false },
+    { "id": "<uuid>", "name": "BTC-USDT", "enabled": true },
+    { "id": "<uuid>", "name": "ETH-USDT", "enabled": false },
+    { "id": "<uuid>", "name": "SOL-USDT", "enabled": true }
   ]
 }
 ```
