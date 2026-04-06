@@ -2,6 +2,7 @@ package producer
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -18,45 +19,79 @@ import (
 
 const instrumentationName = "spot-order-grpc/kafka/producer"
 
-type producer struct {
-	syncProducer sarama.SyncProducer
-	topic        string
-	serviceName  string
-	logger       *zapLogger.Logger
+type Client struct {
+	asyncProducer sarama.AsyncProducer
+	serviceName   string
+	logger        *zapLogger.Logger
+
+	wg        sync.WaitGroup
+	closeOnce sync.Once
 }
 
-func New(
-	syncProducer sarama.SyncProducer,
-	topic, serviceName string,
+type producer struct {
+	client *Client
+	topic  string
+}
+
+type publishResult struct {
+	partition int32
+	offset    int64
+	err       error
+}
+
+type publishRequest struct {
+	ctx           context.Context
+	span          trace.Span
+	topic         string
+	started       time.Time
+	hasKey        bool
+	keyLength     int
+	resultChannel chan publishResult
+}
+
+func NewClient(
+	asyncProducer sarama.AsyncProducer,
+	serviceName string,
 	logger *zapLogger.Logger,
-) *producer {
+) *Client {
+	client := &Client{
+		asyncProducer: asyncProducer,
+		serviceName:   serviceName,
+		logger:        logger,
+	}
+
+	client.wg.Add(1)
+	go client.runAckLoop()
+
+	return client
+}
+
+func New(client *Client, topic string) *producer {
 	return &producer{
-		syncProducer: syncProducer,
-		topic:        topic,
-		serviceName:  serviceName,
-		logger:       logger,
+		client: client,
+		topic:  topic,
 	}
 }
 
 func (p *producer) Send(ctx context.Context, key, value []byte) error {
-	return p.sendMessage(ctx, kafka.Message{
+	return p.SendMessage(ctx, kafka.Message{
 		Key:   key,
 		Value: value,
 	})
 }
 
-func (p *producer) SendMessage(ctx context.Context, msg kafka.Message) error {
-	return p.sendMessage(ctx, msg)
+func (p *producer) SendMessage(ctx context.Context, message kafka.Message) error {
+	return p.client.publish(ctx, p.topic, message)
 }
 
-func (p *producer) sendMessage(ctx context.Context, msg kafka.Message) error {
+func (c *Client) publish(ctx context.Context, defaultTopic string, message kafka.Message) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	topic := p.topic
-	if msg.Topic != "" {
-		topic = msg.Topic
+	topic := defaultTopic
+	if message.Topic != "" {
+		topic = message.Topic
 	}
 
 	ctx, span := otel.Tracer(instrumentationName).Start(
@@ -69,11 +104,9 @@ func (p *producer) sendMessage(ctx context.Context, msg kafka.Message) error {
 			attributes.MessagingDestinationKindValue(kafka.DestinationKind),
 		),
 	)
-	defer span.End()
 
 	carrier := kafka.HeadersCarrier{}
-
-	for key, value := range msg.Headers {
+	for key, value := range message.Headers {
 		copied := make([]byte, len(value))
 		copy(copied, value)
 		carrier[key] = copied
@@ -89,39 +122,135 @@ func (p *producer) sendMessage(ctx context.Context, msg kafka.Message) error {
 		})
 	}
 
-	start := time.Now()
-	partition, offset, err := p.syncProducer.SendMessage(&sarama.ProducerMessage{
-		Topic:   topic,
-		Key:     sarama.ByteEncoder(msg.Key),
-		Value:   sarama.ByteEncoder(msg.Value),
-		Headers: headers,
-	})
-	elapsed := time.Since(start).Seconds()
-
-	metrics.ObserveWithTrace(ctx,
-		metrics.KafkaPublishDuration.WithLabelValues(p.serviceName, topic),
-		elapsed,
-	)
-
-	if err != nil {
-		tracing.RecordError(span, err)
-		metrics.KafkaPublishErrorsTotal.WithLabelValues(p.serviceName, topic).Inc()
-		p.logger.Error(ctx, "Failed to publish Kafka message",
-			zap.String("topic", topic),
-			zap.Error(err))
-
-		return err
+	request := &publishRequest{
+		ctx:           ctx,
+		span:          span,
+		topic:         topic,
+		started:       time.Now(),
+		hasKey:        len(message.Key) > 0,
+		keyLength:     len(message.Key),
+		resultChannel: make(chan publishResult, 1),
 	}
 
-	metrics.KafkaMessagesPublishedTotal.WithLabelValues(p.serviceName, topic).Inc()
+	producerMessage := &sarama.ProducerMessage{
+		Topic:    topic,
+		Key:      sarama.ByteEncoder(message.Key),
+		Value:    sarama.ByteEncoder(message.Value),
+		Headers:  headers,
+		Metadata: request,
+	}
 
-	p.logger.Info(ctx, "Kafka message published",
-		zap.String("topic", topic),
-		zap.Int32("partition", partition),
-		zap.Int64("offset", offset),
-		zap.Bool("has_key", len(msg.Key) > 0),
-		zap.Int("key_len", len(msg.Key)),
+	select {
+	case <-ctx.Done():
+		span.End()
+		return ctx.Err()
+	case c.asyncProducer.Input() <- producerMessage:
+	}
+
+	result := <-request.resultChannel
+
+	if result.err != nil {
+		return result.err
+	}
+
+	return nil
+}
+
+func (c *Client) runAckLoop() {
+	defer c.wg.Done()
+
+	successes := c.asyncProducer.Successes()
+	errorsChannel := c.asyncProducer.Errors()
+
+	for successes != nil || errorsChannel != nil {
+		select {
+		case message, ok := <-successes:
+			if !ok {
+				successes = nil
+				continue
+			}
+			c.handleSuccess(message)
+
+		case producerErr, ok := <-errorsChannel:
+			if !ok {
+				errorsChannel = nil
+				continue
+			}
+			c.handleError(producerErr)
+		}
+	}
+}
+
+func (c *Client) handleSuccess(message *sarama.ProducerMessage) {
+	request, ok := message.Metadata.(*publishRequest)
+	if !ok || request == nil {
+		return
+	}
+
+	elapsed := time.Since(request.started).Seconds()
+
+	metrics.ObserveWithTrace(
+		request.ctx,
+		metrics.KafkaPublishDuration.WithLabelValues(c.serviceName, request.topic),
+		elapsed,
 	)
+	metrics.KafkaMessagesPublishedTotal.WithLabelValues(c.serviceName, request.topic).Inc()
+
+	c.logger.Info(request.ctx, "Kafka message published",
+		zap.String("topic", request.topic),
+		zap.Int32("partition", message.Partition),
+		zap.Int64("offset", message.Offset),
+		zap.Bool("has_key", request.hasKey),
+		zap.Int("key_len", request.keyLength),
+	)
+
+	request.span.End()
+
+	request.resultChannel <- publishResult{
+		partition: message.Partition,
+		offset:    message.Offset,
+		err:       nil,
+	}
+}
+
+func (c *Client) handleError(producerError *sarama.ProducerError) {
+	if producerError == nil || producerError.Msg == nil {
+		return
+	}
+
+	request, ok := producerError.Msg.Metadata.(*publishRequest)
+	if !ok || request == nil {
+		return
+	}
+
+	elapsed := time.Since(request.started).Seconds()
+
+	tracing.RecordError(request.span, producerError.Err)
+
+	metrics.ObserveWithTrace(
+		request.ctx,
+		metrics.KafkaPublishDuration.WithLabelValues(c.serviceName, request.topic),
+		elapsed,
+	)
+	metrics.KafkaPublishErrorsTotal.WithLabelValues(c.serviceName, request.topic).Inc()
+
+	c.logger.Error(request.ctx, "Failed to publish Kafka message",
+		zap.String("topic", request.topic),
+		zap.Error(producerError.Err),
+	)
+
+	request.span.End()
+
+	request.resultChannel <- publishResult{
+		err: producerError.Err,
+	}
+}
+
+func (c *Client) Close() error {
+	c.closeOnce.Do(func() {
+		c.asyncProducer.AsyncClose()
+		c.wg.Wait()
+	})
 
 	return nil
 }

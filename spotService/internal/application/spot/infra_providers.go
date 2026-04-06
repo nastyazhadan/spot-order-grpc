@@ -36,7 +36,7 @@ var InfraProviders = fx.Options(
 		provideMarketByIDCacheRepository,
 
 		provideOutboxStore,
-		provideSaramaSyncProducer,
+		provideSaramaAsyncProducer,
 	),
 )
 
@@ -132,7 +132,7 @@ func provideOutboxStore(
 	return outboxStore.New(pool, logger, cfg)
 }
 
-func provideSaramaSyncProducer(cfg config.SpotConfig) (sarama.SyncProducer, error) {
+func provideSaramaAsyncProducer(cfg config.SpotConfig) (sarama.AsyncProducer, error) {
 	saramaCfg := sarama.NewConfig()
 	saramaCfg.ClientID = cfg.Service.Name
 
@@ -165,10 +165,10 @@ func provideSaramaSyncProducer(cfg config.SpotConfig) (sarama.SyncProducer, erro
 		saramaCfg.Producer.Compression = sarama.CompressionNone
 	}
 
-	syncProducer, err := sarama.NewSyncProducer(cfg.Kafka.Brokers, saramaCfg)
+	asyncProducer, err := sarama.NewAsyncProducer(cfg.Kafka.Brokers, saramaCfg)
 	if err != nil {
 		return nil, fmt.Errorf("sarama.NewSyncProducer: %w", err)
 	}
 
-	return syncProducer, nil
+	return asyncProducer, nil
 }

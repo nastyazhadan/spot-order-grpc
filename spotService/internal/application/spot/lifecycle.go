@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/IBM/sarama"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -21,6 +20,7 @@ import (
 	spotv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
+	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka/producer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
@@ -285,15 +285,15 @@ func registerMarketPoller(
 
 func registerKafkaProducer(
 	lifecycle fx.Lifecycle,
-	syncProducer sarama.SyncProducer,
+	client *producer.Client,
 	logger *zapLogger.Logger,
 ) {
 	lifecycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			logger.Info(ctx, "Kafka producer: stopping")
 
-			if err := syncProducer.Close(); err != nil {
-				logger.Error(ctx, "Failed to close sync producer", zap.Error(err))
+			if err := client.Close(); err != nil {
+				logger.Error(ctx, "Failed to close Kafka producer", zap.Error(err))
 				return err
 			}
 

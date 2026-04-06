@@ -5,6 +5,12 @@ import (
 	"fmt"
 )
 
+var (
+	ErrMessageHandledByDLQ    = errors.New("message handled by dlq")
+	ErrRestartConsumerSession = errors.New("restart consumer session")
+	ErrSkipMessage            = errors.New("skip message")
+)
+
 type RetryExhaustedError struct {
 	Err        error
 	RetryCount int

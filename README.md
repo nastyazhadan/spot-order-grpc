@@ -504,7 +504,7 @@ spotOrder/
 │   │   ├── health/health_checker.go        # gRPC Health Check
 │   │   ├── kafka/
 │   │   │   ├── consumer/                   # Kafka consumer group + middleware
-│   │   │   └── producer/                   # Kafka sync producer
+│   │   │   └── producer/                   # Kafka async producer
 │   │   ├── otel/otel_collector_config.yaml # конфиг OTel Collector для trace pipeline и его metrics
 │   │   ├── prometheus/prometheus_config.yml
 │   │   └── tempo/tempo.yaml

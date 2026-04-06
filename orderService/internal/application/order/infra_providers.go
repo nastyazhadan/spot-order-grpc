@@ -35,7 +35,7 @@ var InfraProviders = fx.Options(
 		provideInboxStore,
 		provideBlockStore,
 
-		provideSaramaSyncProducer,
+		provideSaramaAsyncProducer,
 		provideConsumerGroup,
 	),
 )
@@ -118,7 +118,7 @@ func provideInboxStore(pool *pgxpool.Pool, cfg config.OrderConfig) *inboxStore.I
 	return inboxStore.New(pool, cfg)
 }
 
-func provideSaramaSyncProducer(cfg config.OrderConfig) (sarama.SyncProducer, error) {
+func provideSaramaAsyncProducer(cfg config.OrderConfig) (sarama.AsyncProducer, error) {
 	saramaCfg := sarama.NewConfig()
 	saramaCfg.ClientID = cfg.Service.Name
 
@@ -151,12 +151,12 @@ func provideSaramaSyncProducer(cfg config.OrderConfig) (sarama.SyncProducer, err
 		saramaCfg.Producer.Compression = sarama.CompressionNone
 	}
 
-	syncProducer, err := sarama.NewSyncProducer(cfg.Kafka.Brokers, saramaCfg)
+	asyncProducer, err := sarama.NewAsyncProducer(cfg.Kafka.Brokers, saramaCfg)
 	if err != nil {
-		return nil, fmt.Errorf("sarama.NewSyncProducer: %w", err)
+		return nil, fmt.Errorf("sarama.NewAsyncProducer: %w", err)
 	}
 
-	return syncProducer, nil
+	return asyncProducer, nil
 }
 
 func provideConsumerGroup(cfg config.OrderConfig) (sarama.ConsumerGroup, error) {

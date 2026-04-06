@@ -399,6 +399,16 @@ func ValidateKafkaConsumerConfig(fieldPrefix string, cfg ConsumerConfig) error {
 		)
 	}
 
+	if cfg.DLQEnabled && cfg.DLQMaxMessageBytes < int(cfg.MaxMessageBytes) {
+		return fmt.Errorf(
+			"%s.dlq_max_message_bytes (%d) must be greater than or equal to %s.max_message_bytes (%d) when dlq_enabled=true",
+			fieldPrefix,
+			cfg.DLQMaxMessageBytes,
+			fieldPrefix,
+			cfg.MaxMessageBytes,
+		)
+	}
+
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/IBM/sarama"
 	"go.uber.org/zap"
@@ -12,13 +13,23 @@ import (
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
-const dlqExtraHeaders = 3
-
-var (
-	ErrMessageHandledByDLQ    = errors.New("message handled by dlq")
-	ErrRestartConsumerSession = errors.New("restart consumer session")
-	ErrSkipMessage            = errors.New("skip message")
+const (
+	dlqExtraHeaders  = 8
+	dlqErrorMaxBytes = 2 * 1024
 )
+
+var dlqEssentialHeaders = map[string]struct{}{
+	"traceparent":               {},
+	"dlq-original-topic":        {},
+	"dlq-original-partition":    {},
+	"dlq-original-offset":       {},
+	"dlq-retry-count":           {},
+	"dlq-error":                 {},
+	"dlq-payload-intact":        {},
+	"dlq-metadata-trimmed":      {},
+	"dlq-original-message-size": {},
+	"dlq-original-payload-size": {},
+}
 
 type DLQPublisher interface {
 	SendMessage(ctx context.Context, message kafka.Message) error
@@ -96,10 +107,10 @@ func sendToDLQ(
 	ctx context.Context,
 	message kafka.Message,
 	dlqPublisher DLQPublisher,
-	logger *zapLogger.Logger,
 	lastErr error,
 	retryCount int,
 	maxMessageBytes int,
+	logger *zapLogger.Logger,
 ) error {
 	if dlqPublisher == nil {
 		logger.Error(ctx, "Message processing failed (no DLQ configured)",
@@ -110,7 +121,7 @@ func sendToDLQ(
 		return lastErr
 	}
 
-	dlqMessage := buildDLQMessage(message, lastErr, retryCount, maxMessageBytes)
+	dlqMessage := buildDLQMessage(ctx, message, lastErr, retryCount, maxMessageBytes, logger)
 
 	if dlqError := dlqPublisher.SendMessage(ctx, dlqMessage); dlqError != nil {
 		logger.Error(ctx, "Failed to send message to DLQ",
@@ -130,49 +141,64 @@ func sendToDLQ(
 }
 
 func buildDLQMessage(
+	ctx context.Context,
 	message kafka.Message,
 	lastError error,
 	retryCount int,
-	maxBytes int,
+	maxMessageBytes int,
+	logger *zapLogger.Logger,
 ) kafka.Message {
 	headers := buildDLQHeaders(message, lastError, retryCount)
-
 	dlqMessage := newDLQMessage(message, headers)
-	if !shouldTruncate(dlqMessage, maxBytes) {
+
+	if !shouldTruncate(dlqMessage, maxMessageBytes) {
 		return dlqMessage
 	}
 
-	originalSize := messageSize(dlqMessage)
+	dlqMessage.Headers["dlq-metadata-trimmed"] = []byte("true")
+	dlqMessage.Headers["dlq-original-message-size"] = []byte(strconv.Itoa(messageSize(message)))
+	dlqMessage.Headers["dlq-original-payload-size"] = []byte(strconv.Itoa(len(message.Value)))
 
-	headers["dlq-truncated"] = []byte("true")
-	headers["dlq-original-size"] = []byte(strconv.Itoa(originalSize))
+	trimDLQHeadersToEssential(&dlqMessage)
 
-	// Пробуем уменьшить текст за счет ошибки dlq-error
-	truncateDLQError(&dlqMessage, lastError.Error(), maxBytes)
-	// Если текст все еще больше лимита, режем payload
-	truncateDLQValue(&dlqMessage, maxBytes)
+	if shouldTruncate(dlqMessage, maxMessageBytes) {
+		dlqMessage.Headers["dlq-error"] = truncateUTF8Bytes(dlqMessage.Headers["dlq-error"], 256)
+	}
 
-	currentSize := messageSize(dlqMessage)
-	headers["dlq-final-size"] = []byte(strconv.Itoa(currentSize))
+	if shouldTruncate(dlqMessage, maxMessageBytes) {
+		delete(dlqMessage.Headers, "dlq-error")
+	}
+
+	if shouldTruncate(dlqMessage, maxMessageBytes) {
+		logger.Warn(ctx, "DLQ message still exceeds max size after metadata trimming",
+			zap.String("topic", message.Topic),
+			zap.Int("message_size", messageSize(dlqMessage)),
+			zap.Int("max_message_bytes", maxMessageBytes),
+		)
+	}
 
 	return dlqMessage
 }
 
 func buildDLQHeaders(
 	message kafka.Message,
-	lastErr error,
+	lastError error,
 	retryCount int,
 ) map[string][]byte {
 	headers := make(map[string][]byte, len(message.Headers)+dlqExtraHeaders)
 
-	// Если header values неизменяемые - копировать не надо
+	// Значения headers не копируем отдельно, потому что дальше не изменяем их содержимое
 	for key, value := range message.Headers {
 		headers[key] = value
 	}
 
 	headers["dlq-original-topic"] = []byte(message.Topic)
+	headers["dlq-original-partition"] = []byte(strconv.FormatInt(int64(message.Partition), 10))
+	headers["dlq-original-offset"] = []byte(strconv.FormatInt(message.Offset, 10))
 	headers["dlq-retry-count"] = []byte(strconv.Itoa(retryCount))
-	headers["dlq-error"] = []byte(lastErr.Error())
+	headers["dlq-error"] = truncateUTF8Bytes([]byte(lastError.Error()), dlqErrorMaxBytes)
+	// Явный флаг для DLQ
+	headers["dlq-payload-intact"] = []byte("true")
 
 	return headers
 }
@@ -193,50 +219,33 @@ func shouldTruncate(message kafka.Message, maxBytes int) bool {
 	return maxBytes > 0 && messageSize(message) > maxBytes
 }
 
-func truncateDLQError(message *kafka.Message, errorText string, maxBytes int) {
-	sizeWithoutError := messageSize(kafka.Message{
-		Topic:          message.Topic,
-		Headers:        buildHeadersWithout(message.Headers, "dlq-error"),
-		Timestamp:      message.Timestamp,
-		BlockTimestamp: message.BlockTimestamp,
-		Key:            message.Key,
-		Value:          message.Value,
-		Partition:      message.Partition,
-		Offset:         message.Offset,
-	})
+func trimDLQHeadersToEssential(message *kafka.Message) {
+	result := make(map[string][]byte, len(dlqEssentialHeaders))
 
-	availableForError := maxBytes - sizeWithoutError
-	if availableForError < 0 {
-		availableForError = 0
-	}
-
-	message.Headers["dlq-error"] = truncateBytes([]byte(errorText), availableForError)
-}
-
-func buildHeadersWithout(source map[string][]byte, exclude string) map[string][]byte {
-	result := make(map[string][]byte, len(source))
-	for key, value := range source {
-		if key == exclude {
-			continue
+	for key, value := range message.Headers {
+		if _, ok := dlqEssentialHeaders[key]; ok {
+			result[key] = value
 		}
-		result[key] = value
 	}
-	return result
+
+	message.Headers = result
 }
 
-func truncateDLQValue(message *kafka.Message, maxBytes int) {
-	currentSize := messageSize(*message)
-	if currentSize <= maxBytes {
-		return
+func truncateUTF8Bytes(data []byte, limit int) []byte {
+	if limit <= 0 {
+		return nil
 	}
 
-	sizeWithoutValue := currentSize - len(message.Value)
-	availableForValue := maxBytes - sizeWithoutValue
-	if availableForValue < 0 {
-		availableForValue = 0
+	if len(data) <= limit {
+		return data
 	}
 
-	message.Value = truncateBytes(message.Value, availableForValue)
+	truncated := data[:limit]
+	for len(truncated) > 0 && !utf8.Valid(truncated) {
+		truncated = truncated[:len(truncated)-1]
+	}
+
+	return truncated
 }
 
 func messageSize(message kafka.Message) int {
@@ -247,14 +256,4 @@ func messageSize(message kafka.Message) int {
 	}
 
 	return size
-}
-
-func truncateBytes(data []byte, limit int) []byte {
-	if limit <= 0 {
-		return nil
-	}
-	if len(data) <= limit {
-		return data
-	}
-	return data[:limit]
 }

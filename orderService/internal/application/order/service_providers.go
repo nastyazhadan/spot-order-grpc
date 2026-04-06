@@ -41,9 +41,11 @@ var ServiceProviders = fx.Options(
 		provideAuthService,
 		provideOrderServiceConfig,
 
+		provideKafkaClient,
 		provideKafkaPublisher,
 		provideDLQPublisher,
 		provideEventProducer,
+
 		provideOutboxWorker,
 		provideCompensationService,
 		provideConsumerService,
@@ -110,33 +112,39 @@ func provideOrderServiceConfig(cfg config.OrderConfig) orderService.Config {
 	}
 }
 
-func provideKafkaPublisher(
-	syncProducer sarama.SyncProducer,
+func provideKafkaClient(
+	asyncProducer sarama.AsyncProducer,
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
-) outbox.EventPublisher {
-	return sharedProducer.New(
-		syncProducer,
-		cfg.Kafka.Topics.OrderCreated,
+) *sharedProducer.Client {
+	return sharedProducer.NewClient(
+		asyncProducer,
 		cfg.Service.Name,
 		logger,
 	)
 }
 
-func provideDLQPublisher(
-	syncProducer sarama.SyncProducer,
+func provideKafkaPublisher(
+	client *sharedProducer.Client,
 	cfg config.OrderConfig,
-	logger *zapLogger.Logger,
+) outbox.EventPublisher {
+	return sharedProducer.New(
+		client,
+		cfg.Kafka.Topics.OrderCreated,
+	)
+}
+
+func provideDLQPublisher(
+	client *sharedProducer.Client,
+	cfg config.OrderConfig,
 ) sharedConsumer.DLQPublisher {
 	if !cfg.Kafka.Consumer.DLQEnabled {
 		return nil
 	}
 
 	return sharedProducer.New(
-		syncProducer,
+		client,
 		cfg.Kafka.Topics.MarketStateChangedDLQ,
-		cfg.Service.Name,
-		logger,
 	)
 }
 

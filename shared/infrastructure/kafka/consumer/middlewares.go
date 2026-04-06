@@ -111,7 +111,7 @@ func DLQMiddleware(
 				return err
 			}
 
-			return sendToDLQ(ctx, message, dlqPublisher, logger, err, retryCount, maxMessageBytes)
+			return sendToDLQ(ctx, message, dlqPublisher, err, retryCount, maxMessageBytes, logger)
 		}
 	}
 }

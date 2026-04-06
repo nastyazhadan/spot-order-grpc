@@ -5,7 +5,6 @@ import (
 	"go.uber.org/fx"
 
 	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
-	authsession "github.com/nastyazhadan/spot-order-grpc/shared/auth/session"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	sharedProducer "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka/producer"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
@@ -20,6 +19,9 @@ import (
 
 var ServiceProviders = fx.Options(
 	fx.Provide(
+		provideJWTManager,
+
+		provideKafkaClient,
 		provideMarketStateChangedProducer,
 		provideSpotOutboxWorker,
 		provideMarketEventProducer,
@@ -31,21 +33,33 @@ var ServiceProviders = fx.Options(
 )
 
 type container struct {
-	JWTManager   *authjwt.Manager
-	SessionStore *authsession.Store
-	SpotService  *spotService.MarketViewer
+	JWTManager  *authjwt.Manager
+	SpotService *spotService.MarketViewer
+}
+
+func provideJWTManager(cfg config.SpotConfig) *authjwt.Manager {
+	return authjwt.NewManager(cfg.AuthVerifier.JWTSecret, 0, 0)
+}
+
+func provideKafkaClient(
+	asyncProducer sarama.AsyncProducer,
+	cfg config.SpotConfig,
+	logger *zapLogger.Logger,
+) *sharedProducer.Client {
+	return sharedProducer.NewClient(
+		asyncProducer,
+		cfg.Service.Name,
+		logger,
+	)
 }
 
 func provideMarketStateChangedProducer(
-	syncProducer sarama.SyncProducer,
+	client *sharedProducer.Client,
 	cfg config.SpotConfig,
-	logger *zapLogger.Logger,
 ) outbox.EventPublisher {
 	return sharedProducer.New(
-		syncProducer,
+		client,
 		cfg.Kafka.Topics.MarketStateChanged,
-		cfg.Service.Name,
-		logger,
 	)
 }
 
@@ -119,12 +133,10 @@ func provideMarketPoller(
 
 func provideContainer(
 	jwtManager *authjwt.Manager,
-	sessionStore *authsession.Store,
 	service *spotService.MarketViewer,
 ) *container {
 	return &container{
-		JWTManager:   jwtManager,
-		SessionStore: sessionStore,
-		SpotService:  service,
+		JWTManager:  jwtManager,
+		SpotService: service,
 	}
 }

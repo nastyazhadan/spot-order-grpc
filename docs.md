@@ -577,7 +577,7 @@ FOR EACH batch (locked_by=worker_id, status='pending', available_at <= NOW()):
   UPDATE status='processing', locked_at=NOW()
 
   FOR EACH record:
-    publish to Kafka (synchronous)
+    publish to Kafka
     → success: UPDATE status='published', published_at=NOW()
     → error:
         retry_count++
