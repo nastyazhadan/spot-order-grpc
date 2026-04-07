@@ -46,6 +46,9 @@ func validateSpotConfig(cfg config.SpotConfig) error {
 	if err := validateSpotService(cfg); err != nil {
 		return err
 	}
+	if err := config.ValidateHealthConfig("health", cfg.Health); err != nil {
+		return err
+	}
 	if err := config.ValidatePostgresPoolConfig("postgres_pool", cfg.PostgresPool); err != nil {
 		return err
 	}

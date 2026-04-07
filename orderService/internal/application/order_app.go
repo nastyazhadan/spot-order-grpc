@@ -22,8 +22,8 @@ func Run(ctx context.Context, cfg config.OrderConfig) {
 
 		order.InfraProviders,
 		order.ServiceProviders,
-		order.GRPCProviders,
 		order.Lifecycle,
+		order.GRPCProviders,
 	)
 
 	app.Run()

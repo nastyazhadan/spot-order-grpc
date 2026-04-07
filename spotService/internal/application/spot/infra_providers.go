@@ -3,7 +3,6 @@ package spot
 import (
 	"context"
 	"fmt"
-	"io/fs"
 
 	"github.com/IBM/sarama"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,13 +17,11 @@ import (
 	outboxStore "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/outbox"
 	spotStore "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/spot"
 	spotCache "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis"
-	"github.com/nastyazhadan/spot-order-grpc/spotService/migrations"
 )
 
 var InfraProviders = fx.Options(
 	fx.Provide(
 		provideLogger,
-		provideMigrationsFS,
 
 		providePostgresPool,
 		provideRedisClient,
@@ -43,9 +40,8 @@ var InfraProviders = fx.Options(
 type postgresPoolIn struct {
 	fx.In
 
-	AppCtx       context.Context `name:"app_ctx"`
-	Cfg          config.SpotConfig
-	MigrationsFS fs.FS
+	AppCtx context.Context `name:"app_ctx"`
+	Cfg    config.SpotConfig
 }
 
 func provideLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (*zapLogger.Logger, error) {
@@ -60,15 +56,10 @@ func provideLogger(lifeCycle fx.Lifecycle, cfg config.SpotConfig) (*zapLogger.Lo
 	return logger, nil
 }
 
-func provideMigrationsFS() fs.FS {
-	return migrations.Migrations
-}
-
 func providePostgresPool(in postgresPoolIn) (*pgxpool.Pool, error) {
-	return db.BootstrapPostgres(
+	return db.OpenPostgres(
 		in.AppCtx,
 		in.Cfg.Service.DBURI,
-		in.MigrationsFS,
 		db.PoolConfig{
 			MaxConnections:  in.Cfg.PostgresPool.MaxConnections,
 			MinConnections:  in.Cfg.PostgresPool.MinConnections,

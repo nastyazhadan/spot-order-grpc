@@ -2,11 +2,12 @@ package consumer
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/rand/v2"
 	"runtime/debug"
 	"time"
 
-	"github.com/go-faster/errors"
 	"go.uber.org/zap"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka"
@@ -40,10 +41,17 @@ func PanicRecoveryMiddleware(
 func RetryMiddleware(
 	maxRetries int,
 	backoff time.Duration,
+	jitter float64,
 	logger *zapLogger.Logger,
 ) Middleware {
 	if maxRetries < 0 {
 		maxRetries = 0
+	}
+	if jitter < 0 {
+		jitter = 0
+	}
+	if jitter > 1 {
+		jitter = 1
 	}
 
 	return func(next MessageHandler) MessageHandler {
@@ -55,20 +63,29 @@ func RetryMiddleware(
 					}
 
 					if attempt < maxRetries {
-						sleep := backoff * time.Duration(attempt+1)
+						sleep := retryDelay(backoff, attempt, jitter)
 
 						logger.Warn(ctx, "Kafka message processing failed, retrying",
 							zap.String("topic", message.Topic),
 							zap.Int("attempt", attempt+1),
 							zap.Int("max_retries", maxRetries),
 							zap.Duration("retry_after", sleep),
+							zap.Float64("retry_jitter", jitter),
 							zap.Error(err),
 						)
 
+						timer := time.NewTimer(sleep)
+
 						select {
 						case <-ctx.Done():
+							if !timer.Stop() {
+								select {
+								case <-timer.C:
+								default:
+								}
+							}
 							return ctx.Err()
-						case <-time.After(sleep):
+						case <-timer.C:
 							continue
 						}
 					}
@@ -82,6 +99,21 @@ func RetryMiddleware(
 			return nil
 		}
 	}
+}
+
+func retryDelay(backoff time.Duration, attempt int, jitter float64) time.Duration {
+	base := backoff * time.Duration(attempt+1)
+
+	if base <= 0 || jitter <= 0 {
+		return base
+	}
+
+	delta := time.Duration(rand.Float64() * jitter * float64(base))
+	if rand.IntN(2) == 0 {
+		return base - delta
+	}
+
+	return base + delta
 }
 
 func DLQMiddleware(

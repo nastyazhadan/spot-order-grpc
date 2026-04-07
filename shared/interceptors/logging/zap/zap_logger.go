@@ -3,6 +3,7 @@ package zap
 import (
 	"context"
 	"os"
+	"slices"
 	"strings"
 
 	"go.uber.org/zap"
@@ -22,8 +23,9 @@ type contextFields struct {
 }
 
 type Logger struct {
-	zapLogger        *zap.Logger
-	dynamicLevel     zap.AtomicLevel
+	zapLogger    *zap.Logger
+	dynamicLevel zap.AtomicLevel
+	// ограничивает только extra fields
 	contextFieldsMax int
 }
 
@@ -45,7 +47,8 @@ func New(levelStr string, asJSON bool, contextFieldsMax int) *Logger {
 		level,
 	)
 
-	logger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(3))
+	baseLogger := zap.New(core, zap.AddCaller())
+	logger := baseLogger.WithOptions(zap.AddCallerSkip(1))
 
 	return &Logger{
 		zapLogger:        logger,
@@ -185,55 +188,62 @@ func (l *Logger) WithContext(ctx context.Context) *Logger {
 		return l
 	}
 
-	return &Logger{
-		zapLogger:        l.zapLogger.With(ctxFields...),
-		dynamicLevel:     l.dynamicLevel,
-		contextFieldsMax: l.contextFieldsMax,
-	}
+	return l.With(ctxFields...)
 }
 
 func (l *Logger) Debug(ctx context.Context, message string, fields ...zap.Field) {
-	l.log(ctx, zapcore.DebugLevel, message, fields...)
-}
-
-func (l *Logger) Info(ctx context.Context, message string, fields ...zap.Field) {
-	l.log(ctx, zapcore.InfoLevel, message, fields...)
-}
-
-func (l *Logger) Warn(ctx context.Context, message string, fields ...zap.Field) {
-	l.log(ctx, zapcore.WarnLevel, message, fields...)
-}
-
-func (l *Logger) Error(ctx context.Context, message string, fields ...zap.Field) {
-	l.log(ctx, zapcore.ErrorLevel, message, fields...)
-}
-
-func (l *Logger) Fatal(ctx context.Context, message string, fields ...zap.Field) {
-	l.log(ctx, zapcore.FatalLevel, message, fields...)
-}
-
-func (l *Logger) log(ctx context.Context, level zapcore.Level, message string, fields ...zap.Field) {
 	if l == nil || l.zapLogger == nil {
 		return
 	}
 
-	checked := l.zapLogger.Check(level, message)
-	if checked == nil {
+	l.zapLogger.Debug(message, l.mergeFields(ctx, fields...)...)
+}
+
+func (l *Logger) Info(ctx context.Context, message string, fields ...zap.Field) {
+	if l == nil || l.zapLogger == nil {
 		return
 	}
 
+	l.zapLogger.Info(message, l.mergeFields(ctx, fields...)...)
+}
+
+func (l *Logger) Warn(ctx context.Context, message string, fields ...zap.Field) {
+	if l == nil || l.zapLogger == nil {
+		return
+	}
+
+	l.zapLogger.Warn(message, l.mergeFields(ctx, fields...)...)
+}
+
+func (l *Logger) Error(ctx context.Context, message string, fields ...zap.Field) {
+	if l == nil || l.zapLogger == nil {
+		return
+	}
+
+	l.zapLogger.Error(message, l.mergeFields(ctx, fields...)...)
+}
+
+func (l *Logger) Fatal(ctx context.Context, message string, fields ...zap.Field) {
+	if l == nil || l.zapLogger == nil {
+		return
+	}
+
+	l.zapLogger.Fatal(message, l.mergeFields(ctx, fields...)...)
+}
+
+func (l *Logger) mergeFields(ctx context.Context, fields ...zap.Field) []zap.Field {
 	ctxFields := fieldsFromContext(ctx)
 
 	switch {
 	case len(ctxFields) == 0:
-		checked.Write(fields...)
+		return fields
 	case len(fields) == 0:
-		checked.Write(ctxFields...)
+		return ctxFields
 	default:
 		merged := make([]zap.Field, 0, len(ctxFields)+len(fields))
 		merged = append(merged, ctxFields...)
 		merged = append(merged, fields...)
-		checked.Write(merged...)
+		return merged
 	}
 }
 
@@ -278,6 +288,7 @@ func fieldsFromContext(ctx context.Context) []zap.Field {
 		for _, role := range userRoles {
 			roleNames = append(roleNames, role.String())
 		}
+		slices.Sort(roleNames)
 		fields = append(fields, zap.Strings("user_roles", roleNames))
 	}
 	if extra != nil {
@@ -288,7 +299,7 @@ func fieldsFromContext(ctx context.Context) []zap.Field {
 }
 
 func parseLevel(levelString string) zapcore.Level {
-	switch strings.ToLower(levelString) {
+	switch strings.ToLower(strings.TrimSpace(levelString)) {
 	case "debug":
 		return zapcore.DebugLevel
 	case "info":
@@ -297,6 +308,12 @@ func parseLevel(levelString string) zapcore.Level {
 		return zapcore.WarnLevel
 	case "error":
 		return zapcore.ErrorLevel
+	case "dpanic":
+		return zapcore.DPanicLevel
+	case "panic":
+		return zapcore.PanicLevel
+	case "fatal":
+		return zapcore.FatalLevel
 	default:
 		return zapcore.InfoLevel
 	}

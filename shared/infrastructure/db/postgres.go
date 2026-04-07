@@ -19,25 +19,41 @@ type PoolConfig struct {
 	MaxConnIdleTime time.Duration
 }
 
-func BootstrapPostgres(
+func OpenPostgres(
 	ctx context.Context,
 	dbURI string,
-	migrationsFS fs.FS,
 	config PoolConfig,
 ) (*pgxpool.Pool, error) {
-	const op = "db.BootstrapPostgres"
+	const op = "db.OpenPostgres"
 
 	pool, err := newPostgresPool(ctx, dbURI, config)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
+	return pool, nil
+}
+
+func MigratePostgres(
+	ctx context.Context,
+	dbURI string,
+	migrationsFS fs.FS,
+	config PoolConfig,
+) error {
+	const op = "db.MigratePostgres"
+
+	pool, err := newPostgresPool(ctx, dbURI, config)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	defer pool.Close()
+
 	if err = runPostgresMigrations(ctx, pool, migrationsFS); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	return pool, nil
+	return nil
 }
 
 func newPostgresPool(

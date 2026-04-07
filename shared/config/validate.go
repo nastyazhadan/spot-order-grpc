@@ -49,6 +49,34 @@ func ValidateServiceConfig(fieldPrefix string, cfg ServiceConfig, allowEmptyHost
 	return nil
 }
 
+func ValidateHealthConfig(fieldPrefix string, cfg HealthConfig) error {
+	if cfg.CheckInterval <= 0 {
+		return fmt.Errorf(
+			"%s.check_interval must be greater than 0, got %s",
+			fieldPrefix,
+			cfg.CheckInterval,
+		)
+	}
+
+	if cfg.SuccessThreshold <= 0 {
+		return fmt.Errorf(
+			"%s.success_threshold must be greater than 0, got %d",
+			fieldPrefix,
+			cfg.SuccessThreshold,
+		)
+	}
+
+	if cfg.FailureThreshold <= 0 {
+		return fmt.Errorf(
+			"%s.failure_threshold must be greater than 0, got %d",
+			fieldPrefix,
+			cfg.FailureThreshold,
+		)
+	}
+
+	return nil
+}
+
 func ValidatePostgresPoolConfig(fieldPrefix string, cfg PostgresPoolConfig) error {
 	if cfg.MaxConnections < 0 {
 		return fmt.Errorf(
@@ -356,6 +384,14 @@ func ValidateKafkaConsumerConfig(fieldPrefix string, cfg ConsumerConfig) error {
 			"%s.retry_backoff must be greater than 0, got %s",
 			fieldPrefix,
 			cfg.RetryBackoff,
+		)
+	}
+
+	if cfg.RetryJitter < 0 || cfg.RetryJitter > 1 {
+		return fmt.Errorf(
+			"%s.retry_jitter must be between 0 and 1 inclusive, got %v",
+			fieldPrefix,
+			cfg.RetryJitter,
 		)
 	}
 

@@ -14,6 +14,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      spot-migrator:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       otel-collector:
@@ -27,6 +29,22 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+    networks:
+      - microservices-net
+
+  spot-migrator:
+    build:
+      context: .
+      dockerfile: spotService/Dockerfile
+    container_name: spot-migrator
+    command: [ "./migrate" ]
+    environment:
+      SPOT_DB_URI: ${SPOT_DB_URI}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
     networks:
       - microservices-net
 
@@ -44,6 +62,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      order-migrator:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       otel-collector:
@@ -59,6 +79,22 @@ services:
       retries: 5
       start_period: 15s
     restart: unless-stopped
+    networks:
+      - microservices-net
+
+  order-migrator:
+    build:
+      context: .
+      dockerfile: orderService/Dockerfile
+    container_name: order-migrator
+    command: [ "./migrate" ]
+    environment:
+      ORDER_DB_URI: ${ORDER_DB_URI}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
     networks:
       - microservices-net
 

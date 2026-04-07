@@ -11,6 +11,7 @@ type OrderConfig struct {
 	Timeouts        TimeoutsConfig           `mapstructure:"timeouts"`
 	Log             LoggingConfig            `mapstructure:"log"`
 	AuthVerifier    AuthVerifierConfig       `mapstructure:"auth_verifier"`
+	Health          HealthConfig             `mapstructure:"health"`
 	AuthIssuer      AuthIssuerConfig         `mapstructure:"auth_issuer"`
 	CircuitBreaker  CircuitBreakerConfig     `mapstructure:"circuit_breaker"`
 	PostgresPool    PostgresPoolConfig       `mapstructure:"postgres_pool"`
@@ -30,6 +31,7 @@ type SpotConfig struct {
 	Log           LoggingConfig           `mapstructure:"log"`
 	AuthVerifier  AuthVerifierConfig      `mapstructure:"auth_verifier"`
 	Timeouts      TimeoutsConfig          `mapstructure:"timeouts"`
+	Health        HealthConfig            `mapstructure:"health"`
 	PostgresPool  PostgresPoolConfig      `mapstructure:"postgres_pool"`
 	GRPCRateLimit SpotGRPCRateLimitConfig `mapstructure:"grpc_rate_limit"`
 	Redis         RedisConfig             `mapstructure:"redis"`
@@ -62,6 +64,12 @@ type LoggingConfig struct {
 type TimeoutsConfig struct {
 	Service time.Duration `mapstructure:"service"`
 	Check   time.Duration `mapstructure:"check"`
+}
+
+type HealthConfig struct {
+	CheckInterval    time.Duration `mapstructure:"check_interval"`
+	SuccessThreshold int           `mapstructure:"success_threshold"`
+	FailureThreshold int           `mapstructure:"failure_threshold"`
 }
 
 type CircuitBreakerConfig struct {
@@ -113,6 +121,7 @@ type ConsumerConfig struct {
 	HeartbeatInterval  time.Duration `mapstructure:"heartbeat_interval"`
 	MaxRetries         int           `mapstructure:"max_retries"`
 	RetryBackoff       time.Duration `mapstructure:"retry_backoff"`
+	RetryJitter        float64       `mapstructure:"retry_jitter"`
 	MaxMessageBytes    int32         `mapstructure:"max_message_bytes"`
 	DLQEnabled         bool          `mapstructure:"dlq_enabled"`
 	DLQMaxMessageBytes int           `mapstructure:"dlq_max_message_bytes"`

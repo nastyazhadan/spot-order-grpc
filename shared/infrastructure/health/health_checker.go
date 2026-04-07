@@ -12,7 +12,10 @@ import (
 type Server = health.Server
 
 func NewServer() *health.Server {
-	return health.NewServer()
+	server := health.NewServer()
+	server.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+
+	return server
 }
 
 func RegisterService(server *grpc.Server, healthServer *health.Server) {

@@ -235,6 +235,7 @@ func provideConsumerService(
 		sharedConsumer.RetryMiddleware(
 			cfg.Kafka.Consumer.MaxRetries,
 			cfg.Kafka.Consumer.RetryBackoff,
+			cfg.Kafka.Consumer.RetryJitter,
 			logger,
 		),
 	)

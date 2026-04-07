@@ -17,12 +17,12 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/health/grpc_health_v1"
 
 	outbox "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/kafka"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/consumer"
 	authv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/auth/v1"
 	orderv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
+	spotv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka/producer"
@@ -57,23 +57,12 @@ type appCtxIn struct {
 
 func registerInfrastructure(
 	lifecycle fx.Lifecycle,
-	cfg config.OrderConfig,
 	pool *pgxpool.Pool,
 	redisClient *redis.Client,
 	connection *grpc.ClientConn,
 	logger *zapLogger.Logger,
 ) {
 	lifecycle.Append(fx.Hook{
-		OnStart: func(startCtx context.Context) error {
-			redisPingCtx, cancel := context.WithTimeout(startCtx, cfg.Redis.ConnectionTimeout)
-			defer cancel()
-
-			if err := redisClient.Ping(redisPingCtx).Err(); err != nil {
-				return fmt.Errorf("redis.Ping: %w", err)
-			}
-
-			return nil
-		},
 		OnStop: func(stopCtx context.Context) error {
 			pool.Close()
 
@@ -188,8 +177,8 @@ func registerKafkaProducer(
 }
 
 func registerOutboxWorker(
-	lifecycle fx.Lifecycle,
 	in appCtxIn,
+	lifecycle fx.Lifecycle,
 	worker *outbox.Worker,
 	logger *zapLogger.Logger,
 ) {
@@ -240,8 +229,8 @@ func registerOutboxWorker(
 }
 
 func registerKafkaConsumer(
-	lifecycle fx.Lifecycle,
 	in appCtxIn,
+	lifecycle fx.Lifecycle,
 	consumer *consumer.MarketConsumer,
 	group sarama.ConsumerGroup,
 	logger *zapLogger.Logger,
@@ -312,27 +301,107 @@ func registerKafkaConsumer(
 }
 
 func registerReadiness(
+	in appCtxIn,
 	lifecycle fx.Lifecycle,
 	healthServer *health.Server,
+	pool *pgxpool.Pool,
+	redisClient *redis.Client,
+	connection *grpc.ClientConn,
+	logger *zapLogger.Logger,
+	cfg config.OrderConfig,
 ) {
+	appCtx := in.AppCtx
+
+	var (
+		watchCtx context.Context
+		cancel   context.CancelFunc
+		done     chan struct{}
+	)
+
+	monitor := buildReadinessMonitor(cfg, pool, healthServer, redisClient, connection, logger)
+
 	lifecycle.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			healthServer.SetServingStatus(
-				"",
-				grpc_health_v1.HealthCheckResponse_SERVING)
-			healthServer.SetServingStatus(
-				orderv1.OrderService_ServiceDesc.ServiceName,
-				grpc_health_v1.HealthCheckResponse_SERVING,
-			)
-			healthServer.SetServingStatus(
-				authv1.AuthService_ServiceDesc.ServiceName,
-				grpc_health_v1.HealthCheckResponse_SERVING,
-			)
+		OnStart: func(startCtx context.Context) error {
+			if err := monitor.RequireReady(startCtx); err != nil {
+				logger.Error(startCtx, "order readiness check failed", zap.Error(err))
+				return err
+			}
+
+			watchCtx, cancel = context.WithCancel(appCtx)
+			done = make(chan struct{})
+
+			go func() {
+				defer close(done)
+				monitor.Watch(watchCtx)
+			}()
+
+			logger.Info(startCtx, "Order service is ready")
 			return nil
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(stopCtx context.Context) error {
+			if cancel != nil {
+				cancel()
+			}
+
+			if done != nil {
+				select {
+				case <-done:
+				case <-stopCtx.Done():
+					return stopCtx.Err()
+				}
+			}
+
 			healthServer.Shutdown()
 			return nil
 		},
 	})
+}
+
+func buildReadinessMonitor(
+	cfg config.OrderConfig,
+	pool *pgxpool.Pool,
+	healthServer *health.Server,
+	redisClient *redis.Client,
+	connection *grpc.ClientConn,
+	logger *zapLogger.Logger,
+) *health.ReadinessMonitor {
+	monitor := health.NewReadinessMonitor(
+		healthServer,
+		logger,
+		health.ReadinessMonitorConfig{
+			ServiceName: cfg.Service.Name,
+			ServiceNames: []string{
+				orderv1.OrderService_ServiceDesc.ServiceName,
+				authv1.AuthService_ServiceDesc.ServiceName,
+			},
+			CheckInterval:    cfg.Health.CheckInterval,
+			CheckTimeout:     cfg.Timeouts.Check,
+			SuccessThreshold: cfg.Health.SuccessThreshold,
+			FailureThreshold: cfg.Health.FailureThreshold,
+		},
+		health.DependencyCheck{
+			Name: "postgres",
+			Check: func(ctx context.Context) error {
+				return pool.Ping(ctx)
+			},
+		},
+		health.DependencyCheck{
+			Name: "redis",
+			Check: func(ctx context.Context) error {
+				return redisClient.Ping(ctx).Err()
+			},
+		},
+		health.DependencyCheck{
+			Name: "spot_service",
+			Check: func(ctx context.Context) error {
+				return health.CheckHealth(
+					ctx,
+					connection,
+					spotv1.SpotInstrumentService_ServiceDesc.ServiceName,
+				)
+			},
+		},
+	)
+
+	return monitor
 }

@@ -3,7 +3,6 @@ package order
 import (
 	"context"
 	"fmt"
-	"io/fs"
 
 	"github.com/IBM/sarama"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,7 +13,6 @@ import (
 	orderStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/order"
 	outboxStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/outbox"
 	blockStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/market"
-	"github.com/nastyazhadan/spot-order-grpc/orderService/migrations"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db"
@@ -24,7 +22,6 @@ import (
 var InfraProviders = fx.Options(
 	fx.Provide(
 		provideLogger,
-		provideMigrationsFS,
 
 		providePostgresPool,
 		provideRedisClient,
@@ -43,9 +40,8 @@ var InfraProviders = fx.Options(
 type postgresPoolIn struct {
 	fx.In
 
-	AppCtx       context.Context `name:"app_ctx"`
-	Cfg          config.OrderConfig
-	MigrationsFS fs.FS
+	AppCtx context.Context `name:"app_ctx"`
+	Cfg    config.OrderConfig
 }
 
 func provideLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*zapLogger.Logger, error) {
@@ -60,15 +56,10 @@ func provideLogger(lifeCycle fx.Lifecycle, cfg config.OrderConfig) (*zapLogger.L
 	return logger, nil
 }
 
-func provideMigrationsFS() fs.FS {
-	return migrations.Migrations
-}
-
 func providePostgresPool(in postgresPoolIn) (*pgxpool.Pool, error) {
-	return db.BootstrapPostgres(
+	return db.OpenPostgres(
 		in.AppCtx,
 		in.Cfg.Service.DBURI,
-		in.MigrationsFS,
 		db.PoolConfig{
 			MaxConnections:  in.Cfg.PostgresPool.MaxConnections,
 			MinConnections:  in.Cfg.PostgresPool.MinConnections,
