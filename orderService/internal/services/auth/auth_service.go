@@ -2,12 +2,13 @@ package auth
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	authErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
@@ -31,6 +32,7 @@ type AuthService struct {
 	jwtManager   JWTManager
 	refreshStore RefreshTokenStore
 	sessionStore SessionStore
+	timeout      time.Duration
 	logger       *zapLogger.Logger
 }
 
@@ -38,12 +40,14 @@ func New(
 	jwtManager JWTManager,
 	refreshStore RefreshTokenStore,
 	sessionStore SessionStore,
+	timeout time.Duration,
 	logger *zapLogger.Logger,
 ) *AuthService {
 	return &AuthService{
 		jwtManager:   jwtManager,
 		refreshStore: refreshStore,
 		sessionStore: sessionStore,
+		timeout:      timeout,
 		logger:       logger,
 	}
 }
@@ -52,6 +56,9 @@ func (s *AuthService) Refresh(
 	ctx context.Context,
 	refreshToken string,
 ) (newAccessToken, newRefreshToken string, err error) {
+	ctx, cancel := s.contextWithTimeout(ctx)
+	defer cancel()
+
 	userID, roles, oldJTI, oldSessionID, err := s.validateRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return "", "", err
@@ -71,11 +78,11 @@ func (s *AuthService) validateRefreshToken(
 
 	userID, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		return uuid.Nil, nil, "", "", serviceErrors.ErrInvalidSubject
+		return uuid.Nil, nil, "", "", authErrors.ErrInvalidSubject
 	}
 
 	if claims.ID == "" {
-		return uuid.Nil, nil, "", "", serviceErrors.ErrInvalidJTI
+		return uuid.Nil, nil, "", "", authErrors.ErrInvalidJTI
 	}
 
 	roles, err := authjwt.ParseUserRolesClaims(claims.UserRoles)
@@ -86,10 +93,10 @@ func (s *AuthService) validateRefreshToken(
 	active, err := s.sessionStore.IsSessionActive(ctx, userID, claims.SessionID)
 	if err != nil {
 		s.logger.Error(ctx, "failed to validate refresh token session", zap.Error(err))
-		return uuid.Nil, nil, "", "", serviceErrors.ErrSessionValidationFailed
+		return uuid.Nil, nil, "", "", authErrors.ErrSessionValidationFailed
 	}
 	if !active {
-		return uuid.Nil, nil, "", "", serviceErrors.ErrTokenRevoked
+		return uuid.Nil, nil, "", "", authErrors.ErrTokenRevoked
 	}
 
 	return userID, roles, claims.ID, claims.SessionID, nil
@@ -112,10 +119,10 @@ func (s *AuthService) rotateTokens(
 	rotated, err := s.refreshStore.Rotate(ctx, userID, oldJTI, oldSessionID, newJTI, newSessionID)
 	if err != nil {
 		s.logger.Error(ctx, "failed to rotate refresh token", zap.Error(err))
-		return "", "", serviceErrors.ErrSaveTokenFailed
+		return "", "", authErrors.ErrSaveTokenFailed
 	}
 	if !rotated {
-		return "", "", serviceErrors.ErrTokenRevoked
+		return "", "", authErrors.ErrTokenRevoked
 	}
 
 	return newAccessToken, newRefreshToken, nil
@@ -137,4 +144,24 @@ func (s *AuthService) generateTokenPair(
 	}
 
 	return accessToken, refreshToken, nil
+}
+
+func (s *AuthService) contextWithTimeout(
+	ctx context.Context,
+) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if s.timeout <= 0 {
+		return ctx, func() {}
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		if time.Until(deadline) <= s.timeout {
+			return ctx, func() {}
+		}
+	}
+
+	return context.WithTimeout(ctx, s.timeout)
 }

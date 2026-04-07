@@ -100,9 +100,10 @@ func provideAuthService(
 	jwtManager *authjwt.Manager,
 	refreshStore *authStore.RefreshTokenStore,
 	sessionStore *authsession.Store,
+	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) *authService.AuthService {
-	return authService.New(jwtManager, refreshStore, sessionStore, logger)
+	return authService.New(jwtManager, refreshStore, sessionStore, cfg.Timeouts.Service, logger)
 }
 
 func provideOrderServiceConfig(cfg config.OrderConfig) orderService.Config {

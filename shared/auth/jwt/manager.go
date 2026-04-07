@@ -6,9 +6,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
+	authErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
@@ -49,7 +48,7 @@ func (m *Manager) GenerateAccessToken(userID uuid.UUID, roles []models.UserRole,
 
 	signed, err := token.SignedString(m.secret)
 	if err != nil {
-		return "", status.Error(codes.Internal, "failed to sign access token")
+		return "", authErrors.ErrSignAccessTokenFailed
 	}
 
 	return signed, nil
@@ -79,7 +78,7 @@ func (m *Manager) GenerateRefreshToken(userID uuid.UUID, roles []models.UserRole
 
 	signed, err := token.SignedString(m.secret)
 	if err != nil {
-		return "", status.Error(codes.Internal, "failed to sign refresh token")
+		return "", authErrors.ErrSignRefreshTokenFailed
 	}
 
 	return signed, nil
@@ -98,23 +97,23 @@ func (m *Manager) ParseToken(tokenString string, expectedType TokenType) (*Claim
 	)
 
 	if errors.Is(err, jwt.ErrTokenExpired) {
-		return nil, status.Error(codes.Unauthenticated, "token expired")
+		return nil, authErrors.ErrTokenExpired
 	}
 
 	if err != nil || token == nil || !token.Valid {
-		return nil, status.Error(codes.Unauthenticated, "invalid token")
+		return nil, authErrors.ErrInvalidToken
 	}
 
 	if claims.TokenType != expectedType {
-		return nil, status.Error(codes.Unauthenticated, "invalid token type")
+		return nil, authErrors.ErrInvalidTokenType
 	}
 
 	if claims.Subject == "" {
-		return nil, status.Error(codes.Unauthenticated, "subject not found in token")
+		return nil, authErrors.ErrMissingTokenSubject
 	}
 
 	if claims.SessionID == "" {
-		return nil, status.Error(codes.Unauthenticated, "session_id not found in token")
+		return nil, authErrors.ErrMissingTokenSessionID
 	}
 
 	return claims, nil

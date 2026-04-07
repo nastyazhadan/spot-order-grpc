@@ -389,22 +389,32 @@ task token:gen
   "refresh_token": "<token>"
 }
 ```
+`RefreshToken` не требует access token в metadata: метод исключён из JWT-перехватчика через `order.auth_verifier.skip_methods`.
 
+При вызове:
+- валидируется refresh token и его claims
+- проверяется активная session в Redis
+- атомарно ротируется refresh token
+- возвращается новая пара `access_token` / `refresh_token`
+
+Важно:
+- access token не проверяется по Redis и остаётся валидным до истечения `exp`
+- при refresh ротируется refresh-token chain, а не уже выданные access token
 ---
 
 ### Возможные gRPC-статусы
 
-| Код | Причина                                                   |
-|---|-----------------------------------------------------------|
-| `OK` | Успешный вызов                                            |
-| `INVALID_ARGUMENT` | пустые или некорректные поля, неверный UUID               |
-| `UNAUTHENTICATED` | отсутствует или невалиден JWT                             |
-| `NOT_FOUND` | Рынок или ордер не найден                                 |
-| `ALREADY_EXISTS` | Ордер с таким ID уже существует                           |
-| `FAILED_PRECONDITION` | Рынок отключён (`enabled = false`)                        |
-| `RESOURCE_EXHAUSTED` | Сработал per-user Rate Limiter или per-instance RPS-лимит |
-| `UNAVAILABLE` | Сработал Circuit Breaker или недоступен зависимый сервис  |
-| `INTERNAL` | Внутренняя ошибка сервера                                 |
+| Код | Причина                                                          |
+|---|------------------------------------------------------------------|
+| `OK` | Успешный вызов                                                   |
+| `INVALID_ARGUMENT` | пустые или некорректные поля, неверный UUID                      |
+| `UNAUTHENTICATED` | Ошибка аутентификации (authentication failed)                    |
+| `NOT_FOUND` | Рынок или ордер не найден                                        |
+| `ALREADY_EXISTS` | Ордер с таким ID уже существует                                  |
+| `FAILED_PRECONDITION` | Рынок отключён (`enabled = false`)                               |
+| `RESOURCE_EXHAUSTED` | Сработал per-user Rate Limiter или per-instance RPS-лимит        |
+| `UNAVAILABLE` | Сработал Circuit Breaker или недоступен зависимый сервис         |
+| `INTERNAL` | Внутренняя ошибка auth/session storage или другая ошибка сервера |
 
 ---
 
@@ -544,8 +554,8 @@ spotOrder/
 │            OrderService                │  :50051
 │  interceptors (chain):                 │
 │   recoverer → tracer → meter →         │
-│   logger → auth → rateLimiter →        │
-│   errorMapper → validator              │
+│   logger → errorMapper → auth →        │
+│   rateLimiter → validator              │
 │────────────────────────────────────────│
 │  OrderHandler                          │
 │  OrderService (business)               │
@@ -570,8 +580,8 @@ spotOrder/
 │        SpotInstrumentService           │  :50052
 │  interceptors (chain):                 │
 │   recoverer → tracer → meter →         │
-│   logger → auth → rateLimiter →        │
-│   errorMapper → validator              │
+│   logger → errorMapper → auth →        │
+│   rateLimiter → validator              │
 │────────────────────────────────────────│
 │  SpotInstrumentHandler                 │
 │  MarketViewer (business)               │  ← при miss первой страницы может лениво прогревать head-cache из PostgreSQL

@@ -177,7 +177,7 @@ shared/errors/service/
 ├── ErrTokenRevoked                  — refresh token отозван или не найден
 ├── ErrRevokeTokenFailed             — ошибка отзыва токена в Redis
 ├── ErrSaveTokenFailed               — ошибка сохранения токена в Redis
-└── ErrSessionValidationFailed       — ошибка проверки активной сессии в Redis ErrSessionValidationFailed       — ошибка проверки активной сессии в Redis
+└── ErrSessionValidationFailed       — ошибка проверки активной сессии в Redis
 
 shared/errors/repository/
 └── ErrOrderNotFound, ErrOrderAlreadyExists, ErrMarketsNotFound, ErrMarketCacheCorrupted
@@ -228,19 +228,19 @@ shared/errors/repository/
 ### OrderService
 
 ```
-recoverer → tracer → meter → logger → auth → rateLimiter → errorMapper → validator
+recoverer → tracer → meter → logger → errorMapper → auth → rateLimiter → validator
 ```
 
-| Перехватчик | Пакет | Действие                                            |
-|---|---|-----------------------------------------------------|
-| `recoverer` | `interceptors/recovery` | Перехватывает `panic`, возвращает `INTERNAL`        |
-| `tracer` | `interceptors/tracing` | Создаёт span, инжектирует W3C TraceContext          |
-| `meter` | `interceptors/metrics` | Счётчики, in-flight gauge, histogram длительности   |
-| `logger` | `interceptors/logging/zap` | Логирует метод, статус, длительность с trace_id     |
-| `auth` | `interceptors/auth` | Парсит JWT, кладёт user_id и roles в контекст       |
-| `rateLimiter` | `interceptors/ratelimit` | Per-instance RPS-лимит (токен-бакет)                |
-| `errorMapper` | `interceptors/errors` | Переводит доменные ошибки в gRPC-статусы            |
-| `validator` | `interceptors/validate` | Protovalidate: проверяет поля запроса по аннотациям |
+| Перехватчик | Пакет | Действие                                                             |
+|---|---|----------------------------------------------------------------------|
+| `recoverer` | `interceptors/recovery` | Перехватывает `panic`, возвращает `INTERNAL`                         |
+| `tracer` | `interceptors/tracing` | Создаёт span, инжектирует W3C TraceContext                           |
+| `meter` | `interceptors/metrics` | Счётчики, in-flight gauge, histogram длительности                    |
+| `logger` | `interceptors/logging/zap` | Логирует метод, статус, длительность с trace_id                      |
+| `auth` | `interceptors/auth` | Парсит JWT, кладёт user_id и roles в контекст                        |
+| `rateLimiter` | `interceptors/ratelimit` | Per-instance RPS-лимит (токен-бакет)                                 |
+| `errorMapper` | `interceptors/errors` | Переводит доменные ошибки и оишбки JWT-аутентификации в gRPC-статусы |
+| `validator` | `interceptors/validate` | Protovalidate: проверяет поля запроса по аннотациям                  |
 
 ### SpotInstrumentService
 
@@ -293,6 +293,8 @@ SpotService тоже использует JWT auth interceptor.
 > Для access token используется stateless-проверка: подпись, срок жизни, token_type и claims.
 > Проверка активной сессии (`IsSessionActive`) выполняется только в `AuthService.Refresh` для refresh token.
 > Поэтому access token остаётся валидным до истечения `exp`, даже если после него уже был выполнен refresh.
+> Ошибки JWT-аутентификации возвращаются как внутренние service errors и централизованно мапятся в gRPC-статусы через `shared/interceptors/errors/grpc_error_interceptor.go`.
+> `AuthService.Refresh` выполняется в собственном сервисном timeout-контексте. Если входящий context уже содержит более ранний deadline, он сохраняется.
 
 ### Skip-методы по умолчанию
 
@@ -320,16 +322,30 @@ type Claims struct {
 
 ### Хранение refresh-токенов и сессий в Redis
 
-Система использует **два ключа** для управления refresh-токенами:
+Система использует **три ключа** для управления refresh-токенами:
 
 | Ключ | Значение | TTL |
 |---|---|---|
-| `refresh:<userID>:<jti>` | `"1"` (маркер существования токена) | `refresh_token_ttl` |
-| `auth_session:<userID>` | sessionID (string, UUID) | `refresh_token_ttl` |
+| `refresh:<userID>:<jti>` | `"1"` | `refresh_token_ttl` |
+| `auth_session:<userID>` | `sessionID` | `refresh_token_ttl` |
+| `auth_refresh:<userID>` | полный ключ текущего refresh token | `refresh_token_ttl` |
 
-- **Ротация** (при `RefreshToken`): атомарным Lua-скриптом проверяется `auth_session:<userID>` == oldSessionID, удаляется старый `refresh:<userID>:<oldJTI>`, создаётся `refresh:<userID>:<newJTI>` и сохраняется тот же `auth_session:<userID>` = oldsessionID, но TTL продлевается вместе с refresh-chain.
-- **Замена** (при первой выдаче токена): создаются оба ключа атомарно.
-- **Валидация сессии** (в `AuthService.Refresh`): `IsSessionActive` сверяет `auth_session:<userID>` с `sessionID` из claims refresh-токена.
+- При `RefreshToken` Lua-скрипт атомарно:
+  - проверяет, что `auth_session:<userID>` совпадает с `sessionID` из refresh token
+  - проверяет существование старого `refresh:<userID>:<oldJTI>`
+  - проверяет, что `auth_refresh:<userID>` указывает на тот же refresh key
+  - создаёт новый `refresh:<userID>:<newJTI>`
+  - продлевает TTL для session key
+  - обновляет `auth_refresh:<userID>` на новый refresh key
+  - удаляет старый refresh key
+- Текущая модель не ротирует `sessionID` при каждом refresh. 
+- При refresh меняется `jti` refresh token и указатель на текущий refresh key, а `sessionID` сохраняется в рамках активной сессии.
+
+### Проброс `authorization` между сервисами
+
+При исходящем gRPC-вызове из одного сервиса в другой client auth interceptor копирует входящий `authorization` из incoming metadata в outgoing metadata downstream-запроса.
+
+Используется одно актуальное значение заголовка `authorization`, чтобы downstream-сервис получал ожидаемый bearer token без накопления нескольких значений заголовка.
 
 ---
 

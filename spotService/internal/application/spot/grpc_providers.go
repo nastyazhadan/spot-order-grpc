@@ -89,7 +89,7 @@ func provideGRPCServer(
 			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
 		}),
 		grpc.ChainUnaryInterceptor(
-			recoverer, tracer, meter, logger, authenticator, rateLimiter, errorsMapper, validator,
+			recoverer, tracer, meter, logger, errorsMapper, authenticator, rateLimiter, validator,
 		),
 	)
 

@@ -26,12 +26,11 @@ func UnaryClientAuthInterceptor() grpc.UnaryClientInterceptor {
 			return invoker(ctx, method, request, reply, connection, opts...)
 		}
 
+		authHeader := authValues[0]
+
 		outgoingMetadata, _ := metadata.FromOutgoingContext(ctx)
 		outgoingMetadata = outgoingMetadata.Copy()
-
-		for _, value := range authValues {
-			outgoingMetadata.Append(authorizationHeader, value)
-		}
+		outgoingMetadata.Set(authorizationHeader, authHeader)
 
 		ctx = metadata.NewOutgoingContext(ctx, outgoingMetadata)
 		return invoker(ctx, method, request, reply, connection, opts...)

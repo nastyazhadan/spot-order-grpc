@@ -18,19 +18,13 @@ var (
 	ErrMarketUnavailable = ErrUnavailable{}
 	ErrMarketDisabled    = ErrDisabled{}
 
-	ErrMarketsNotFound      = errors.New("markets not found")
-	ErrMarketsUnavailable   = errors.New("markets are temporarily unavailable")
+	ErrMarketsNotFound    = errors.New("markets not found")
+	ErrMarketsUnavailable = errors.New("markets are temporarily unavailable")
+
+	ErrNilContext        = errors.New("outbox worker: nil context")
+	ErrInvalidPagination = errors.New("invalid pagination parameters")
+
 	ErrUserRoleNotSpecified = errors.New("user role not specified")
-
-	ErrInvalidSubject    = errors.New("invalid subject in token")
-	ErrInvalidJTI        = errors.New("invalid refresh token jti")
-	ErrTokenRevoked      = errors.New("refresh token revoked or not found")
-	ErrRevokeTokenFailed = errors.New("failed to revoke refresh token")
-	ErrSaveTokenFailed   = errors.New("failed to save refresh token")
-
-	ErrNilContext              = errors.New("outbox worker: nil context")
-	ErrInvalidPagination       = errors.New("invalid pagination parameters")
-	ErrSessionValidationFailed = errors.New("failed to validate session")
 )
 
 type ErrLimitExceeded struct {

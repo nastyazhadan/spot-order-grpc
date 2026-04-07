@@ -6,12 +6,11 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 
 	authjwt "github.com/nastyazhadan/spot-order-grpc/shared/auth/jwt"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
+	authErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 )
 
@@ -57,16 +56,16 @@ func UnaryServerInterceptor(
 
 		userID, err := uuid.Parse(claims.Subject)
 		if err != nil {
-			return nil, status.Error(codes.Unauthenticated, "invalid user_id in token")
+			return nil, authErrors.ErrInvalidUserIDInToken
 		}
 
 		ctx, ok := requestctx.ContextWithUserID(ctx, userID)
 		if !ok {
-			return nil, status.Error(codes.Internal, "internal auth context error")
+			return nil, authErrors.ErrInternalAuthContext
 		}
 		ctx, ok = requestctx.ContextWithUserRoles(ctx, userRoles)
 		if !ok {
-			return nil, status.Error(codes.Internal, "internal auth context error")
+			return nil, authErrors.ErrInternalAuthContext
 		}
 
 		return handler(ctx, request)
@@ -95,23 +94,23 @@ func shouldSkip(fullMethod string, skipMethods map[string]struct{}) bool {
 func bearerTokenFromContext(ctx context.Context) (string, error) {
 	md, found := metadata.FromIncomingContext(ctx)
 	if !found {
-		return "", status.Error(codes.Unauthenticated, "missing metadata")
+		return "", authErrors.ErrMissingMetadata
 	}
 
 	values := md.Get(authorizationHeader)
 	if len(values) == 0 {
-		return "", status.Error(codes.Unauthenticated, "missing authorization token")
+		return "", authErrors.ErrMissingAuthToken
 	}
 
 	authHeader := strings.TrimSpace(values[0])
 	lower := strings.ToLower(authHeader)
 	if !strings.HasPrefix(lower, bearerPrefix) {
-		return "", status.Error(codes.Unauthenticated, "missing authorization token")
+		return "", authErrors.ErrMissingAuthToken
 	}
 
 	tokenString := strings.TrimSpace(authHeader[len(bearerPrefix):])
 	if tokenString == "" {
-		return "", status.Error(codes.Unauthenticated, "missing authorization token")
+		return "", authErrors.ErrMissingAuthToken
 	}
 
 	return tokenString, nil

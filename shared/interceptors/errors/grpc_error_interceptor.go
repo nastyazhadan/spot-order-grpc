@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
+	"github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
@@ -44,54 +44,60 @@ func mapError(ctx context.Context, err error, logger *zapLogger.Logger) error {
 	}
 
 	switch {
-	// Штатные ошибки - warn, ошибки системы - error
-	case errors.Is(err, serviceErrors.ErrMarketsNotFound),
-		errors.Is(err, serviceErrors.ErrMarketNotFound),
-		errors.Is(err, serviceErrors.ErrOrderNotFound):
+	case errors.Is(err, service.ErrMarketsNotFound),
+		errors.Is(err, service.ErrMarketNotFound),
+		errors.Is(err, service.ErrOrderNotFound):
 		logger.Warn(ctx, "resource not found", zap.Error(err))
 		return status.Error(codes.NotFound, "resource not found")
 
-	case errors.Is(err, serviceErrors.ErrMarketUnavailable):
+	case errors.Is(err, service.ErrMarketUnavailable):
 		logger.Warn(ctx, "market temporarily unavailable", zap.Error(err))
 		return status.Error(codes.Unavailable, "market temporarily unavailable")
 
-	case errors.Is(err, serviceErrors.ErrMarketsUnavailable):
+	case errors.Is(err, service.ErrMarketsUnavailable):
 		logger.Warn(ctx, "markets are temporarily unavailable", zap.Error(err))
 		return status.Error(codes.Unavailable, err.Error())
 
-	case errors.Is(err, serviceErrors.ErrOrderAlreadyExists):
+	case errors.Is(err, service.ErrOrderAlreadyExists):
 		logger.Warn(ctx, "order already exists", zap.Error(err))
 		return status.Error(codes.AlreadyExists, "order already exists")
 
-	case errors.Is(err, serviceErrors.ErrRateLimitExceeded):
+	case errors.Is(err, service.ErrRateLimitExceeded):
 		logger.Warn(ctx, "rate limit exceeded", zap.Error(err))
 		return status.Error(codes.ResourceExhausted, err.Error())
-
-	case errors.Is(err, serviceErrors.ErrUserRoleNotSpecified):
-		logger.Warn(ctx, "user role not specified", zap.Error(err))
-		return status.Error(codes.Unauthenticated, err.Error())
-
-	case errors.Is(err, serviceErrors.ErrInvalidSubject),
-		errors.Is(err, serviceErrors.ErrInvalidJTI),
-		errors.Is(err, serviceErrors.ErrTokenRevoked):
-		logger.Warn(ctx, "refresh token error", zap.Error(err))
-		return status.Error(codes.Unauthenticated, "refresh token error")
 
 	case errors.Is(err, gobreaker.ErrOpenState),
 		errors.Is(err, gobreaker.ErrTooManyRequests):
 		return status.Error(codes.Unavailable, "service temporarily unavailable")
 
-	case errors.Is(err, serviceErrors.ErrMarketDisabled):
+	case errors.Is(err, service.ErrMarketDisabled):
 		logger.Warn(ctx, "market is disabled", zap.Error(err))
 		return status.Error(codes.FailedPrecondition, "market is disabled")
 
-	case errors.Is(err, serviceErrors.ErrRevokeTokenFailed),
-		errors.Is(err, serviceErrors.ErrSaveTokenFailed):
-		logger.Error(ctx, "token store failure", zap.Error(err))
-		return status.Error(codes.Internal, "internal error")
+	case errors.Is(err, service.ErrUserRoleNotSpecified),
+		errors.Is(err, service.ErrMissingMetadata),
+		errors.Is(err, service.ErrMissingAuthToken),
+		errors.Is(err, service.ErrInvalidToken),
+		errors.Is(err, service.ErrTokenExpired),
+		errors.Is(err, service.ErrInvalidTokenType),
+		errors.Is(err, service.ErrMissingTokenSubject),
+		errors.Is(err, service.ErrMissingTokenSessionID),
+		errors.Is(err, service.ErrMissingUserRoles),
+		errors.Is(err, service.ErrInvalidUserRoles),
+		errors.Is(err, service.ErrInvalidUserIDInToken),
+		errors.Is(err, service.ErrInvalidSubject),
+		errors.Is(err, service.ErrInvalidJTI),
+		errors.Is(err, service.ErrTokenRevoked):
+		logger.Warn(ctx, "authentication failed", zap.Error(err))
+		return status.Error(codes.Unauthenticated, "authentication failed")
 
-	case errors.Is(err, serviceErrors.ErrSessionValidationFailed):
-		logger.Error(ctx, "session validation failure", zap.Error(err))
+	case errors.Is(err, service.ErrSessionValidationFailed),
+		errors.Is(err, service.ErrSaveTokenFailed),
+		errors.Is(err, service.ErrSignAccessTokenFailed),
+		errors.Is(err, service.ErrSignRefreshTokenFailed),
+		errors.Is(err, service.ErrBuildTokenClaimsFailed),
+		errors.Is(err, service.ErrInternalAuthContext):
+		logger.Error(ctx, "authentication internal failure", zap.Error(err))
 		return status.Error(codes.Internal, "internal error")
 
 	default:

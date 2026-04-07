@@ -18,7 +18,7 @@ const (
 )
 
 // Атомарно валидирует активную refresh/session-связку,
-// ротирует refresh token, обновляет session ID и указатель на текущий refresh key
+// ротирует refresh token, обновляет указатель на текущий refresh key
 var rotateScript = redisGo.NewScript(`
 	local oldRefreshKey = KEYS[1]
 	local newRefreshKey = KEYS[2]
