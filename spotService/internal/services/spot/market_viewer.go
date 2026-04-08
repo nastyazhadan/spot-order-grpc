@@ -409,6 +409,7 @@ func (s *MarketViewer) handleWarmupSetError(
 
 func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 	const op = "MarketViewer.RefreshAll"
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -416,43 +417,37 @@ func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 	refreshCtx := context.WithoutCancel(ctx)
 
 	for _, roleKey := range cacheRoleKeys {
-		if err := func() error {
-			roleCtx, cancel := context.WithTimeout(refreshCtx, s.serviceTimeout)
-			defer cancel()
+		roleCtx, cancel := context.WithTimeout(refreshCtx, s.serviceTimeout)
 
-			markets, err := s.marketRepository.GetMarketsPage(roleCtx, roleKey, s.cacheLimit+1, 0)
-			if err != nil {
-				if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
-					return s.invalidateMarketsCache(refreshCtx)
-				}
-
-				metrics.CacheWarmupsTotal.
-					WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
-
-				return fmt.Errorf("%s: load head cache for role %s: %w", op, roleKey, err)
-			}
-
-			if err = s.marketCacheRepository.SetMarkets(refreshCtx, markets, roleKey, s.cacheTTL); err != nil {
-				metrics.CacheWarmupsTotal.
-					WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
-
-				return fmt.Errorf("%s: set cache for role %s: %w", op, roleKey, err)
+		markets, err := s.marketRepository.GetMarketsPage(roleCtx, roleKey, s.cacheLimit+1, 0)
+		cancel()
+		if err != nil {
+			if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
+				return s.invalidateMarketsCache(refreshCtx)
 			}
 
 			metrics.CacheWarmupsTotal.
-				WithLabelValues(s.serviceName, "refresh_all", roleKey, "success").Inc()
+				WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
 
-			return nil
-		}(); err != nil {
-			return err
+			return fmt.Errorf("%s: load head cache for role %s: %w", op, roleKey, err)
 		}
+
+		if err = s.marketCacheRepository.SetMarkets(refreshCtx, markets, roleKey, s.cacheTTL); err != nil {
+			metrics.CacheWarmupsTotal.
+				WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
+
+			return fmt.Errorf("%s: set cache for role %s: %w", op, roleKey, err)
+		}
+
+		metrics.CacheWarmupsTotal.
+			WithLabelValues(s.serviceName, "refresh_all", roleKey, "success").Inc()
 	}
 	return nil
 }
 
 // Удаление всех ключей при пустом market store
 func (s *MarketViewer) invalidateMarketsCache(ctx context.Context) error {
-	const op = "MarketViewer.invalidateAllCache"
+	const op = "MarketViewer.invalidateMarketsCache"
 
 	for _, roleKey := range cacheRoleKeys {
 		if err := s.marketCacheRepository.DeleteMarkets(ctx, roleKey); err != nil {

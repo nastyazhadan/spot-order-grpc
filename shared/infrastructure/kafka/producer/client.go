@@ -259,9 +259,7 @@ func (c *Client) waitPublishResult(
 				zap.String("topic", request.topic),
 				zap.Error(ctx.Err()),
 			)
-
-			tracing.RecordError(request.span, ctx.Err())
-			request.finish(publishResult{err: ctx.Err()})
+			// Чтобы не было лишнего retry
 			ctxDone = nil
 
 		case <-c.closed:
