@@ -151,9 +151,9 @@ func ValidateMetricsConfig(fieldPrefix string, cfg MetricsConfig) error {
 		)
 	}
 
-	if cfg.ShutdownTimeout < 0 {
+	if cfg.ShutdownTimeout <= 0 {
 		return fmt.Errorf(
-			"%s.shutdown_timeout must be greater than or equal to 0, got %s",
+			"%s.shutdown_timeout must be greater than 0, got %s",
 			fieldPrefix,
 			cfg.ShutdownTimeout,
 		)

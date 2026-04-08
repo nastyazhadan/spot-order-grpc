@@ -91,15 +91,9 @@ func (s *MarketViewer) ViewMarkets(
 	limit, offset uint64,
 ) ([]models.Market, uint64, bool, error) {
 	const op = "MarketViewer.ViewMarkets"
-	if ctx == nil {
-		ctx = context.Background()
-	}
 
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.serviceTimeout)
-		defer cancel()
-	}
+	ctx, cancel := contextWithTimeout(ctx, s.serviceTimeout)
+	defer cancel()
 
 	ctx, span := tracing.StartSpan(ctx, "spot.view_markets")
 	defer span.End()
@@ -217,15 +211,9 @@ func (s *MarketViewer) GetMarketByID(
 	id uuid.UUID,
 ) (models.Market, error) {
 	const op = "MarketViewer.GetMarketByID"
-	if ctx == nil {
-		ctx = context.Background()
-	}
 
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.serviceTimeout)
-		defer cancel()
-	}
+	ctx, cancel := contextWithTimeout(ctx, s.serviceTimeout)
+	defer cancel()
 
 	ctx, span := tracing.StartSpan(ctx, "spot.get_market_by_id",
 		trace.WithAttributes(attributes.MarketIDValue(id.String())),
@@ -578,4 +566,25 @@ func normalizeLimit(limit, defaultLimit, maxLimit uint64) uint64 {
 		return maxLimit
 	}
 	return limit
+}
+
+func contextWithTimeout(
+	ctx context.Context,
+	timeout time.Duration,
+) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if timeout <= 0 {
+		return ctx, func() {}
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		if time.Until(deadline) <= timeout {
+			return ctx, func() {}
+		}
+	}
+
+	return context.WithTimeout(ctx, timeout)
 }

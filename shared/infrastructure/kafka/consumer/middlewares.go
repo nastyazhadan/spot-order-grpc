@@ -135,7 +135,7 @@ func DLQMiddleware(
 			retryCount := 0
 			var exhaustedErr RetryExhaustedError
 			if errors.As(err, &exhaustedErr) {
-				retryCount = exhaustedErr.RetryCount
+				retryCount = exhaustedErr.RetryCount + 1
 				err = exhaustedErr.Err
 			}
 

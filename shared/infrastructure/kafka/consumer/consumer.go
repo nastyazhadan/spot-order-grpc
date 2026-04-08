@@ -23,7 +23,7 @@ var dlqEssentialHeaders = map[string]struct{}{
 	"dlq-original-topic":        {},
 	"dlq-original-partition":    {},
 	"dlq-original-offset":       {},
-	"dlq-retry-count":           {},
+	"dlq-attempts-total":        {},
 	"dlq-error":                 {},
 	"dlq-payload-intact":        {},
 	"dlq-metadata-trimmed":      {},
@@ -195,7 +195,7 @@ func buildDLQHeaders(
 	headers["dlq-original-topic"] = []byte(message.Topic)
 	headers["dlq-original-partition"] = []byte(strconv.FormatInt(int64(message.Partition), 10))
 	headers["dlq-original-offset"] = []byte(strconv.FormatInt(message.Offset, 10))
-	headers["dlq-retry-count"] = []byte(strconv.Itoa(retryCount))
+	headers["dlq-attempts-total"] = []byte(strconv.Itoa(retryCount))
 	headers["dlq-error"] = truncateUTF8Bytes([]byte(lastError.Error()), dlqErrorMaxBytes)
 	// Явный флаг для DLQ
 	headers["dlq-payload-intact"] = []byte("true")

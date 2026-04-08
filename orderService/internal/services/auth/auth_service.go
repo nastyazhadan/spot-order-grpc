@@ -56,7 +56,7 @@ func (s *AuthService) Refresh(
 	ctx context.Context,
 	refreshToken string,
 ) (newAccessToken, newRefreshToken string, err error) {
-	ctx, cancel := s.contextWithTimeout(ctx)
+	ctx, cancel := contextWithTimeout(ctx, s.timeout)
 	defer cancel()
 
 	userID, roles, oldJTI, oldSessionID, err := s.validateRefreshToken(ctx, refreshToken)
@@ -146,22 +146,23 @@ func (s *AuthService) generateTokenPair(
 	return accessToken, refreshToken, nil
 }
 
-func (s *AuthService) contextWithTimeout(
+func contextWithTimeout(
 	ctx context.Context,
+	timeout time.Duration,
 ) (context.Context, context.CancelFunc) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	if s.timeout <= 0 {
+	if timeout <= 0 {
 		return ctx, func() {}
 	}
 
 	if deadline, ok := ctx.Deadline(); ok {
-		if time.Until(deadline) <= s.timeout {
+		if time.Until(deadline) <= timeout {
 			return ctx, func() {}
 		}
 	}
 
-	return context.WithTimeout(ctx, s.timeout)
+	return context.WithTimeout(ctx, timeout)
 }

@@ -74,15 +74,9 @@ func (s *CompensationService) ProcessMarketStateChanged(
 	event sharedModels.MarketStateChangedEvent,
 ) error {
 	const op = "MarketCompensationService.ProcessMarketStateChanged"
-	if ctx == nil {
-		ctx = context.Background()
-	}
 
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.config.Timeouts.Service)
-		defer cancel()
-	}
+	ctx, cancel := contextWithTimeout(ctx, s.config.Timeouts.Service)
+	defer cancel()
 
 	ctx, span := tracing.StartSpan(ctx, "market_compensation.process",
 		trace.WithAttributes(

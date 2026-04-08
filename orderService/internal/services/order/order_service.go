@@ -112,15 +112,9 @@ func (s *OrderService) CreateOrder(
 	quantity int64,
 ) (uuid.UUID, orderModel.OrderStatus, error) {
 	const op = "OrderService.CreateOrder"
-	if ctx == nil {
-		ctx = context.Background()
-	}
 
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.config.Timeout)
-		defer cancel()
-	}
+	ctx, cancel := contextWithTimeout(ctx, s.config.Timeout)
+	defer cancel()
 
 	if err := s.checkRateLimit(ctx, userID, s.rateLimiters.Create, "create_order"); err != nil {
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
@@ -143,15 +137,9 @@ func (s *OrderService) GetOrderStatus(
 	orderID, userID uuid.UUID,
 ) (orderModel.OrderStatus, error) {
 	const op = "OrderService.GetOrderStatus"
-	if ctx == nil {
-		ctx = context.Background()
-	}
 
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.config.Timeout)
-		defer cancel()
-	}
+	ctx, cancel := contextWithTimeout(ctx, s.config.Timeout)
+	defer cancel()
 
 	if err := s.checkRateLimit(ctx, userID, s.rateLimiters.Get, "get_order_status"); err != nil {
 		return orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
@@ -468,4 +456,25 @@ func buildOrderCreatedEvent(
 		Status:    order.Status,
 		CreatedAt: now,
 	}
+}
+
+func contextWithTimeout(
+	ctx context.Context,
+	timeout time.Duration,
+) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if timeout <= 0 {
+		return ctx, func() {}
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		if time.Until(deadline) <= timeout {
+			return ctx, func() {}
+		}
+	}
+
+	return context.WithTimeout(ctx, timeout)
 }
