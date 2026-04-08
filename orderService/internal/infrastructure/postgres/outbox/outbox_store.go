@@ -250,8 +250,8 @@ func (s *OutboxStore) MarkFailed(ctx context.Context, event models.OutboxEvent, 
 	return nil
 }
 
-// ReleaseStuckEvents сбрасывает застрявшие события обратно в статус pending.
-// Застрявшее событие — то, которое осталось в processing дольше processingTimeout.
+// ReleaseStuckEvents сбрасывает застрявшие события обратно в статус pending
+// и делает их немедленно доступными для повторной обработки
 func (s *OutboxStore) ReleaseStuckEvents(ctx context.Context, stuckBefore time.Time) (int64, error) {
 	const op = "OutboxStore.ReleaseStuckEvents"
 
@@ -266,7 +266,8 @@ func (s *OutboxStore) ReleaseStuckEvents(ctx context.Context, stuckBefore time.T
 	result, err := s.pool.Exec(ctx, `
 		UPDATE outbox
 		SET status    = 'pending',
-		    locked_at = NULL
+		    locked_at = NULL,
+		    available_at = NOW()
 		WHERE status = 'processing'
 		  AND locked_at < $1
 	`, stuckBefore)

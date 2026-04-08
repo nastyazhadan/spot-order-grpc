@@ -81,7 +81,9 @@ func (c *Client) runAckLoop() {
 	}
 }
 
-func (c *Client) handleSuccess(message *sarama.ProducerMessage) {
+func (c *Client) handleSuccess(
+	message *sarama.ProducerMessage,
+) {
 	request, ok := message.Metadata.(*publishRequest)
 	if !ok || request == nil {
 		return
@@ -111,7 +113,9 @@ func (c *Client) handleSuccess(message *sarama.ProducerMessage) {
 	})
 }
 
-func (c *Client) handleError(producerError *sarama.ProducerError) {
+func (c *Client) handleError(
+	producerError *sarama.ProducerError,
+) {
 	if producerError == nil || producerError.Msg == nil {
 		return
 	}
@@ -142,7 +146,11 @@ func (c *Client) handleError(producerError *sarama.ProducerError) {
 	})
 }
 
-func (c *Client) publish(ctx context.Context, defaultTopic string, message kafka.Message) error {
+func (c *Client) publish(
+	ctx context.Context,
+	defaultTopic string,
+	message kafka.Message,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -233,7 +241,10 @@ func (c *Client) enqueue(
 	}
 }
 
-func (c *Client) waitPublishResult(ctx context.Context, request *publishRequest) error {
+func (c *Client) waitPublishResult(
+	ctx context.Context,
+	request *publishRequest,
+) error {
 	select {
 	case <-request.done:
 		return request.result.err
@@ -245,6 +256,9 @@ func (c *Client) waitPublishResult(ctx context.Context, request *publishRequest)
 			zap.String("topic", request.topic),
 			zap.Error(ctx.Err()),
 		)
+
+		tracing.RecordError(request.span, ctx.Err())
+		request.finish(publishResult{err: ctx.Err()})
 		return ctx.Err()
 
 	case <-c.closed:
