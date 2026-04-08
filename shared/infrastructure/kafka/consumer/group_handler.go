@@ -165,6 +165,20 @@ func (g *groupHandler) handleMessageResult(
 
 		return err
 
+	case IsNonRetryableError(err):
+		tracing.RecordError(span, err)
+		metrics.KafkaMessagesConsumedTotal.WithLabelValues(g.serviceName, message.Topic, "skipped").Inc()
+
+		g.logger.Warn(ctx, "Kafka message is non-retryable and will be skipped",
+			zap.String("topic", message.Topic),
+			zap.Int32("partition", message.Partition),
+			zap.Int64("offset", message.Offset),
+			zap.Error(err),
+		)
+
+		session.MarkMessage(message, "")
+		return nil
+
 	default:
 		tracing.RecordError(span, err)
 		metrics.KafkaMessagesConsumedTotal.WithLabelValues(g.serviceName, message.Topic, "retry").Inc()

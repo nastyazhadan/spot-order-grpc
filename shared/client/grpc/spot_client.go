@@ -116,13 +116,12 @@ func mapViewMarketsError(err error) error {
 	case codes.NotFound:
 		return serviceErrors.ErrMarketsNotFound
 	case codes.Unavailable,
-		codes.DeadlineExceeded:
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted,
+		codes.Unauthenticated,
+		codes.PermissionDenied:
 		return serviceErrors.ErrMarketsUnavailable
 	default:
-		if shouldPassThroughGRPCCode(stat.Code()) {
-			return err
-		}
-
 		return fmt.Errorf("spot client view markets: %w", err)
 	}
 }
@@ -149,28 +148,16 @@ func mapGetMarketByIDError(err error, marketID uuid.UUID) error {
 	switch stat.Code() {
 	case codes.NotFound:
 		return sharedErrors.ErrMarketNotFound{ID: marketID}
-	case codes.Unavailable,
-		codes.DeadlineExceeded:
-		return serviceErrors.ErrUnavailable{ID: marketID}
 	case codes.FailedPrecondition:
 		return serviceErrors.ErrDisabled{ID: marketID}
-	default:
-		if shouldPassThroughGRPCCode(stat.Code()) {
-			return err
-		}
-
-		return fmt.Errorf("spot client get market by id: %w", err)
-	}
-}
-
-func shouldPassThroughGRPCCode(code codes.Code) bool {
-	switch code {
-	case codes.ResourceExhausted,
+	case codes.Unavailable,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted,
 		codes.Unauthenticated,
 		codes.PermissionDenied:
-		return true
+		return serviceErrors.ErrUnavailable{ID: marketID}
 	default:
-		return false
+		return fmt.Errorf("spot client get market by id: %w", err)
 	}
 }
 

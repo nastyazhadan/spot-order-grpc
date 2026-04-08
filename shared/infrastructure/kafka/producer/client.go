@@ -245,36 +245,40 @@ func (c *Client) waitPublishResult(
 	ctx context.Context,
 	request *publishRequest,
 ) error {
-	select {
-	case <-request.done:
-		return request.result.err
+	ctxDone := ctx.Done()
 
-	case <-ctx.Done():
-		c.logger.Warn(
-			ctx,
-			"Kafka publish wait canceled by context",
-			zap.String("topic", request.topic),
-			zap.Error(ctx.Err()),
-		)
-
-		tracing.RecordError(request.span, ctx.Err())
-		request.finish(publishResult{err: ctx.Err()})
-		return ctx.Err()
-
-	case <-c.closed:
-		if request.isDone() {
+	for {
+		select {
+		case <-request.done:
 			return request.result.err
+
+		case <-ctxDone:
+			c.logger.Warn(
+				ctx,
+				"Kafka publish wait canceled by context",
+				zap.String("topic", request.topic),
+				zap.Error(ctx.Err()),
+			)
+
+			tracing.RecordError(request.span, ctx.Err())
+			request.finish(publishResult{err: ctx.Err()})
+			ctxDone = nil
+
+		case <-c.closed:
+			if request.isDone() {
+				return request.result.err
+			}
+
+			c.logger.Error(
+				ctx,
+				"Kafka producer stopped before publish result was received",
+				zap.String("topic", request.topic),
+			)
+
+			tracing.RecordError(request.span, ErrProducerUnavailable)
+			request.finish(publishResult{err: ErrProducerUnavailable})
+			return ErrProducerUnavailable
 		}
-
-		c.logger.Error(
-			ctx,
-			"Kafka producer stopped before publish result was received",
-			zap.String("topic", request.topic),
-		)
-
-		tracing.RecordError(request.span, ErrProducerUnavailable)
-		request.finish(publishResult{err: ErrProducerUnavailable})
-		return ErrProducerUnavailable
 	}
 }
 

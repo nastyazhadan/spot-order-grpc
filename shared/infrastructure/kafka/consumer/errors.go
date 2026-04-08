@@ -33,6 +33,18 @@ func (e MessageTooLargeError) Error() string {
 	return fmt.Sprintf("kafka message too large: %d > %d", e.Size, e.Limit)
 }
 
+type NonRetryableError struct {
+	Err error
+}
+
+func (e NonRetryableError) Error() string {
+	return e.Err.Error()
+}
+
+func (e NonRetryableError) Unwrap() error {
+	return e.Err
+}
+
 func IsControlFlowError(err error) bool {
 	return errors.Is(err, ErrSkipMessage) ||
 		errors.Is(err, ErrRestartConsumerSession) ||
@@ -41,6 +53,9 @@ func IsControlFlowError(err error) bool {
 
 func IsNonRetryableError(err error) bool {
 	var tooLargeError MessageTooLargeError
+	var nonRetryableError NonRetryableError
 
-	return errors.As(err, &tooLargeError) || IsControlFlowError(err)
+	return errors.As(err, &tooLargeError) ||
+		errors.As(err, &nonRetryableError) ||
+		IsControlFlowError(err)
 }

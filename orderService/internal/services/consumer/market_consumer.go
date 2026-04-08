@@ -80,7 +80,9 @@ func (c *MarketConsumer) handleMarketStateChanged(ctx context.Context, msg kafka
 			zap.Error(err),
 		)
 
-		return fmt.Errorf("%s: %w", op, err)
+		return consumer.NonRetryableError{
+			Err: fmt.Errorf("%s: %w", op, err),
+		}
 	}
 
 	span.SetAttributes(
