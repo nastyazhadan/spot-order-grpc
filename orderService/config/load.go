@@ -6,18 +6,16 @@ import (
 	"os"
 
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
-	"github.com/spf13/viper"
 )
 
-const configDir = "."
-
 func Load() (*config.OrderConfig, error) {
-	if err := config.LoadAll(configDir); err != nil {
+	viper, err := config.NewViper(resolveConfigDir())
+	if err != nil {
 		return nil, err
 	}
 
 	var cfg config.OrderConfig
-	if err := viper.UnmarshalKey("order", &cfg); err != nil {
+	if err = viper.UnmarshalKey("order", &cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal order config: %w", err)
 	}
 
@@ -33,7 +31,7 @@ func Load() (*config.OrderConfig, error) {
 
 	cfg.Kafka.Producer.Compression = config.NormalizeKafkaCompression(cfg.Kafka.Producer.Compression)
 
-	if err := validateOrderConfig(cfg); err != nil {
+	if err = validateOrderConfig(cfg); err != nil {
 		return nil, err
 	}
 
@@ -79,6 +77,15 @@ func validateOrderConfig(cfg config.OrderConfig) error {
 	}
 
 	return nil
+}
+
+func resolveConfigDir() string {
+	configDir := os.Getenv("CONFIG_DIR")
+	if configDir == "" {
+		return "."
+	}
+
+	return configDir
 }
 
 func validateOrderService(cfg config.OrderConfig) error {

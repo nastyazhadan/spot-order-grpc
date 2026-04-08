@@ -18,7 +18,7 @@ type migrateSection struct {
 
 func LoadMigrate() (*MigrateConfig, error) {
 	var section migrateSection
-	if err := config.LoadKey(configDir, "spot", &section); err != nil {
+	if err := config.LoadKey(resolveConfigDir(), "spot", &section); err != nil {
 		return nil, err
 	}
 

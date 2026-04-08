@@ -52,7 +52,8 @@ func (p *MarketProducer) PublishMarketStateChanged(
 	const op = "MarketProducer.PublishMarketStateChanged"
 
 	if len(events) == 0 {
-		return nil
+		// Сохраняем курсор даже если событие не опубликовано
+		return p.saveCursor(ctx, cursor)
 	}
 
 	ctx, span := tracing.StartSpan(ctx, "producer.publish_market_state_changed")
@@ -154,4 +155,34 @@ func (p *MarketProducer) commitTransaction(
 	defer cancel()
 
 	return transaction.Commit(commitCtx)
+}
+
+func (p *MarketProducer) saveCursor(
+	ctx context.Context,
+	cursor models.PollerCursor,
+) error {
+	const op = "MarketProducer.saveCursorOnly"
+
+	transaction, err := p.outboxWriter.BeginTransaction(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: begin tx: %w", op, err)
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			p.rollbackTransaction(ctx, transaction, p.logger, op)
+		}
+	}()
+
+	if err = p.cursorStore.SaveCursorTransaction(ctx, transaction, cursor); err != nil {
+		return fmt.Errorf("%s: save cursor: %w", op, err)
+	}
+
+	if err = p.commitTransaction(ctx, transaction); err != nil {
+		return fmt.Errorf("%s: commit: %w", op, err)
+	}
+
+	committed = true
+	return nil
 }

@@ -9,19 +9,22 @@ import (
 	"github.com/spf13/viper"
 )
 
-func LoadAll(configDir string) error {
-	viper.Reset()
-	return loadIntoViper(configDir, viper.GetViper())
-}
-
-func LoadKey(configDir, key string, target any) error {
+func NewViper(configDir string) (*viper.Viper, error) {
 	v := viper.New()
 
 	if err := loadIntoViper(configDir, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func LoadKey(configDir, key string, target any) error {
+	v, err := NewViper(configDir)
+	if err != nil {
 		return err
 	}
 
-	if err := v.UnmarshalKey(key, target); err != nil {
+	if err = v.UnmarshalKey(key, target); err != nil {
 		return fmt.Errorf("unmarshal %s config: %w", key, err)
 	}
 
