@@ -22,7 +22,6 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/consumer"
 	authv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/auth/v1"
 	orderv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/order/v1"
-	spotv1 "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
 	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/health"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/kafka/producer"
@@ -306,7 +305,6 @@ func registerReadiness(
 	healthServer *health.Server,
 	pool *pgxpool.Pool,
 	redisClient *redis.Client,
-	connection *grpc.ClientConn,
 	logger *zapLogger.Logger,
 	cfg config.OrderConfig,
 ) {
@@ -318,7 +316,7 @@ func registerReadiness(
 		done     chan struct{}
 	)
 
-	monitor := buildReadinessMonitor(cfg, pool, healthServer, redisClient, connection, logger)
+	monitor := buildReadinessMonitor(cfg, pool, healthServer, redisClient, logger)
 
 	lifecycle.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
@@ -362,7 +360,6 @@ func buildReadinessMonitor(
 	pool *pgxpool.Pool,
 	healthServer *health.Server,
 	redisClient *redis.Client,
-	connection *grpc.ClientConn,
 	logger *zapLogger.Logger,
 ) *health.ReadinessMonitor {
 	monitor := health.NewReadinessMonitor(
@@ -389,16 +386,6 @@ func buildReadinessMonitor(
 			Name: "redis",
 			Check: func(ctx context.Context) error {
 				return redisClient.Ping(ctx).Err()
-			},
-		},
-		health.DependencyCheck{
-			Name: "spot_service",
-			Check: func(ctx context.Context) error {
-				return health.CheckHealth(
-					ctx,
-					connection,
-					spotv1.SpotInstrumentService_ServiceDesc.ServiceName,
-				)
 			},
 		},
 	)

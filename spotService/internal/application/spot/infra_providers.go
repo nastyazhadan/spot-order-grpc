@@ -158,7 +158,7 @@ func provideSaramaAsyncProducer(cfg config.SpotConfig) (sarama.AsyncProducer, er
 
 	asyncProducer, err := sarama.NewAsyncProducer(cfg.Kafka.Brokers, saramaCfg)
 	if err != nil {
-		return nil, fmt.Errorf("sarama.NewSyncProducer: %w", err)
+		return nil, fmt.Errorf("sarama.NewAsyncProducer: %w", err)
 	}
 
 	return asyncProducer, nil

@@ -239,13 +239,13 @@ recoverer → tracer → meter → logger → errorMapper → auth → rateLimit
 | `logger` | `interceptors/logging/zap` | Логирует метод, статус, длительность с trace_id                      |
 | `auth` | `interceptors/auth` | Парсит JWT, кладёт user_id и roles в контекст                        |
 | `rateLimiter` | `interceptors/ratelimit` | Per-instance RPS-лимит (токен-бакет)                                 |
-| `errorMapper` | `interceptors/errors` | Переводит доменные ошибки и оишбки JWT-аутентификации в gRPC-статусы |
+| `errorMapper` | `interceptors/errors` | Переводит доменные ошибки и ошибки JWT-аутентификации в gRPC-статусы |
 | `validator` | `interceptors/validate` | Protovalidate: проверяет поля запроса по аннотациям                  |
 
 ### SpotInstrumentService
 
 ```
-recoverer → tracer → meter → logger → auth → rateLimiter → errorMapper → validator
+recoverer → tracer → meter → logger → errorMapper → auth → rateLimiter → validator
 ```
 
 SpotService тоже использует JWT auth interceptor.

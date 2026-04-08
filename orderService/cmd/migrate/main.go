@@ -13,9 +13,9 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load()
+	cfg, err := config.LoadMigrate()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		log.Fatalf("failed to load migrate config: %v", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -23,7 +23,7 @@ func main() {
 
 	migrationError := db.MigratePostgres(
 		ctx,
-		cfg.Service.DBURI,
+		cfg.DBURI,
 		migrations.Migrations,
 		db.PoolConfig{
 			MaxConnections:  cfg.PostgresPool.MaxConnections,
@@ -33,7 +33,7 @@ func main() {
 		},
 	)
 	if migrationError != nil {
-		log.Fatalf("failed to migrate order db: %v", err)
+		log.Fatalf("failed to migrate order db: %v", migrationError)
 	}
 
 	log.Println("order db migrations applied successfully")

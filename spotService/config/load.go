@@ -88,6 +88,13 @@ func validateSpotService(cfg config.SpotConfig) error {
 		)
 	}
 
+	if cfg.Timeouts.Check <= 0 {
+		return fmt.Errorf(
+			"timeouts.check must be greater than 0, got %s",
+			cfg.Timeouts.Check,
+		)
+	}
+
 	if err := config.ValidateServiceConfig("service", cfg.Service, true); err != nil {
 		return err
 	}

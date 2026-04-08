@@ -68,8 +68,6 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_started
-      spot-service:
-        condition: service_healthy
       kafka:
         condition: service_healthy
     healthcheck:

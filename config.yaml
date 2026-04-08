@@ -115,6 +115,7 @@ spot:
     cache_limit: 500
   timeouts:
     service: 5s
+    check: 15s
   health:
     check_interval: 10s
     success_threshold: 1

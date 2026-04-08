@@ -10,6 +10,25 @@ import (
 )
 
 func LoadAll(configDir string) error {
+	viper.Reset()
+	return loadIntoViper(configDir, viper.GetViper())
+}
+
+func LoadKey(configDir, key string, target any) error {
+	v := viper.New()
+
+	if err := loadIntoViper(configDir, v); err != nil {
+		return err
+	}
+
+	if err := v.UnmarshalKey(key, target); err != nil {
+		return fmt.Errorf("unmarshal %s config: %w", key, err)
+	}
+
+	return nil
+}
+
+func loadIntoViper(configDir string, v *viper.Viper) error {
 	if configDir == "" {
 		configDir = "."
 	}
@@ -26,7 +45,6 @@ func LoadAll(configDir string) error {
 		return fmt.Errorf("load config.yaml file %q: %w", configPath, err)
 	}
 
-	viper.Reset()
 	viper.SetConfigFile(configPath)
 
 	if err := viper.ReadInConfig(); err != nil {
