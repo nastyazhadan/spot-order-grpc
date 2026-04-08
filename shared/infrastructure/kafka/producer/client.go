@@ -238,6 +238,15 @@ func (c *Client) waitPublishResult(ctx context.Context, request *publishRequest)
 	case <-request.done:
 		return request.result.err
 
+	case <-ctx.Done():
+		c.logger.Warn(
+			ctx,
+			"Kafka publish wait canceled by context",
+			zap.String("topic", request.topic),
+			zap.Error(ctx.Err()),
+		)
+		return ctx.Err()
+
 	case <-c.closed:
 		if request.isDone() {
 			return request.result.err
@@ -251,7 +260,6 @@ func (c *Client) waitPublishResult(ctx context.Context, request *publishRequest)
 
 		tracing.RecordError(request.span, ErrProducerUnavailable)
 		request.finish(publishResult{err: ErrProducerUnavailable})
-
 		return ErrProducerUnavailable
 	}
 }

@@ -45,9 +45,9 @@ func loadIntoViper(configDir string, v *viper.Viper) error {
 		return fmt.Errorf("load config.yaml file %q: %w", configPath, err)
 	}
 
-	viper.SetConfigFile(configPath)
+	v.SetConfigFile(configPath)
 
-	if err := viper.ReadInConfig(); err != nil {
+	if err := v.ReadInConfig(); err != nil {
 		return fmt.Errorf("read config file %q: %w", configPath, err)
 	}
 

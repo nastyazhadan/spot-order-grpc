@@ -75,7 +75,7 @@ func (p *MarketPoller) Init(ctx context.Context) error {
 	if ctx == nil {
 		return fmt.Errorf("market poller init: nil context")
 	}
-	initCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.processingTimeout)
+	initCtx, cancel := context.WithTimeout(ctx, p.processingTimeout)
 	defer cancel()
 
 	if err := p.loadCursor(initCtx); err != nil {
