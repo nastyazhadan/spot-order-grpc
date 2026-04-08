@@ -112,6 +112,9 @@ func (s *OrderService) CreateOrder(
 	quantity int64,
 ) (uuid.UUID, orderModel.OrderStatus, error) {
 	const op = "OrderService.CreateOrder"
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
@@ -140,6 +143,9 @@ func (s *OrderService) GetOrderStatus(
 	orderID, userID uuid.UUID,
 ) (orderModel.OrderStatus, error) {
 	const op = "OrderService.GetOrderStatus"
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc

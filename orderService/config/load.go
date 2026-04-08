@@ -145,6 +145,10 @@ func validateOrderCircuitBreaker(cfg config.OrderConfig) error {
 		)
 	}
 
+	if cfg.CircuitBreaker.MaxRequests == 0 {
+		return errors.New("circuit_breaker.max_requests must be greater than 0")
+	}
+
 	if cfg.CircuitBreaker.MaxFailures == 0 {
 		return errors.New("circuit_breaker.max_failures must be greater than 0")
 	}

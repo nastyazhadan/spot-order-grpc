@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # ======= Этап 1: Сборка =======
 FROM golang:1.25.0 AS builder
 

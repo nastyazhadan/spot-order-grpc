@@ -152,6 +152,7 @@ func provideSaramaAsyncProducer(cfg config.OrderConfig) (sarama.AsyncProducer, e
 
 func provideConsumerGroup(cfg config.OrderConfig) (sarama.ConsumerGroup, error) {
 	saramaCfg := sarama.NewConfig()
+	saramaCfg.ClientID = cfg.Service.Name
 
 	saramaCfg.Consumer.Group.Session.Timeout = cfg.Kafka.Consumer.SessionTimeout
 	saramaCfg.Consumer.Group.Heartbeat.Interval = cfg.Kafka.Consumer.HeartbeatInterval
@@ -159,6 +160,15 @@ func provideConsumerGroup(cfg config.OrderConfig) (sarama.ConsumerGroup, error) 
 
 	saramaCfg.Consumer.Fetch.Max = cfg.Kafka.Consumer.MaxMessageBytes
 	saramaCfg.Consumer.Fetch.Default = cfg.Kafka.Consumer.MaxMessageBytes
+	saramaCfg.Consumer.Retry.Backoff = cfg.Kafka.Consumer.RetryBackoff
+
+	saramaCfg.Net.DialTimeout = cfg.Kafka.Consumer.SessionTimeout
+	saramaCfg.Net.ReadTimeout = cfg.Kafka.Consumer.SessionTimeout
+	saramaCfg.Net.WriteTimeout = cfg.Kafka.Consumer.SessionTimeout
+
+	saramaCfg.Metadata.Timeout = cfg.Kafka.Consumer.SessionTimeout
+	saramaCfg.Metadata.Retry.Max = cfg.Kafka.Consumer.MaxRetries
+	saramaCfg.Metadata.Retry.Backoff = cfg.Kafka.Consumer.RetryBackoff
 
 	group, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.Kafka.Consumer.GroupID, saramaCfg)
 	if err != nil {

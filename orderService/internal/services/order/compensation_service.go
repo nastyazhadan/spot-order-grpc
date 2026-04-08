@@ -74,6 +74,9 @@ func (s *CompensationService) ProcessMarketStateChanged(
 	event sharedModels.MarketStateChangedEvent,
 ) error {
 	const op = "MarketCompensationService.ProcessMarketStateChanged"
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc

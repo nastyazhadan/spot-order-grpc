@@ -91,6 +91,9 @@ func (s *MarketViewer) ViewMarkets(
 	limit, offset uint64,
 ) ([]models.Market, uint64, bool, error) {
 	const op = "MarketViewer.ViewMarkets"
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
@@ -214,6 +217,9 @@ func (s *MarketViewer) GetMarketByID(
 	id uuid.UUID,
 ) (models.Market, error) {
 	const op = "MarketViewer.GetMarketByID"
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
@@ -415,6 +421,9 @@ func (s *MarketViewer) handleWarmupSetError(
 
 func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 	const op = "MarketViewer.RefreshAll"
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	refreshCtx := context.WithoutCancel(ctx)
 

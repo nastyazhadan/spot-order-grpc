@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # ======= Этап 1: Сборка =======
 FROM golang:1.25.0 AS builder
 
@@ -12,10 +13,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     GOWORK=off go mod download
 
 WORKDIR /build
- COPY orderService ./orderService
- COPY shared ./shared
- COPY protos ./protos
- COPY config.yaml ./config.yaml
+COPY orderService ./orderService
+COPY shared ./shared
+COPY protos ./protos
+COPY config.yaml ./config.yaml
 
 WORKDIR /build/orderService
 RUN --mount=type=cache,target=/go/pkg/mod \
