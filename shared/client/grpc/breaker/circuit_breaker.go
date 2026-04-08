@@ -1,6 +1,8 @@
 package breaker
 
 import (
+	"context"
+
 	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -27,7 +29,7 @@ func New[T any](
 
 			if shouldTrip {
 				// Инфраструктурные логи без контекста
-				logger.Warn(nil, "circuit breaker is about to open",
+				logger.Warn(context.Background(), "circuit breaker is about to open",
 					zap.String("name", name),
 					zap.Uint32("consecutive_failures", counts.ConsecutiveFailures),
 					zap.Uint32("total_failures", counts.TotalFailures),
@@ -56,13 +58,13 @@ func New[T any](
 
 			switch to {
 			case gobreaker.StateOpen:
-				logger.Warn(nil, "circuit breaker is open", fields...)
+				logger.Warn(context.Background(), "circuit breaker is open", fields...)
 			case gobreaker.StateHalfOpen:
-				logger.Info(nil, "circuit breaker is half-open", fields...)
+				logger.Info(context.Background(), "circuit breaker is half-open", fields...)
 			case gobreaker.StateClosed:
-				logger.Info(nil, "circuit breaker is closed", fields...)
+				logger.Info(context.Background(), "circuit breaker is closed", fields...)
 			default:
-				logger.Info(nil, "circuit breaker state changed", fields...)
+				logger.Info(context.Background(), "circuit breaker state changed", fields...)
 			}
 		},
 	})

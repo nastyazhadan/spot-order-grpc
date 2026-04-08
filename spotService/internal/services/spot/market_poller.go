@@ -234,7 +234,7 @@ func (p *MarketPoller) processNextBatch(
 
 	events, err := p.buildMarketStateChangedEvents(ctx, markets)
 	if err != nil {
-		return updatedIDs, false, err
+		return nil, false, err
 	}
 
 	nextCursor := p.buildNextPollerCursor(markets)
@@ -246,7 +246,7 @@ func (p *MarketPoller) processNextBatch(
 			zap.String("last_seen_id", nextCursor.LastSeenID.String()),
 			zap.Error(err),
 		)
-		return updatedIDs, false, err
+		return nil, false, err
 	}
 
 	p.lastSeenAt = nextCursor.LastSeenAt
