@@ -251,14 +251,15 @@ services:
         KAFKA_LOG_RETENTION_HOURS: 168
         KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
         CLUSTER_ID: "Mk30EYBSD23fcvwNTJENDM5Qk"
+        KAFKA_HEAP_OPTS: "-Xms256m -Xmx512m"
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: [ "CMD", "bash", "-c", "echo > /dev/tcp/localhost/${KAFKA_INTERNAL_PORT}" ]
+      test: ["CMD-SHELL", "echo > /dev/tcp/127.0.0.1/9092"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 20s
+      retries: 20
+      start_period: 60s
     restart: unless-stopped
     networks:
       - microservices-net
