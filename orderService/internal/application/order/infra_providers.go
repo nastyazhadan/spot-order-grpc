@@ -120,6 +120,9 @@ func provideSaramaAsyncProducer(cfg config.OrderConfig) (sarama.AsyncProducer, e
 	saramaCfg.Producer.Timeout = cfg.Kafka.Producer.Timeout
 	saramaCfg.Producer.Retry.Max = cfg.Kafka.Producer.MaxRetries
 	saramaCfg.Producer.Retry.Backoff = cfg.Kafka.Producer.RetryBackoff
+	if cfg.Kafka.Producer.ChannelBufferSize > 0 {
+		saramaCfg.ChannelBufferSize = cfg.Kafka.Producer.ChannelBufferSize
+	}
 
 	saramaCfg.Net.DialTimeout = cfg.Kafka.Producer.Timeout
 	saramaCfg.Net.ReadTimeout = cfg.Kafka.Producer.Timeout

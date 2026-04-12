@@ -81,6 +81,7 @@ order:
       retry_backoff: 200ms
       timeout: 5s
       compression: "snappy"
+      channel_buffer_size: 1024
     consumer:
       group_id: "order-service"
       session_timeout: 30s
@@ -171,6 +172,7 @@ spot:
       retry_backoff: 200ms
       timeout: 5s
       compression: "snappy"
+      channel_buffer_size: 1024
     topics:
       market_state_changed: "market.state.changed"
     outbox:

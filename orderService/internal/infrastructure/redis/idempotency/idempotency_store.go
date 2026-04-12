@@ -31,6 +31,7 @@ type Entry struct {
 func (e Entry) IsCompleted() bool {
 	return e.Status == statusCompleted
 }
+
 func (e Entry) IsProcessing() bool {
 	return e.Status == statusProcessing
 }

@@ -68,6 +68,7 @@ gRPC-методы:
 - хранит блокировки рынков в Redis
 - пишет события в outbox и публикует их в Kafka
 - читает `market.state.changed` из Kafka и запускает компенсационную обработку
+- гарантирует идемпотентность CreateOrder через Redis: повторный запрос с теми же параметрами возвращает результат первого заказа
 
 ## Требования
 
@@ -404,17 +405,17 @@ task token:gen
 
 ### Возможные gRPC-статусы
 
-| Код | Причина                                                          |
-|---|------------------------------------------------------------------|
-| `OK` | Успешный вызов                                                   |
-| `INVALID_ARGUMENT` | пустые или некорректные поля, неверный UUID                      |
-| `UNAUTHENTICATED` | Ошибка аутентификации (authentication failed)                    |
-| `NOT_FOUND` | Рынок или ордер не найден                                        |
-| `ALREADY_EXISTS` | Ордер с таким ID уже существует                                  |
-| `FAILED_PRECONDITION` | Рынок отключён (`enabled = false`)                               |
-| `RESOURCE_EXHAUSTED` | Сработал per-user Rate Limiter или per-instance RPS-лимит        |
-| `UNAVAILABLE` | Сработал Circuit Breaker или недоступен зависимый сервис         |
-| `INTERNAL` | Внутренняя ошибка auth/session storage или другая ошибка сервера |
+| Код | Причина                                                                  |
+|---|--------------------------------------------------------------------------|
+| `OK` | Успешный вызов                                                           |
+| `INVALID_ARGUMENT` | пустые или некорректные поля, неверный UUID                              |
+| `UNAUTHENTICATED` | Ошибка аутентификации (authentication failed)                            |
+| `NOT_FOUND` | Рынок или ордер не найден                                                |
+| `ALREADY_EXISTS` | Ордер с таким ID уже существует                                          |
+| `FAILED_PRECONDITION` | Рынок отключён (`enabled = false`), заказ уже обрабатывается (подождите) |
+| `RESOURCE_EXHAUSTED` | Сработал per-user Rate Limiter или per-instance RPS-лимит                |
+| `UNAVAILABLE` | Сработал Circuit Breaker или недоступен зависимый сервис                 |
+| `INTERNAL` | Внутренняя ошибка auth/session storage или другая ошибка сервера         |
 
 ---
 

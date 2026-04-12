@@ -23,7 +23,7 @@ const (
 	unblockedState = "0"
 )
 
-var syncStateScript = redisGo.NewScript(`
+var synchronizeStateScript = redisGo.NewScript(`
 	local key = KEYS[1]
 	local newTs = tonumber(ARGV[1])
 	local newState = ARGV[2]
@@ -67,19 +67,19 @@ func New(store *cache.Store, ttl time.Duration, cfg config.OrderConfig) *MarketB
 	}
 }
 
-func (s *MarketBlockStore) SyncState(
+func (s *MarketBlockStore) SynchronizeState(
 	ctx context.Context,
 	marketID uuid.UUID,
 	blocked bool,
 	updatedAt time.Time,
 ) (bool, error) {
-	const op = "redis.MarketBlockStore.SyncState"
+	const op = "redis.MarketBlockStore.SynchronizeState"
 
 	start := time.Now()
 	defer func() {
 		metrics.ObserveWithTrace(
 			ctx,
-			metrics.CacheOperationDuration.WithLabelValues(s.config.Service.Name, "market_sync_state"),
+			metrics.CacheOperationDuration.WithLabelValues(s.config.Service.Name, "market_synchronize_state"),
 			time.Since(start).Seconds(),
 		)
 	}()
@@ -90,7 +90,7 @@ func (s *MarketBlockStore) SyncState(
 	}
 	ttlMs := s.ttl.Milliseconds()
 
-	result, err := syncStateScript.Run(
+	result, err := synchronizeStateScript.Run(
 		ctx,
 		s.store.ScriptRunner(),
 		[]string{blockKey(marketID)},
@@ -105,7 +105,7 @@ func (s *MarketBlockStore) SyncState(
 				return false, fmt.Errorf("%s: %w; invalidate corrupted cache: %v", op, err, deleteError)
 			}
 		}
-		return false, fmt.Errorf("%s: run sync state script: %w", op, err)
+		return false, fmt.Errorf("%s: run synchronize state script: %w", op, err)
 	}
 
 	switch value := result.(type) {

@@ -115,6 +115,17 @@ type MarketOrderCanceler interface {
 }
 ```
 
+### IdempotencyService
+
+```go
+// IdempotencyAdapter — гарантия однократного создания ордера.
+type IdempotencyAdapter interface {
+	Acquire(ctx context.Context, userID uuid.UUID, requestHash string) (IdempotencyResult, bool, error)
+	Complete(ctx context.Context, userID uuid.UUID, requestHash string, orderID uuid.UUID, orderStatus string) error
+	FailCleanup(ctx context.Context, userID uuid.UUID, requestHash string) error
+}
+```
+
 ### SpotService (бизнес-логика)
 
 ```go
@@ -171,6 +182,7 @@ shared/errors/service/
 ├── ErrDisabled{ID}                  — рынок отключён (enabled=false)
 ├── ErrMarketsNotFound               — рынки не найдены (список пуст)
 ├── ErrMarketsUnavailable            — список рынков временно недоступен
+├── ErrOrderProcessing               — дубликат запроса пока первый ещё обрабатывается
 ├── ErrUserRoleNotSpecified          — роль не передана в запросе
 ├── ErrInvalidSubject                — невалидный sub в JWT
 ├── ErrInvalidJTI                    — невалидный jti refresh token
@@ -204,18 +216,19 @@ shared/errors/repository/
 3. Остальные ошибки сопоставляются по таблице:
 
 | Внутренняя ошибка | gRPC-код | Сообщение | Уровень лога |
-|---|---|---|---|
-| `ErrMarketsNotFound`, `ErrMarketNotFound`, `ErrOrderNotFound` | `NOT_FOUND` | `"resource not found"` | WARN |
-| `ErrUnavailable` (circuit breaker / рынок) | `UNAVAILABLE` | `"market temporarily unavailable"` | WARN |
-| `ErrMarketsUnavailable` | `UNAVAILABLE` | `err.Error()` | WARN |
-| `ErrOrderAlreadyExists` | `ALREADY_EXISTS` | `"order already exists"` | WARN |
-| `ErrLimitExceeded` | `RESOURCE_EXHAUSTED` | `err.Error()` (с лимитом и окном) | WARN |
-| `ErrUserRoleNotSpecified` | `UNAUTHENTICATED` | `err.Error()` | WARN |
-| `ErrInvalidSubject`, `ErrInvalidJTI`, `ErrTokenRevoked` | `UNAUTHENTICATED` | `"refresh token error"` | WARN |
-| `gobreaker.ErrOpenState`, `ErrTooManyRequests` | `UNAVAILABLE` | `"service temporarily unavailable"` | — |
-| `ErrDisabled` | `FAILED_PRECONDITION` | `"market is disabled"` | WARN |
-| `ErrSessionValidationFailed`, `ErrRevokeTokenFailed`, `ErrSaveTokenFailed` | `INTERNAL` | `"internal error"` | ERROR |
-| Прочие | `INTERNAL` | `"internal error"` | ERROR |
+|---|---|---|--------------|
+| `ErrMarketsNotFound`, `ErrMarketNotFound`, `ErrOrderNotFound` | `NOT_FOUND` | `"resource not found"` | WARN         |
+| `ErrUnavailable` (circuit breaker / рынок) | `UNAVAILABLE` | `"market temporarily unavailable"` | WARN         |
+| `ErrMarketsUnavailable` | `UNAVAILABLE` | `err.Error()` | WARN         |
+| `ErrOrderAlreadyExists` | `ALREADY_EXISTS` | `"order already exists"` | WARN         |
+| `ErrLimitExceeded` | `RESOURCE_EXHAUSTED` | `err.Error()` (с лимитом и окном) | WARN         |
+| `ErrUserRoleNotSpecified` | `UNAUTHENTICATED` | `err.Error()` | WARN         |
+| `ErrInvalidSubject`, `ErrInvalidJTI`, `ErrTokenRevoked` | `UNAUTHENTICATED` | `"refresh token error"` | WARN         |
+| `gobreaker.ErrOpenState`, `ErrTooManyRequests` | `UNAVAILABLE` | `"service temporarily unavailable"` | —            |
+| `ErrDisabled` | `FAILED_PRECONDITION` | `"market is disabled"` | WARN         |
+| `ErrOrderProcessing` | `FAILED_PRECONDITION` | `order is already being processed` | ERROR        |
+| `ErrSessionValidationFailed`, `ErrRevokeTokenFailed`, `ErrSaveTokenFailed` | `INTERNAL` | `"internal error"` | ERROR        |
+| Прочие | `INTERNAL` | `"internal error"` | ERROR        |
 
 > **Важно:** Сообщения `NOT_FOUND` и `ALREADY_EXISTS` намеренно не раскрывают внутренние детали. Только `ErrLimitExceeded` возвращает клиенту конкретные значения лимита и окна.
 
@@ -456,7 +469,7 @@ validateMarket(marketID):
         вернуть ошибку SpotService
 
   3. market.DeletedAt != nil?
-     → syncMarketBlock(blocked=true, reason="warm_block_after_deleted_recheck")
+     → go syncMarketBlock(blocked=true, ...)  // асинхронно, не блокирует ответ
      → вернуть ErrMarketNotFound
 
   4. !market.Enabled?
@@ -470,8 +483,8 @@ validateMarket(marketID):
 
 **Смысл двойной проверки:** Redis-состояние блокировки может быть устаревшим (рынок снова включён, но блокировка ещё не снята). Вызов SpotService является авторитетным источником истины.
 
-`syncMarketBlock` вызывается _без ошибки для вызывающей стороны_ — это фоновая синхронизация. Результат фиксируется в метрике `grpc_server_market_block_state_sync_total`.
-
+`syncMarketBlock` вызывается асинхронно (горутина) с context.WithoutCancel — не блокирует ответ клиенту и не зависит от отмены родительского контекста. 
+Результат фиксируется в метрике `grpc_server_market_block_state_sync_total`.
 ---
 
 ## 9. Компенсационный сервис: конечный автомат
@@ -743,6 +756,24 @@ By-id cache (`market:by_id:<marketID>`) не перепрогревается po
 | Блокировка рынка | `market:block:<marketID>` | `<unix_ms>:<0\|1>` | настраивается |
 | Refresh token (маркер) | `refresh:<userID>:<jti>` | `"1"` | refresh_token_ttl |
 | Активная сессия | `auth_session:<userID>` | sessionID (string) | refresh_token_ttl |
+| Идемпотентность CreateOrder | `idem:order:create:<userID>:<requestHash>` | JSON `{status, request_hash, order_id, order_status}` | idempotency_ttl |
+
+### Идемпотентность CreateOrder
+
+Ключ захватывается атомарно через Lua-скрипт до начала бизнес-логики.
+
+Жизненный цикл записи:
+- `processing` — ключ захвачен, заказ создаётся
+- `completed`  — заказ создан, хранится `order_id` и `order_status`
+- ключ удалён  — ошибка при создании (FailCleanup), клиент может повторить
+
+requestHash = SHA-256(marketID | orderType | price | quantity)
+userID не включается в хэш — он уже является частью ключа.
+
+Поведение при повторном запросе:
+- статус `completed`   → вернуть сохранённый order_id + status (прозрачно для клиента)
+- статус `processing`  → вернуть FAILED_PRECONDITION
+- ключ отсутствует     → создать новый заказ
 
 ### SpotService
 

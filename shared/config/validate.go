@@ -332,6 +332,14 @@ func ValidateKafkaProducerConfig(fieldPrefix string, cfg ProducerConfig) error {
 		)
 	}
 
+	if cfg.ChannelBufferSize < 0 {
+		return fmt.Errorf(
+			"%s.channel_buffer_size must be >= 0, got %s",
+			fieldPrefix,
+			cfg.ChannelBufferSize,
+		)
+	}
+
 	compression := NormalizeKafkaCompression(cfg.Compression)
 	switch compression {
 	case "none", "gzip", "snappy", "lz4", "zstd":

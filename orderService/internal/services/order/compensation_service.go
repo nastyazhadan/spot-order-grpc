@@ -146,7 +146,7 @@ func (s *CompensationService) ProcessMarketStateChanged(
 	}
 	transactionClosed = true
 
-	s.trySyncMarketBlockState(ctx, span, event, "after_commit")
+	s.trySynchronizeMarketBlockState(ctx, span, event, "after_commit")
 
 	return nil
 }
@@ -168,9 +168,9 @@ func (s *CompensationService) handleSkippedEvent(
 
 	switch currentStatus {
 	case models.InboxEventStatusProcessed:
-		s.trySyncMarketBlockState(ctx, span, event, "processed_event_resync")
+		s.trySynchronizeMarketBlockState(ctx, span, event, "processed_event_resync")
 	case models.InboxEventStatusProcessing:
-		s.trySyncMarketBlockState(ctx, span, event, "processing_event_resync")
+		s.trySynchronizeMarketBlockState(ctx, span, event, "processing_event_resync")
 	}
 
 	return true, nil
@@ -269,7 +269,7 @@ func (s *CompensationService) publishCancelledOrderEvents(
 	return nil
 }
 
-func (s *CompensationService) trySyncMarketBlockState(
+func (s *CompensationService) trySynchronizeMarketBlockState(
 	ctx context.Context,
 	span trace.Span,
 	event sharedModels.MarketStateChangedEvent,
@@ -278,7 +278,7 @@ func (s *CompensationService) trySyncMarketBlockState(
 	syncCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.config.Timeouts.Service)
 	defer cancel()
 
-	blocked, updated, err := s.syncMarketBlockState(syncCtx, event)
+	blocked, updated, err := s.synchronizeMarketBlockState(syncCtx, event)
 	if err != nil {
 		metrics.MarketBlockStateSyncTotal.
 			WithLabelValues(s.config.Service.Name, reason, strconv.FormatBool(blocked), "error", "false").
@@ -303,13 +303,13 @@ func (s *CompensationService) trySyncMarketBlockState(
 		Inc()
 }
 
-func (s *CompensationService) syncMarketBlockState(
+func (s *CompensationService) synchronizeMarketBlockState(
 	ctx context.Context,
 	event sharedModels.MarketStateChangedEvent,
 ) (bool, bool, error) {
 	blocked := !event.Enabled || event.DeletedAt != nil
 
-	updated, err := s.blockStore.SyncState(ctx, event.MarketID, blocked, event.UpdatedAt)
+	updated, err := s.blockStore.SynchronizeState(ctx, event.MarketID, blocked, event.UpdatedAt)
 	if err != nil {
 		return blocked, false, err
 	}

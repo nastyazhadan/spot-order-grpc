@@ -57,7 +57,7 @@ type Saver interface {
 }
 
 type MarketBlockStore interface {
-	SyncState(ctx context.Context, marketID uuid.UUID, blocked bool, updatedAt time.Time) (bool, error)
+	SynchronizeState(ctx context.Context, marketID uuid.UUID, blocked bool, updatedAt time.Time) (bool, error)
 	IsBlocked(ctx context.Context, marketID uuid.UUID) (bool, error)
 }
 
@@ -275,8 +275,9 @@ func (s *OrderService) validateMarket(
 		attributes.MarketBlockedValue(blocked),
 	)
 
+	// Обновление кэша происходит асинхронно
 	if market.DeletedAt != nil {
-		s.syncMarketBlock(ctx, market, true, "warm_block_after_deleted_recheck")
+		go s.synchronizeMarketBlock(context.WithoutCancel(ctx), market, true, "warm_block_after_deleted_recheck")
 
 		err = sharedErrors.ErrMarketNotFound{ID: marketID}
 		tracing.RecordError(span, err)
@@ -284,7 +285,7 @@ func (s *OrderService) validateMarket(
 	}
 
 	if !market.Enabled {
-		s.syncMarketBlock(ctx, market, true, "warm_block_after_disabled_recheck")
+		go s.synchronizeMarketBlock(context.WithoutCancel(ctx), market, true, "warm_block_after_disabled_recheck")
 
 		err = serviceErrors.ErrDisabled{ID: marketID}
 		tracing.RecordError(span, err)
@@ -292,7 +293,7 @@ func (s *OrderService) validateMarket(
 	}
 
 	if blocked {
-		s.syncMarketBlock(ctx, market, false, "remove_stale_block_after_recheck")
+		go s.synchronizeMarketBlock(context.WithoutCancel(ctx), market, false, "remove_stale_block_after_recheck")
 	}
 
 	return nil
@@ -303,6 +304,7 @@ func (s *OrderService) getMarketBlockedState(
 	span trace.Span,
 	marketID uuid.UUID,
 ) (bool, error) {
+	// Получение статуса происходит синхронно
 	blocked, err := s.blockStore.IsBlocked(ctx, marketID)
 	if err == nil {
 		return blocked, nil
@@ -326,19 +328,19 @@ func (s *OrderService) getMarketBlockedState(
 	return blocked, nil
 }
 
-func (s *OrderService) syncMarketBlock(
+func (s *OrderService) synchronizeMarketBlock(
 	ctx context.Context,
 	market sharedModels.Market,
 	blocked bool,
 	reason string,
 ) {
-	updated, err := s.blockStore.SyncState(ctx, market.ID, blocked, market.UpdatedAt)
+	updated, err := s.blockStore.SynchronizeState(ctx, market.ID, blocked, market.UpdatedAt)
 	if err != nil {
 		metrics.MarketBlockStateSyncTotal.
 			WithLabelValues(s.config.ServiceName, reason, strconv.FormatBool(blocked), "error", "false").
 			Inc()
 
-		s.logger.Warn(ctx, "Failed to sync market block state after recheck",
+		s.logger.Warn(ctx, "Failed to synchronize market block state after recheck",
 			zap.String("market_id", market.ID.String()),
 			zap.Bool("blocked", blocked),
 			zap.String("reason", reason),
@@ -352,7 +354,7 @@ func (s *OrderService) syncMarketBlock(
 		Inc()
 
 	if updated {
-		s.logger.Info(ctx, "Synced market block state after recheck",
+		s.logger.Info(ctx, "Synchronized market block state after recheck",
 			zap.String("market_id", market.ID.String()),
 			zap.Bool("blocked", blocked),
 			zap.String("reason", reason),

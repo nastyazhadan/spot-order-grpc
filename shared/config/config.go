@@ -110,10 +110,11 @@ type KafkaConfig struct {
 }
 
 type ProducerConfig struct {
-	MaxRetries   int           `mapstructure:"max_retries"`
-	RetryBackoff time.Duration `mapstructure:"retry_backoff"`
-	Timeout      time.Duration `mapstructure:"timeout"`
-	Compression  string        `mapstructure:"compression"`
+	MaxRetries        int           `mapstructure:"max_retries"`
+	RetryBackoff      time.Duration `mapstructure:"retry_backoff"`
+	Timeout           time.Duration `mapstructure:"timeout"`
+	Compression       string        `mapstructure:"compression"`
+	ChannelBufferSize int           `mapstructure:"channel_buffer_size"`
 }
 
 type ConsumerConfig struct {
