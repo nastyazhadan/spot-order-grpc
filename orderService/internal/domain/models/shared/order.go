@@ -41,6 +41,19 @@ func (s OrderStatus) String() string {
 	}
 }
 
+func FromString(s string) OrderStatus {
+	switch s {
+	case "created":
+		return OrderStatusCreated
+	case "filled":
+		return OrderStatusFilled
+	case "cancelled":
+		return OrderStatusCancelled
+	default:
+		return OrderStatusUnspecified
+	}
+}
+
 func (t OrderType) String() string {
 	switch t {
 	case OrderTypeLimit:

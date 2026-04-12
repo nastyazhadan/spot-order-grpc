@@ -10,6 +10,7 @@ import (
 	orderStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/order"
 	outboxStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/postgres/outbox"
 	authStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/auth"
+	idemStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/idempotency"
 	blockStore "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/market"
 	orderCache "github.com/nastyazhadan/spot-order-grpc/orderService/internal/infrastructure/redis/order"
 	authService "github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/auth"
@@ -50,6 +51,7 @@ var ServiceProviders = fx.Options(
 		provideCompensationService,
 		provideConsumerService,
 
+		provideIdempotencyService,
 		provideOrderService,
 		provideContainer,
 	),
@@ -149,6 +151,17 @@ func provideDLQPublisher(
 	)
 }
 
+func provideIdempotencyService(
+	store *cache.Store,
+	cfg config.OrderConfig,
+	logger *zapLogger.Logger,
+) *orderService.IdempotencyService {
+	idempotencyStore := idemStore.New(store, cfg.Redis.IdempotencyTTL)
+	adapter := &redisIdempotencyAdapter{store: idempotencyStore}
+
+	return orderService.NewIdempotencyService(adapter, logger)
+}
+
 func provideOrderService(
 	pool *pgxpool.Pool,
 	store *orderStore.OrderStore,
@@ -157,6 +170,7 @@ func provideOrderService(
 	rateLimiters orderService.RateLimiters,
 	cfg orderService.Config,
 	eventProducer orderService.EventProducer,
+	service orderService.IdempotencyService,
 	logger *zapLogger.Logger,
 ) *orderService.OrderService {
 	return orderService.New(
@@ -168,6 +182,7 @@ func provideOrderService(
 		rateLimiters,
 		cfg,
 		eventProducer,
+		service,
 		logger,
 	)
 }

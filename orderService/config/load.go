@@ -126,6 +126,13 @@ func validateOrderRedis(cfg config.OrderConfig) error {
 		)
 	}
 
+	if cfg.Redis.IdempotencyTTL <= 0 {
+		return fmt.Errorf(
+			"redis.idempotency_ttl must be greater than 0, got %s",
+			cfg.Redis.IdempotencyTTL,
+		)
+	}
+
 	return nil
 }
 

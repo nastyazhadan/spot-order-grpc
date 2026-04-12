@@ -43,7 +43,8 @@ order:
     max_active_conns: 15
     idle_timeout: 1m
     max_conn_lifetime: 30m
-    market_block_ttl: 168h
+    market_block_ttl: 10m
+    idempotency_ttl: 30m
   grpc_rate_limit:
     create_order: 1000
     get_order_status: 2000

@@ -98,6 +98,7 @@ type RedisConfig struct {
 	ConnMaxLifetime   time.Duration `mapstructure:"max_conn_lifetime"`
 	CacheTTL          time.Duration `mapstructure:"spot_cache_ttl"`
 	MarketBlockTTL    time.Duration `mapstructure:"market_block_ttl"`
+	IdempotencyTTL    time.Duration `mapstructure:"idempotency_ttl"`
 }
 
 type KafkaConfig struct {

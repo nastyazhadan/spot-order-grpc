@@ -74,6 +74,10 @@ func mapError(ctx context.Context, err error, logger *zapLogger.Logger) error {
 		logger.Warn(ctx, "market is disabled", zap.Error(err))
 		return status.Error(codes.FailedPrecondition, "market is disabled")
 
+	case errors.Is(err, service.ErrOrderProcessing):
+		logger.Warn(ctx, "order is processing", zap.Error(err))
+		return status.Error(codes.FailedPrecondition, "order is already being processed, wait please")
+
 	case errors.Is(err, service.ErrUserRoleNotSpecified),
 		errors.Is(err, service.ErrMissingMetadata),
 		errors.Is(err, service.ErrMissingAuthToken),

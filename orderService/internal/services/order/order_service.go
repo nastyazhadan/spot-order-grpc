@@ -34,6 +34,7 @@ type OrderService struct {
 	rateLimiters       RateLimiters
 	config             Config
 	eventProducer      EventProducer
+	idempotencyService IdempotencyService
 	logger             *zapLogger.Logger
 }
 
@@ -88,6 +89,7 @@ func New(
 	limiters RateLimiters,
 	cfg Config,
 	producer EventProducer,
+	service IdempotencyService,
 	logger *zapLogger.Logger,
 ) *OrderService {
 	return &OrderService{
@@ -99,6 +101,7 @@ func New(
 		rateLimiters:       limiters,
 		config:             cfg,
 		eventProducer:      producer,
+		idempotencyService: service,
 		logger:             logger,
 	}
 }
@@ -116,17 +119,36 @@ func (s *OrderService) CreateOrder(
 	ctx, cancel := contextWithTimeout(ctx, s.config.Timeout)
 	defer cancel()
 
+	requestHash := s.idempotencyService.buildRequestHash(marketID, orderType, price, quantity)
+
+	idemResult, acquired, idemError := s.idempotencyService.acquire(ctx, userID, requestHash)
+	if idemError != nil {
+		s.logger.Warn(ctx, "idempotency acquire failed",
+			zap.Error(idemError),
+		)
+	}
+	if idemError == nil && !acquired {
+		return s.idempotencyService.checkIdempotencyResult(ctx, idemResult)
+	}
+
 	if err := s.checkRateLimit(ctx, userID, s.rateLimiters.Create, "create_order"); err != nil {
+		s.idempotencyService.failCleanup(ctx, userID, requestHash, acquired)
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
 	if err := s.validateMarket(ctx, marketID); err != nil {
+		s.idempotencyService.failCleanup(ctx, userID, requestHash, acquired)
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
 	orderID, orderStatus, err := s.saveOrder(ctx, userID, marketID, orderType, price, quantity)
 	if err != nil {
+		s.idempotencyService.failCleanup(ctx, userID, requestHash, acquired)
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if acquired {
+		s.idempotencyService.completeIdempotencyChecking(ctx, userID, orderID, requestHash, orderStatus)
 	}
 
 	return orderID, orderStatus, nil

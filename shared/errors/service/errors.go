@@ -18,6 +18,7 @@ var (
 	ErrMarketUnavailable = ErrUnavailable{}
 	ErrMarketDisabled    = ErrDisabled{}
 
+	ErrOrderProcessing    = errors.New("order is already being processed")
 	ErrMarketsNotFound    = errors.New("markets not found")
 	ErrMarketsUnavailable = errors.New("markets are temporarily unavailable")
 

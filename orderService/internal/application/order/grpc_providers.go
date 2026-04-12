@@ -139,9 +139,9 @@ func provideGRPCServer(
 			MinTime:             cfg.KeepAlive.MinPingInterval,
 			PermitWithoutStream: cfg.KeepAlive.PermitWithoutStream,
 		}),
-		// logger до auth для логов auth, errorsMapper до auth
+		// logger до auth для логов auth, errorsMapper до auth, validator в начало
 		grpc.ChainUnaryInterceptor(
-			recoverer, tracer, meter, logger, errorsMapper, authenticator, rateLimiter, validator,
+			validator, recoverer, tracer, meter, logger, errorsMapper, authenticator, rateLimiter,
 		),
 	)
 

@@ -44,7 +44,7 @@ func newUnaryServerInterceptor(
 			continue
 		}
 
-		limiters[method] = rate.NewLimiter(rate.Limit(rps), rps)
+		limiters[method] = rate.NewLimiter(rate.Limit(rps), rps*3)
 	}
 
 	return func(
