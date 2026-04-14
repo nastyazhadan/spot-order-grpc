@@ -3,10 +3,10 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,245 +14,469 @@ import (
 	"google.golang.org/grpc/status"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/models"
 	"github.com/nastyazhadan/spot-order-grpc/spotService/tests/suite"
 )
 
-func init() {
-	gofakeit.Seed(time.Now().UnixNano())
-}
-
-func TestUserRole(test *testing.T) {
-	ctx, st := suite.New(test)
+func TestUserSeesOnlyEnabledAndNotDeleted(t *testing.T) {
+	ctx, st := suite.New(t)
 	st.ClearMarkets(ctx)
 
 	enabledID := uuid.New().String()
 	disabledID := uuid.New().String()
 	deletedID := uuid.New().String()
-	deletedTime := time.Now().UTC()
+	deletedAt := time.Now().UTC()
 
-	st.InsertMarket(ctx, enabledID, "BTC-USDT", true, nil)
-	st.InsertMarket(ctx, disabledID, "ETH-USDT", false, nil)
-	st.InsertMarket(ctx, deletedID, "DOGE-USDT", true, &deletedTime)
+	st.InsertMarket(ctx, enabledID, "AAA-USDT", true, nil)
+	st.InsertMarket(ctx, disabledID, "BBB-USDT", false, nil)
+	st.InsertMarket(ctx, deletedID, "CCC-USDT", true, &deletedAt)
 
-	response, err := st.SpotClient.ViewMarkets(ctx, &proto.ViewMarketsRequest{
-		UserRoles: []proto.UserRole{proto.UserRole_ROLE_USER},
-	})
-	require.NoError(test, err)
-	require.NotNil(test, response)
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleUser),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
 
-	ids := marketIDs(response)
-	assert.Contains(test, ids, enabledID, "user должен видеть enabled рынок")
-	assert.NotContains(test, ids, disabledID, "user не должен видеть disabled рынок")
-	assert.NotContains(test, ids, deletedID, "user не должен видеть deleted рынок")
-	assert.Len(test, ids, 1)
+	ids := suite.MarketIDs(response)
+	assert.Contains(t, ids, enabledID, "user должен видеть enabled рынок")
+	assert.NotContains(t, ids, disabledID, "user не должен видеть disabled рынок")
+	assert.NotContains(t, ids, deletedID, "user не должен видеть deleted рынок")
+	assert.Len(t, ids, 1)
 }
 
-func TestViewerRole(test *testing.T) {
-	ctx, st := suite.New(test)
+func TestViewerSeesNonDeletedIncludingDisabled(t *testing.T) {
+	ctx, st := suite.New(t)
 	st.ClearMarkets(ctx)
 
 	enabledID := uuid.New().String()
 	disabledID := uuid.New().String()
 	deletedID := uuid.New().String()
-	deletedTime := time.Now().UTC()
+	deletedAt := time.Now().UTC()
 
-	st.InsertMarket(ctx, enabledID, "BTC-USDT", true, nil)
-	st.InsertMarket(ctx, disabledID, "ETH-USDT", false, nil)
-	st.InsertMarket(ctx, deletedID, "DOGE-USDT", true, &deletedTime)
+	st.InsertMarket(ctx, enabledID, "AAA-USDT", true, nil)
+	st.InsertMarket(ctx, disabledID, "BBB-USDT", false, nil)
+	st.InsertMarket(ctx, deletedID, "CCC-USDT", true, &deletedAt)
 
-	response, err := st.SpotClient.ViewMarkets(ctx, &proto.ViewMarketsRequest{
-		UserRoles: []proto.UserRole{proto.UserRole_ROLE_VIEWER},
-	})
-	require.NoError(test, err)
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleViewer),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
 
-	ids := marketIDs(response)
-	assert.Contains(test, ids, enabledID, "viewer должен видеть enabled рынок")
-	assert.Contains(test, ids, disabledID, "viewer должен видеть disabled рынок")
-	assert.NotContains(test, ids, deletedID, "viewer не должен видеть deleted рынок")
-	assert.Len(test, ids, 2)
+	ids := suite.MarketIDs(response)
+	assert.Contains(t, ids, enabledID, "viewer должен видеть enabled рынок")
+	assert.Contains(t, ids, disabledID, "viewer должен видеть disabled рынок")
+	assert.NotContains(t, ids, deletedID, "viewer не должен видеть deleted рынок")
+	assert.Len(t, ids, 2)
 }
 
-func TestAdminRole(test *testing.T) {
-	ctx, st := suite.New(test)
+func TestAdminSeesEverything(t *testing.T) {
+	ctx, st := suite.New(t)
 	st.ClearMarkets(ctx)
 
 	enabledID := uuid.New().String()
 	disabledID := uuid.New().String()
-	deletedID := uuid.New().String()
-	deletedTime := time.Now().UTC()
+	deletedEnabledID := uuid.New().String()
+	deletedDisabledID := uuid.New().String()
+	deletedAt := time.Now().UTC()
 
-	st.InsertMarket(ctx, enabledID, "BTC-USDT", true, nil)
-	st.InsertMarket(ctx, disabledID, "ETH-USDT", false, nil)
-	st.InsertMarket(ctx, deletedID, "DOGE-USDT", true, &deletedTime)
+	st.InsertMarket(ctx, enabledID, "AAA-USDT", true, nil)
+	st.InsertMarket(ctx, disabledID, "BBB-USDT", false, nil)
+	st.InsertMarket(ctx, deletedEnabledID, "CCC-USDT", true, &deletedAt)
+	st.InsertMarket(ctx, deletedDisabledID, "DDD-USDT", false, &deletedAt)
 
-	response, err := st.SpotClient.ViewMarkets(ctx, &proto.ViewMarketsRequest{
-		UserRoles: []proto.UserRole{proto.UserRole_ROLE_ADMIN},
-	})
-	require.NoError(test, err)
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
 
-	ids := marketIDs(response)
-	assert.Contains(test, ids, enabledID, "admin должен видеть enabled рынок")
-	assert.Contains(test, ids, disabledID, "admin должен видеть disabled рынок")
-	assert.Contains(test, ids, deletedID, "admin должен видеть deleted рынок")
-	assert.Len(test, ids, 3)
+	ids := suite.MarketIDs(response)
+	assert.Contains(t, ids, enabledID)
+	assert.Contains(t, ids, disabledID)
+	assert.Contains(t, ids, deletedEnabledID)
+	assert.Contains(t, ids, deletedDisabledID)
+	assert.Len(t, ids, 4)
 }
 
-func TestMarketsSortedByName(test *testing.T) {
-	ctx, st := suite.New(test)
+func TestMultipleRoles(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+
+	deletedAt := time.Now().UTC()
+	deletedID := uuid.New().String()
+	enabledID := uuid.New().String()
+
+	st.InsertMarket(ctx, enabledID, "AAA-USDT", true, nil)
+	st.InsertMarket(ctx, deletedID, "BBB-USDT", true, &deletedAt)
+
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin, models.UserRoleUser),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
+
+	ids := suite.MarketIDs(response)
+	assert.Contains(t, ids, deletedID, "при наличии роли admin deleted рынок должен быть виден")
+	assert.Len(t, ids, 2)
+}
+
+func TestSortedByName(t *testing.T) {
+	ctx, st := suite.New(t)
 	st.ClearMarkets(ctx)
 
 	st.InsertMarket(ctx, uuid.New().String(), "SOL-USDT", true, nil)
 	st.InsertMarket(ctx, uuid.New().String(), "BTC-USDT", true, nil)
 	st.InsertMarket(ctx, uuid.New().String(), "ETH-USDT", true, nil)
 
-	response, err := st.SpotClient.ViewMarkets(ctx, &proto.ViewMarketsRequest{
-		UserRoles: []proto.UserRole{proto.UserRole_ROLE_USER},
-	})
-	require.NoError(test, err)
-	require.Len(test, response.GetMarkets(), 3)
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleUser),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
+	require.Len(t, response.GetMarkets(), 3)
 
-	assert.Equal(test, "BTC-USDT", response.GetMarkets()[0].GetName())
-	assert.Equal(test, "ETH-USDT", response.GetMarkets()[1].GetName())
-	assert.Equal(test, "SOL-USDT", response.GetMarkets()[2].GetName())
+	assert.Equal(t, "BTC-USDT", response.GetMarkets()[0].GetName())
+	assert.Equal(t, "ETH-USDT", response.GetMarkets()[1].GetName())
+	assert.Equal(t, "SOL-USDT", response.GetMarkets()[2].GetName())
 }
 
-func TestAdminAndUserRoles(test *testing.T) {
-	ctx, st := suite.New(test)
+func TestEmptyDB(t *testing.T) {
+	ctx, st := suite.New(t)
 	st.ClearMarkets(ctx)
 
-	deletedTime := time.Now().UTC()
-	deletedID := uuid.New().String()
-
-	st.InsertMarket(ctx, uuid.New().String(), "BTC-USDT", true, nil)
-	st.InsertMarket(ctx, deletedID, "DOGE-USDT", true, &deletedTime)
-
-	response, err := st.SpotClient.ViewMarkets(ctx, &proto.ViewMarketsRequest{
-		UserRoles: []proto.UserRole{proto.UserRole_ROLE_ADMIN, proto.UserRole_ROLE_USER},
-	})
-	require.NoError(test, err)
-
-	ids := marketIDs(response)
-	assert.Contains(test, ids, deletedID, "при наличии роли admin удалённые рынки должны быть видны")
-	assert.Len(test, ids, 2)
-}
-
-func TestEmptyTableReturnsNotFound(test *testing.T) {
-	ctx, st := suite.New(test)
-	st.ClearMarkets(ctx)
-
-	response, err := st.SpotClient.ViewMarkets(ctx, &proto.ViewMarketsRequest{
-		UserRoles: []proto.UserRole{proto.UserRole_ROLE_USER},
-	})
-	require.Error(test, err)
-	assert.Nil(test, response)
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleUser),
+		&proto.ViewMarketsRequest{},
+	)
+	require.Error(t, err)
+	assert.Nil(t, response)
 
 	st2, ok := status.FromError(err)
-	require.True(test, ok)
-	assert.Equal(test, codes.NotFound, st2.Code())
+	require.True(t, ok)
+	assert.Equal(t, codes.NotFound, st2.Code())
 }
 
-func TestAllMarketsDisabledOrDeletedReturnsEmptyList(test *testing.T) {
-	ctx, st := suite.New(test)
+func TestAllMarketsFilteredOut(t *testing.T) {
+	ctx, st := suite.New(t)
 	st.ClearMarkets(ctx)
 
-	deletedTime := time.Now().UTC()
-	st.InsertMarket(ctx, uuid.New().String(), "ETH-USDT", false, nil)
-	st.InsertMarket(ctx, uuid.New().String(), "DOGE-USDT", true, &deletedTime)
+	deletedAt := time.Now().UTC()
+	st.InsertMarket(ctx, uuid.New().String(), "AAA-USDT", false, nil)       // disabled
+	st.InsertMarket(ctx, uuid.New().String(), "BBB-USDT", true, &deletedAt) // deleted
 
-	response, err := st.SpotClient.ViewMarkets(ctx, &proto.ViewMarketsRequest{
-		UserRoles: []proto.UserRole{proto.UserRole_ROLE_USER},
-	})
-	require.NoError(test, err)
-	assert.Empty(test, response.GetMarkets())
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleUser),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, response.GetMarkets())
+	assert.False(t, response.GetHasMore())
 }
 
-func TestLargeNumberOfMarkets(test *testing.T) {
-	ctx, st := suite.New(test)
+func TestPaginationFirstPageHasMore(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+
+	for _, name := range []string{"AAA", "BBB", "CCC", "DDD", "EEE"} {
+		st.InsertMarket(ctx, uuid.New().String(), name+"-USDT", true, nil)
+	}
+
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{Limit: 2, Offset: 0},
+	)
+	require.NoError(t, err)
+	require.Len(t, response.GetMarkets(), 2)
+	assert.True(t, response.GetHasMore())
+	assert.Equal(t, uint64(2), response.GetNextOffset())
+	assert.Equal(t, "AAA-USDT", response.GetMarkets()[0].GetName())
+	assert.Equal(t, "BBB-USDT", response.GetMarkets()[1].GetName())
+}
+
+func TestPaginationMiddlePage(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+
+	for _, name := range []string{"AAA", "BBB", "CCC", "DDD", "EEE"} {
+		st.InsertMarket(ctx, uuid.New().String(), name+"-USDT", true, nil)
+	}
+
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{Limit: 2, Offset: 2},
+	)
+	require.NoError(t, err)
+	require.Len(t, response.GetMarkets(), 2)
+	assert.True(t, response.GetHasMore())
+	assert.Equal(t, uint64(4), response.GetNextOffset())
+	assert.Equal(t, "CCC-USDT", response.GetMarkets()[0].GetName())
+	assert.Equal(t, "DDD-USDT", response.GetMarkets()[1].GetName())
+}
+
+func TestPaginationLastPageNoMore(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+
+	for _, name := range []string{"AAA", "BBB", "CCC", "DDD", "EEE"} {
+		st.InsertMarket(ctx, uuid.New().String(), name+"-USDT", true, nil)
+	}
+
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{Limit: 2, Offset: 4},
+	)
+	require.NoError(t, err)
+	require.Len(t, response.GetMarkets(), 1)
+	assert.False(t, response.GetHasMore())
+	assert.Equal(t, uint64(0), response.GetNextOffset())
+	assert.Equal(t, "EEE-USDT", response.GetMarkets()[0].GetName())
+}
+
+func TestPaginationOffsetBeyondData(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+
+	st.InsertMarket(ctx, uuid.New().String(), "AAA-USDT", true, nil)
+	st.InsertMarket(ctx, uuid.New().String(), "BBB-USDT", true, nil)
+
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		// offset больше общего числа маркетов
+		&proto.ViewMarketsRequest{Limit: 10, Offset: 100},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, response.GetMarkets())
+	assert.False(t, response.GetHasMore())
+}
+
+func TestPaginationDefaultLimit(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+
+	for i := 0; i < 5; i++ {
+		st.InsertMarket(ctx, uuid.New().String(), fmt.Sprintf("MKT-%02d-USDT", i), true, nil)
+	}
+
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{Limit: 0, Offset: 0},
+	)
+	require.NoError(t, err)
+	assert.Len(t, response.GetMarkets(), 5)
+	assert.False(t, response.GetHasMore())
+}
+
+func TestCacheSecondRequestServedFromCache(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+
+	id1 := uuid.New().String()
+	id2 := uuid.New().String()
+	st.InsertMarket(ctx, id1, "AAA-USDT", true, nil)
+	st.InsertMarket(ctx, id2, "BBB-USDT", true, nil)
+
+	firstResponse, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleUser),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
+	require.Len(t, firstResponse.GetMarkets(), 2)
+
+	secondResponse, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleUser),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, suite.MarketIDs(firstResponse), suite.MarketIDs(secondResponse), "кэш должен возвращать те же данные")
+}
+
+func TestCacheStaleDataAfterDirectDBChange(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+
+	id := uuid.New().String()
+	st.InsertMarket(ctx, id, "AAA-USDT", true, nil)
+
+	firstResponse, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
+	require.Len(t, firstResponse.GetMarkets(), 1)
+
+	st.DeleteMarketFromDB(ctx, id)
+
+	secondResponse, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
+	assert.Len(t, secondResponse.GetMarkets(), 1, "кэш ещё не инвалидирован — данные stale")
+
+	st.FlushRedis(ctx)
+	thirdResponse, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{},
+	)
+	require.Error(t, err, "после flush БД пуста — должен вернуться NotFound")
+	assert.Nil(t, thirdResponse)
+	st3, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.NotFound, st3.Code())
+}
+
+func TestCachePerRoleIsolation(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+
+	disabledID := uuid.New().String()
+	st.InsertMarket(ctx, uuid.New().String(), "AAA-USDT", true, nil)
+	st.InsertMarket(ctx, disabledID, "BBB-USDT", false, nil)
+
+	responseViewer, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleViewer),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
+	assert.Len(t, responseViewer.GetMarkets(), 2, "viewer видит 2 рынка (включая disabled)")
+
+	responseUser, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleUser),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
+	ids := suite.MarketIDs(responseUser)
+	assert.NotContains(t, ids, disabledID, "user не должен видеть disabled рынок из viewer-кэша")
+	assert.Len(t, responseUser.GetMarkets(), 1)
+}
+
+// failed
+func TestFieldMappingActiveMarket(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+
+	id := uuid.New().String()
+	st.InsertMarket(ctx, id, "BTC-USDT", true, nil)
+
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
+	require.Len(t, response.GetMarkets(), 1)
+
+	m := response.GetMarkets()[0]
+	assert.Equal(t, id, m.GetId())
+	assert.Equal(t, "BTC-USDT", m.GetName())
+	assert.True(t, m.GetEnabled())
+	assert.Nil(t, m.GetDeletedAt())
+}
+
+func TestFieldMappingDeletedMarket(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+
+	id := uuid.New().String()
+	deletedAt := time.Now().UTC().Truncate(time.Millisecond)
+	st.InsertMarket(ctx, id, "DOGE-USDT", false, &deletedAt)
+
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{},
+	)
+	require.NoError(t, err)
+	require.Len(t, response.GetMarkets(), 1)
+
+	m := response.GetMarkets()[0]
+	assert.Equal(t, id, m.GetId())
+	assert.False(t, m.GetEnabled())
+	assert.NotNil(t, m.GetDeletedAt())
+	assert.WithinDuration(t, deletedAt, m.GetDeletedAt().AsTime(), time.Second)
+}
+
+func TestNoRolesUnauthenticated(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
+	st.InsertMarket(ctx, uuid.New().String(), "BTC-USDT", true, nil)
+
+	response, err := st.SpotClient.ViewMarkets(ctx, &proto.ViewMarketsRequest{})
+	require.Error(t, err)
+	assert.Nil(t, response)
+
+	st2, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.Unauthenticated, st2.Code())
+}
+
+func TestLargeNumberOfMarkets(t *testing.T) {
+	ctx, st := suite.New(t)
 	st.ClearMarkets(ctx)
 
 	const count = 100
 	for i := 0; i < count; i++ {
-		st.InsertMarket(ctx, uuid.New().String(), gofakeit.Company(), i%2 == 0, nil)
+		st.InsertMarket(ctx, uuid.New().String(), fmt.Sprintf("MKT-%03d-USDT", i), true, nil)
 	}
 
-	response, err := st.SpotClient.ViewMarkets(ctx, &proto.ViewMarketsRequest{
-		UserRoles: []proto.UserRole{proto.UserRole_ROLE_ADMIN},
-	})
-	require.NoError(test, err)
-	assert.Len(test, response.GetMarkets(), count)
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{Limit: 0},
+	)
+	require.NoError(t, err)
+	assert.Len(t, response.GetMarkets(), 20, "должен вернуть defaultLimit маркетов")
+	assert.True(t, response.GetHasMore())
+	assert.Equal(t, uint64(20), response.GetNextOffset())
 }
 
-func TestMarketDeletedNotVisibleToUserAndViewer(test *testing.T) {
-	ctx, st := suite.New(test)
+func TestLimitExceedsMaxLimit(t *testing.T) {
+	ctx, st := suite.New(t)
 	st.ClearMarkets(ctx)
 
-	now := time.Now().UTC()
-	id := uuid.New().String()
-	st.InsertMarket(ctx, id, "EDGE-USDT", true, &now)
+	for i := 0; i < 110; i++ {
+		st.InsertMarket(ctx, uuid.New().String(), fmt.Sprintf("MKT-%03d-USDT", i), true, nil)
+	}
 
-	response, err := st.SpotClient.ViewMarkets(ctx, &proto.ViewMarketsRequest{
-		UserRoles: []proto.UserRole{proto.UserRole_ROLE_USER, proto.UserRole_ROLE_VIEWER},
-	})
-	require.NoError(test, err)
-	assert.NotContains(test, marketIDs(response), id)
+	response, err := st.SpotClient.ViewMarkets(
+		st.CtxWithRole(ctx, models.UserRoleAdmin),
+		&proto.ViewMarketsRequest{Limit: 999},
+	)
+	require.NoError(t, err)
+	assert.Len(t, response.GetMarkets(), 100, "limit должен быть ограничен maxLimit")
+	assert.True(t, response.GetHasMore())
 }
 
-func TestFailCases(test *testing.T) {
-	ctx, st := suite.New(test)
+func TestPaginationConsistencyAllPages(t *testing.T) {
+	ctx, st := suite.New(t)
+	st.ClearMarkets(ctx)
 
-	tests := []struct {
-		name         string
-		request      *proto.ViewMarketsRequest
-		expectedCode codes.Code
-	}{
-		{
-			name:         "пустой список ролей",
-			request:      &proto.ViewMarketsRequest{UserRoles: []proto.UserRole{}},
-			expectedCode: codes.InvalidArgument,
-		},
-		{
-			name:         "nil UserRoles",
-			request:      &proto.ViewMarketsRequest{},
-			expectedCode: codes.InvalidArgument,
-		},
-		{
-			name: "роль UNSPECIFIED",
-			request: &proto.ViewMarketsRequest{
-				UserRoles: []proto.UserRole{proto.UserRole_ROLE_UNSPECIFIED},
-			},
-			expectedCode: codes.InvalidArgument,
-		},
-		{
-			name: "дубликат роли",
-			request: &proto.ViewMarketsRequest{
-				UserRoles: []proto.UserRole{proto.UserRole_ROLE_USER, proto.UserRole_ROLE_USER},
-			},
-			expectedCode: codes.InvalidArgument,
-		},
+	const total = 7
+	for i := 0; i < total; i++ {
+		st.InsertMarket(ctx, uuid.New().String(), fmt.Sprintf("MKT-%02d-USDT", i), true, nil)
 	}
 
-	for _, tt := range tests {
-		test.Run(tt.name, func(t *testing.T) {
-			response, err := st.SpotClient.ViewMarkets(ctx, tt.request)
-			require.Error(t, err)
-			assert.Nil(t, response)
+	const pageSize = uint64(3)
+	var allIDs []string
+	offset := uint64(0)
 
-			stat, ok := status.FromError(err)
-			require.True(t, ok)
-			assert.Equal(t, tt.expectedCode, stat.Code(), "неожиданный gRPC код для кейса %q", tt.name)
-		})
-	}
-}
+	for {
+		response, err := st.SpotClient.ViewMarkets(
+			st.CtxWithRole(ctx, models.UserRoleAdmin),
+			&proto.ViewMarketsRequest{Limit: pageSize, Offset: offset},
+		)
+		require.NoError(t, err)
+		allIDs = append(allIDs, suite.MarketIDs(response)...)
 
-func marketIDs(response *proto.ViewMarketsResponse) []string {
-	if response == nil {
-		return nil
-	}
-
-	ids := make([]string, 0, len(response.GetMarkets()))
-	for _, market := range response.GetMarkets() {
-		ids = append(ids, market.GetId())
+		if !response.GetHasMore() {
+			break
+		}
+		offset = response.GetNextOffset()
 	}
 
-	return ids
+	assert.Len(t, allIDs, total, "суммарно должны вернуть все маркеты")
+
+	seen := make(map[string]struct{}, len(allIDs))
+	for _, id := range allIDs {
+		seen[id] = struct{}{}
+	}
+	assert.Len(t, seen, total, "дублей в пагинации быть не должно")
 }

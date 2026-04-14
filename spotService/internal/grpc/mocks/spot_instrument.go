@@ -16,9 +16,9 @@ type SpotInstrument struct {
 	mock.Mock
 }
 
-// GetMarketByID provides a mock function with given fields: ctx, id, userRoles
-func (_m *SpotInstrument) GetMarketByID(ctx context.Context, id uuid.UUID, userRoles []models.UserRole) (models.Market, error) {
-	ret := _m.Called(ctx, id, userRoles)
+// GetMarketByID provides a mock function with given fields: ctx, id
+func (_m *SpotInstrument) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
+	ret := _m.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetMarketByID")
@@ -26,17 +26,17 @@ func (_m *SpotInstrument) GetMarketByID(ctx context.Context, id uuid.UUID, userR
 
 	var r0 models.Market
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, []models.UserRole) (models.Market, error)); ok {
-		return rf(ctx, id, userRoles)
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) (models.Market, error)); ok {
+		return rf(ctx, id)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID, []models.UserRole) models.Market); ok {
-		r0 = rf(ctx, id, userRoles)
+	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) models.Market); ok {
+		r0 = rf(ctx, id)
 	} else {
 		r0 = ret.Get(0).(models.Market)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, uuid.UUID, []models.UserRole) error); ok {
-		r1 = rf(ctx, id, userRoles)
+	if rf, ok := ret.Get(1).(func(context.Context, uuid.UUID) error); ok {
+		r1 = rf(ctx, id)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -44,34 +44,48 @@ func (_m *SpotInstrument) GetMarketByID(ctx context.Context, id uuid.UUID, userR
 	return r0, r1
 }
 
-// ViewMarkets provides a mock function with given fields: ctx, userRoles
-func (_m *SpotInstrument) ViewMarkets(ctx context.Context, userRoles []models.UserRole) ([]models.Market, error) {
-	ret := _m.Called(ctx, userRoles)
+// ViewMarkets provides a mock function with given fields: ctx, limit, offset
+func (_m *SpotInstrument) ViewMarkets(ctx context.Context, limit uint64, offset uint64) ([]models.Market, uint64, bool, error) {
+	ret := _m.Called(ctx, limit, offset)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ViewMarkets")
 	}
 
 	var r0 []models.Market
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, []models.UserRole) ([]models.Market, error)); ok {
-		return rf(ctx, userRoles)
+	var r1 uint64
+	var r2 bool
+	var r3 error
+	if rf, ok := ret.Get(0).(func(context.Context, uint64, uint64) ([]models.Market, uint64, bool, error)); ok {
+		return rf(ctx, limit, offset)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, []models.UserRole) []models.Market); ok {
-		r0 = rf(ctx, userRoles)
+	if rf, ok := ret.Get(0).(func(context.Context, uint64, uint64) []models.Market); ok {
+		r0 = rf(ctx, limit, offset)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]models.Market)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, []models.UserRole) error); ok {
-		r1 = rf(ctx, userRoles)
+	if rf, ok := ret.Get(1).(func(context.Context, uint64, uint64) uint64); ok {
+		r1 = rf(ctx, limit, offset)
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Get(1).(uint64)
 	}
 
-	return r0, r1
+	if rf, ok := ret.Get(2).(func(context.Context, uint64, uint64) bool); ok {
+		r2 = rf(ctx, limit, offset)
+	} else {
+		r2 = ret.Get(2).(bool)
+	}
+
+	if rf, ok := ret.Get(3).(func(context.Context, uint64, uint64) error); ok {
+		r3 = rf(ctx, limit, offset)
+	} else {
+		r3 = ret.Error(3)
+	}
+
+	return r0, r1, r2, r3
 }
 
 // NewSpotInstrument creates a new instance of SpotInstrument. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

@@ -334,7 +334,7 @@ func ValidateKafkaProducerConfig(fieldPrefix string, cfg ProducerConfig) error {
 
 	if cfg.ChannelBufferSize < 0 {
 		return fmt.Errorf(
-			"%s.channel_buffer_size must be >= 0, got %s",
+			"%s.channel_buffer_size must be >= 0, got %d",
 			fieldPrefix,
 			cfg.ChannelBufferSize,
 		)

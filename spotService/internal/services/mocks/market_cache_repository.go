@@ -16,12 +16,30 @@ type MarketCacheRepository struct {
 	mock.Mock
 }
 
-// GetAll provides a mock function with given fields: ctx, roleKey
-func (_m *MarketCacheRepository) GetAll(ctx context.Context, roleKey string) ([]models.Market, error) {
+// DeleteMarkets provides a mock function with given fields: ctx, roleKey
+func (_m *MarketCacheRepository) DeleteMarkets(ctx context.Context, roleKey string) error {
 	ret := _m.Called(ctx, roleKey)
 
 	if len(ret) == 0 {
-		panic("no return value specified for GetAll")
+		panic("no return value specified for DeleteMarkets")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, roleKey)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// GetMarkets provides a mock function with given fields: ctx, roleKey
+func (_m *MarketCacheRepository) GetMarkets(ctx context.Context, roleKey string) ([]models.Market, error) {
+	ret := _m.Called(ctx, roleKey)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetMarkets")
 	}
 
 	var r0 []models.Market
@@ -46,12 +64,12 @@ func (_m *MarketCacheRepository) GetAll(ctx context.Context, roleKey string) ([]
 	return r0, r1
 }
 
-// SetAll provides a mock function with given fields: ctx, market, roleKey, ttl
-func (_m *MarketCacheRepository) SetAll(ctx context.Context, market []models.Market, roleKey string, ttl time.Duration) error {
+// SetMarkets provides a mock function with given fields: ctx, market, roleKey, ttl
+func (_m *MarketCacheRepository) SetMarkets(ctx context.Context, market []models.Market, roleKey string, ttl time.Duration) error {
 	ret := _m.Called(ctx, market, roleKey, ttl)
 
 	if len(ret) == 0 {
-		panic("no return value specified for SetAll")
+		panic("no return value specified for SetMarkets")
 	}
 
 	var r0 error

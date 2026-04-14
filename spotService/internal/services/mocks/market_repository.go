@@ -16,12 +16,12 @@ type MarketRepository struct {
 	mock.Mock
 }
 
-// GetByID provides a mock function with given fields: ctx, id
-func (_m *MarketRepository) GetByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
+// GetMarketByID provides a mock function with given fields: ctx, id
+func (_m *MarketRepository) GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error) {
 	ret := _m.Called(ctx, id)
 
 	if len(ret) == 0 {
-		panic("no return value specified for GetByID")
+		panic("no return value specified for GetMarketByID")
 	}
 
 	var r0 models.Market
@@ -44,29 +44,29 @@ func (_m *MarketRepository) GetByID(ctx context.Context, id uuid.UUID) (models.M
 	return r0, r1
 }
 
-// ListAll provides a mock function with given fields: ctx
-func (_m *MarketRepository) ListAll(ctx context.Context) ([]models.Market, error) {
-	ret := _m.Called(ctx)
+// GetMarketsPage provides a mock function with given fields: ctx, roleKey, limit, offset
+func (_m *MarketRepository) GetMarketsPage(ctx context.Context, roleKey string, limit uint64, offset uint64) ([]models.Market, error) {
+	ret := _m.Called(ctx, roleKey, limit, offset)
 
 	if len(ret) == 0 {
-		panic("no return value specified for ListAll")
+		panic("no return value specified for GetMarketsPage")
 	}
 
 	var r0 []models.Market
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]models.Market, error)); ok {
-		return rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string, uint64, uint64) ([]models.Market, error)); ok {
+		return rf(ctx, roleKey, limit, offset)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) []models.Market); ok {
-		r0 = rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string, uint64, uint64) []models.Market); ok {
+		r0 = rf(ctx, roleKey, limit, offset)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]models.Market)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = rf(ctx)
+	if rf, ok := ret.Get(1).(func(context.Context, string, uint64, uint64) error); ok {
+		r1 = rf(ctx, roleKey, limit, offset)
 	} else {
 		r1 = ret.Error(1)
 	}

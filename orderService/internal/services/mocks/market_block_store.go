@@ -45,12 +45,12 @@ func (_m *MarketBlockStore) IsBlocked(ctx context.Context, marketID uuid.UUID) (
 	return r0, r1
 }
 
-// SyncState provides a mock function with given fields: ctx, marketID, blocked, updatedAt
-func (_m *MarketBlockStore) SyncState(ctx context.Context, marketID uuid.UUID, blocked bool, updatedAt time.Time) (bool, error) {
+// SynchronizeState provides a mock function with given fields: ctx, marketID, blocked, updatedAt
+func (_m *MarketBlockStore) SynchronizeState(ctx context.Context, marketID uuid.UUID, blocked bool, updatedAt time.Time) (bool, error) {
 	ret := _m.Called(ctx, marketID, blocked, updatedAt)
 
 	if len(ret) == 0 {
-		panic("no return value specified for SyncState")
+		panic("no return value specified for SynchronizeState")
 	}
 
 	var r0 bool

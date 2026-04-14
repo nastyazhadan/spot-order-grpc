@@ -6,23 +6,30 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/redis/go-redis/v9"
 	"github.com/testcontainers/testcontainers-go"
 	pgContainer "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	proto "github.com/nastyazhadan/spot-order-grpc/protos/gen/go/spot/v1"
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/cache"
 	migrate "github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/db/migrator"
+	grpcErrors "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/errors"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/validate"
+	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
+	"github.com/nastyazhadan/spot-order-grpc/shared/requestctx"
 	grpcSpot "github.com/nastyazhadan/spot-order-grpc/spotService/internal/grpc/spot"
 	repoPostgres "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/postgres/spot"
 	repoRedis "github.com/nastyazhadan/spot-order-grpc/spotService/internal/infrastructure/redis"
@@ -37,17 +44,22 @@ const (
 
 	longTimeout    = 2 * time.Minute
 	startupTimeout = 30 * time.Second
-	cacheTTL       = 5 * time.Minute
 
-	redisConnectionTimeout = 3 * time.Second
-	redisCacheKey          = "market:cache:all"
+	testRolesMetadataKey = "x-test-roles"
+
+	testServiceName    = "spot-integration-test"
+	testCacheTTL       = 5 * time.Minute
+	testServiceTimeout = 10 * time.Second
+	testDefaultLimit   = uint64(20)
+	testMaxLimit       = uint64(100)
+	testCacheLimit     = uint64(50)
 )
 
 type Suite struct {
 	Test       *testing.T
 	SpotClient proto.SpotInstrumentServiceClient
 	Pool       *pgxpool.Pool
-	RedisPool  *redigo.Pool
+	Redis      *redis.Client
 }
 
 func New(test *testing.T) (context.Context, *Suite) {
@@ -55,6 +67,8 @@ func New(test *testing.T) (context.Context, *Suite) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), longTimeout)
 	test.Cleanup(cancel)
+
+	logger := zapLogger.NewNop()
 
 	container, err := pgContainer.Run(ctx,
 		"postgres:17.0-alpine3.20",
@@ -71,21 +85,21 @@ func New(test *testing.T) (context.Context, *Suite) {
 		test.Fatalf("failed to start postgres container: %v", err)
 	}
 	test.Cleanup(func() {
-		if err := container.Terminate(context.Background()); err != nil {
+		if err = container.Terminate(context.Background()); err != nil {
 			test.Logf("failed to terminate postgres container: %v", err)
 		}
 	})
 
-	network, err := container.ConnectionString(ctx, "sslmode=disable")
+	connString, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		test.Fatalf("failed to get connection string: %v", err)
 	}
 
-	pool, err := pgxpool.New(ctx, network)
+	pool, err := pgxpool.New(ctx, connString)
 	if err != nil {
 		test.Fatalf("failed to create pgxpool: %v", err)
 	}
-	if err := pool.Ping(ctx); err != nil {
+	if err = pool.Ping(ctx); err != nil {
 		test.Fatalf("failed to ping postgres: %v", err)
 	}
 	test.Cleanup(pool.Close)
@@ -95,8 +109,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 		_ = sqlDB.Close()
 	})
 
-	migrator := migrate.NewMigrator(sqlDB, migrations.Migrations)
-	if err := migrator.Up(ctx); err != nil {
+	if err = migrate.NewMigrator(sqlDB, migrations.Migrations).Up(ctx); err != nil {
 		test.Fatalf("failed to run migrations: %v", err)
 	}
 
@@ -113,7 +126,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 		test.Fatalf("failed to start redis container: %v", err)
 	}
 	test.Cleanup(func() {
-		if err := redisC.Terminate(context.Background()); err != nil {
+		if err = redisC.Terminate(context.Background()); err != nil {
 			test.Logf("failed to terminate redis container: %v", err)
 		}
 	})
@@ -126,28 +139,39 @@ func New(test *testing.T) (context.Context, *Suite) {
 	if err != nil {
 		test.Fatalf("failed to get redis port: %v", err)
 	}
-	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
 
-	redisPool := &redigo.Pool{
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
-		Dial: func() (redigo.Conn, error) {
-			return redigo.Dial("tcp", redisAddr)
-		},
-		TestOnBorrow: func(c redigo.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			return err
-		},
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort.Port()),
+	})
+	if err = redisClient.Ping(ctx).Err(); err != nil {
+		test.Fatalf("failed to ping redis: %v", err)
 	}
 	test.Cleanup(func() {
-		_ = redisPool.Close()
+		_ = redisClient.Close()
 	})
 
-	redisClient := cache.New(redisPool, zapLogger.With(), redisConnectionTimeout)
+	cacheStore := cache.New(redisClient)
 
-	marketRepo := repoPostgres.NewMarketStore(pool)
-	cacheRepo := repoRedis.NewMarketCacheRepository(redisClient)
-	marketSvc := svcSpot.NewMarketViewer(marketRepo, cacheRepo, cacheTTL)
+	spotCfg := config.SpotConfig{
+		Service: config.ServiceConfig{Name: testServiceName},
+	}
+
+	marketRepo := repoPostgres.NewMarketStore(pool, spotCfg)
+	cacheRepo := repoRedis.NewMarketCacheRepository(cacheStore, testServiceName)
+	biIDCacheRepo := repoRedis.NewMarketByIDCacheRepository(cacheStore, testServiceName)
+
+	marketSvc := svcSpot.NewMarketViewer(
+		marketRepo,
+		cacheRepo,
+		biIDCacheRepo,
+		testCacheTTL,
+		testServiceTimeout,
+		testDefaultLimit,
+		testMaxLimit,
+		testCacheLimit,
+		testServiceName,
+		logger,
+	)
 
 	validator, err := validate.UnaryServerInterceptor()
 	if err != nil {
@@ -156,8 +180,10 @@ func New(test *testing.T) (context.Context, *Suite) {
 
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
-			recovery.UnaryServerInterceptor,
+			recovery.UnaryServerInterceptor(logger),
+			testRolesInjectorInterceptor,
 			validator,
+			grpcErrors.UnaryServerInterceptor(logger),
 		),
 	)
 	grpcSpot.Register(grpcServer, marketSvc)
@@ -170,9 +196,7 @@ func New(test *testing.T) (context.Context, *Suite) {
 	go func() {
 		_ = grpcServer.Serve(listener)
 	}()
-	test.Cleanup(func() {
-		grpcServer.GracefulStop()
-	})
+	test.Cleanup(grpcServer.GracefulStop)
 
 	address := fmt.Sprintf("localhost:%d", listener.Addr().(*net.TCPAddr).Port)
 	connection, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -187,8 +211,16 @@ func New(test *testing.T) (context.Context, *Suite) {
 		Test:       test,
 		SpotClient: proto.NewSpotInstrumentServiceClient(connection),
 		Pool:       pool,
-		RedisPool:  redisPool,
+		Redis:      redisClient,
 	}
+}
+
+func (s *Suite) CtxWithRole(ctx context.Context, roles ...sharedModels.UserRole) context.Context {
+	strRoles := make([]string, len(roles))
+	for i, r := range roles {
+		strRoles[i] = r.String()
+	}
+	return metadata.NewOutgoingContext(ctx, metadata.Pairs(testRolesMetadataKey, strings.Join(strRoles, ",")))
 }
 
 func (s *Suite) ClearMarkets(ctx context.Context) {
@@ -196,6 +228,14 @@ func (s *Suite) ClearMarkets(ctx context.Context) {
 
 	if _, err := s.Pool.Exec(ctx, "DELETE FROM market_store"); err != nil {
 		s.Test.Fatalf("failed to clear market_store: %v", err)
+	}
+}
+
+func (s *Suite) FlushRedis(ctx context.Context) {
+	s.Test.Helper()
+
+	if err := s.Redis.FlushDB(ctx).Err(); err != nil {
+		s.Test.Fatalf("failed to flush redis: %v", err)
 	}
 }
 
@@ -207,6 +247,55 @@ func (s *Suite) InsertMarket(ctx context.Context, id, name string, enabled bool,
 		id, name, enabled, deletedAt,
 	)
 	if err != nil {
-		s.Test.Fatalf("failed to insert market: %v", err)
+		s.Test.Fatalf("failed to insert market %q: %v", name, err)
 	}
+}
+
+func (s *Suite) DeleteMarketFromDB(ctx context.Context, id string) {
+	s.Test.Helper()
+
+	if _, err := s.Pool.Exec(ctx, "DELETE FROM market_store WHERE id = $1", id); err != nil {
+		s.Test.Fatalf("failed to delete market %s from DB: %v", id, err)
+	}
+}
+
+func testRolesInjectorInterceptor(
+	ctx context.Context,
+	request any,
+	_ *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (any, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return handler(ctx, request)
+	}
+
+	values := md.Get(testRolesMetadataKey)
+	if len(values) == 0 {
+		return handler(ctx, request)
+	}
+
+	var roles []sharedModels.UserRole
+	for _, part := range strings.Split(values[0], ",") {
+		if r, ok := sharedModels.ParseUserRole(strings.TrimSpace(part)); ok {
+			roles = append(roles, r)
+		}
+	}
+
+	if len(roles) > 0 {
+		ctx, _ = requestctx.ContextWithUserRoles(ctx, roles)
+	}
+
+	return handler(ctx, request)
+}
+
+func MarketIDs(response *proto.ViewMarketsResponse) []string {
+	if response == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(response.GetMarkets()))
+	for _, m := range response.GetMarkets() {
+		ids = append(ids, m.GetId())
+	}
+	return ids
 }

@@ -16,8 +16,8 @@ type MarketEventProducer struct {
 	mock.Mock
 }
 
-// ProduceMarketStateChangedBatch provides a mock function with given fields: ctx, events, cursor
-func (_m *MarketEventProducer) ProduceMarketStateChangedBatch(ctx context.Context, events []models.MarketStateChangedEvent, cursor domainmodels.PollerCursor) error {
+// PublishMarketStateChanged provides a mock function with given fields: ctx, events, cursor
+func (_m *MarketEventProducer) PublishMarketStateChanged(ctx context.Context, events []models.MarketStateChangedEvent, cursor domainmodels.PollerCursor) error {
 	ret := _m.Called(ctx, events, cursor)
 
 	if len(ret) == 0 {
