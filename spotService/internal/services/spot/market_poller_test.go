@@ -30,11 +30,31 @@ func newTestPoller(
 	cursor *mocks.CursorStore,
 	refresher *mocks.MarketCacheRefresher,
 ) *MarketPoller {
+	var r MarketReader
+	if reader != nil {
+		r = reader
+	}
+
+	var p MarketEventProducer
+	if producer != nil {
+		p = producer
+	}
+
+	var c CursorStore
+	if cursor != nil {
+		c = cursor
+	}
+
+	var cr MarketCacheRefresher
+	if refresher != nil {
+		cr = refresher
+	}
+
 	return NewMarketPoller(
-		reader,
-		producer,
-		cursor,
-		refresher,
+		r,
+		p,
+		c,
+		cr,
 		testPollInterval,
 		testProcessingTimeout,
 		testBatchSize,
@@ -149,6 +169,8 @@ func TestInit(t *testing.T) {
 }
 
 func TestProcessNextBatch(t *testing.T) {
+	markets := makeMarketsForMarketPoller(2)
+
 	tests := []struct {
 		name           string
 		initialAt      time.Time
@@ -173,7 +195,7 @@ func TestProcessNextBatch(t *testing.T) {
 		{
 			name: "меньше batchSize маркетов — hasMore=false",
 			setupMocks: func(reader *mocks.MarketReader, producer *mocks.MarketEventProducer) {
-				markets := makeMarketsForMarketPoller(2) // 2 < 3 = batchSize
+				markets := makeMarketsForMarketPoller(2)
 				reader.On("ListUpdatedSince", mock.Anything, mock.Anything, mock.Anything, testBatchSize).
 					Return(markets, nil)
 				producer.On("PublishMarketStateChanged", mock.Anything, mock.Anything, mock.Anything).
@@ -197,7 +219,6 @@ func TestProcessNextBatch(t *testing.T) {
 		{
 			name: "курсор обновляется до последнего маркета в батче",
 			setupMocks: func(reader *mocks.MarketReader, producer *mocks.MarketEventProducer) {
-				markets := makeMarketsForMarketPoller(2)
 				last := markets[len(markets)-1]
 
 				reader.On("ListUpdatedSince", mock.Anything, mock.Anything, mock.Anything, testBatchSize).
@@ -207,9 +228,13 @@ func TestProcessNextBatch(t *testing.T) {
 
 				_ = last
 			},
+			wantUpdatedIDs: 2,
+			wantHasMore:    false,
 			checkCursor: func(t *testing.T, p *MarketPoller) {
-				assert.NotEqual(t, uuid.Nil, p.lastSeenID)
-				assert.False(t, p.lastSeenAt.IsZero())
+				last := markets[len(markets)-1]
+
+				require.Equal(t, last.UpdatedAt.UTC(), p.lastSeenAt)
+				require.Equal(t, last.ID, p.lastSeenID)
 			},
 		},
 		{
@@ -631,14 +656,27 @@ func TestPoll(t *testing.T) {
 		},
 		{
 			name: "один батч меньше batchSize — один вызов reader, курсор обновлён",
-			setupMocks: func(reader *mocks.MarketReader, producer *mocks.MarketEventProducer, _ *mocks.MarketCacheRefresher) {
+			setupMocks: func(reader *mocks.MarketReader, producer *mocks.MarketEventProducer, refresher *mocks.MarketCacheRefresher) {
 				markets := makeMarketsForMarketPoller(2)
 				reader.On("ListUpdatedSince", mock.Anything, mock.Anything, mock.Anything, testBatchSize).
 					Return(markets, nil).Once()
 				producer.On("PublishMarketStateChanged", mock.Anything, mock.Anything, mock.Anything).
 					Return(nil).Once()
+				refresher.On(
+					"InvalidateByIDs",
+					mock.Anything,
+					mock.MatchedBy(func(ids []uuid.UUID) bool {
+						return len(ids) == 2 &&
+							ids[0] == markets[0].ID &&
+							ids[1] == markets[1].ID
+					}),
+				).Return(nil).Once()
+
+				refresher.On("RefreshAll", mock.Anything).Return(nil).Once()
 			},
-			checkErr: func(t *testing.T, err error) { require.NoError(t, err) },
+			checkErr: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
 			checkState: func(t *testing.T, p *MarketPoller) {
 				assert.NotEqual(t, uuid.Nil, p.lastSeenID)
 			},

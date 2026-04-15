@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -11,12 +12,31 @@ import (
 	"github.com/stretchr/testify/require"
 
 	orderModel "github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
 
+const (
+	testCompleteAttempts       = 3
+	testCompleteAttemptTimeout = 100 * time.Millisecond
+	testCompleteRetryDelay     = 1 * time.Millisecond
+	testCleanupTimeout         = 100 * time.Millisecond
+)
+
 func newIdemService(adapter *mockIdempotencyAdapter) *IdempotencyService {
-	return NewIdempotencyService(adapter, zapLogger.NewNop())
+	cfg := config.OrderConfig{
+		Redis: config.RedisConfig{
+			Idempotency: config.IdempotencyConfig{
+				CompleteAttempts:       testCompleteAttempts,
+				CompleteAttemptTimeout: testCompleteAttemptTimeout,
+				CompleteRetryDelay:     testCompleteRetryDelay,
+				CleanupTimeout:         testCleanupTimeout,
+			},
+		},
+	}
+
+	return NewIdempotencyService(adapter, zapLogger.NewNop(), cfg)
 }
 
 func TestBuildRequestHash(t *testing.T) {
@@ -251,11 +271,28 @@ func TestCompleteIdempotencyChecking(t *testing.T) {
 			},
 		},
 		{
-			name: "ошибка Complete — не пробрасывается (fire-and-forget)",
+			name: "ошибка на первой попытке, затем успех — делает retry",
 			setupMock: func(a *mockIdempotencyAdapter) {
 				a.On("Complete", mock.Anything, userID, hash, orderID,
 					orderModel.OrderStatusCreated.String(),
 				).Return(errors.New("redis down")).Once()
+
+				a.On("Complete", mock.Anything, userID, hash, orderID,
+					orderModel.OrderStatusCreated.String(),
+				).Return(nil).Once()
+			},
+		},
+		{
+			name: "ошибка Complete — делает bounded retries и не пробрасывает ошибку",
+			setupMock: func(a *mockIdempotencyAdapter) {
+				a.On(
+					"Complete",
+					mock.Anything,
+					userID,
+					hash,
+					orderID,
+					orderModel.OrderStatusCreated.String(),
+				).Return(errors.New("redis down"))
 			},
 		},
 	}

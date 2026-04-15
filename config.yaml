@@ -44,7 +44,12 @@ order:
     idle_timeout: 1m
     max_conn_lifetime: 30m
     market_block_ttl: 10m
-    idempotency_ttl: 30m
+    idempotency:
+      request_ttl: 1m
+      complete_attempts: 3
+      complete_attempt_timeout: 300ms
+      complete_retry_delay: 50ms
+      cleanup_timeout: 300ms
   grpc_rate_limit:
     create_order: 1000
     get_order_status: 2000

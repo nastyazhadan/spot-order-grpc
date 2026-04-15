@@ -155,7 +155,9 @@ func (s *Store) Complete(
 		return fmt.Errorf("%s: script: %w", op, err)
 	}
 	if result == 0 {
-		return fmt.Errorf("%s: key expired before complete", op)
+		if err = s.store.SetWithTTL(ctx, key, string(value), s.ttl); err != nil {
+			return fmt.Errorf("%s: restore expired key: %w", op, err)
+		}
 	}
 
 	return nil

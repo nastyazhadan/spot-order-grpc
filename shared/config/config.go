@@ -87,18 +87,26 @@ type PostgresPoolConfig struct {
 }
 
 type RedisConfig struct {
-	Host              string        `mapstructure:"host"`
-	Port              int           `mapstructure:"port"`
-	ConnectionTimeout time.Duration `mapstructure:"connection_timeout"`
-	PoolSize          int           `mapstructure:"pool_size"`
-	MinIdle           int           `mapstructure:"min_idle"`
-	MaxIdle           int           `mapstructure:"max_idle"`
-	MaxActiveConns    int           `mapstructure:"max_active_conns"`
-	IdleTimeout       time.Duration `mapstructure:"idle_timeout"`
-	ConnMaxLifetime   time.Duration `mapstructure:"max_conn_lifetime"`
-	CacheTTL          time.Duration `mapstructure:"spot_cache_ttl"`
-	MarketBlockTTL    time.Duration `mapstructure:"market_block_ttl"`
-	IdempotencyTTL    time.Duration `mapstructure:"idempotency_ttl"`
+	Host              string            `mapstructure:"host"`
+	Port              int               `mapstructure:"port"`
+	ConnectionTimeout time.Duration     `mapstructure:"connection_timeout"`
+	PoolSize          int               `mapstructure:"pool_size"`
+	MinIdle           int               `mapstructure:"min_idle"`
+	MaxIdle           int               `mapstructure:"max_idle"`
+	MaxActiveConns    int               `mapstructure:"max_active_conns"`
+	IdleTimeout       time.Duration     `mapstructure:"idle_timeout"`
+	ConnMaxLifetime   time.Duration     `mapstructure:"max_conn_lifetime"`
+	CacheTTL          time.Duration     `mapstructure:"spot_cache_ttl"`
+	MarketBlockTTL    time.Duration     `mapstructure:"market_block_ttl"`
+	Idempotency       IdempotencyConfig `mapstructure:"idempotency"`
+}
+
+type IdempotencyConfig struct {
+	RequestTTl             time.Duration `mapstructure:"request_ttl"`
+	CompleteAttempts       int           `mapstructure:"complete_attempts"`
+	CompleteAttemptTimeout time.Duration `mapstructure:"complete_attempt_timeout"`
+	CompleteRetryDelay     time.Duration `mapstructure:"complete_retry_delay"`
+	CleanupTimeout         time.Duration `mapstructure:"cleanup_timeout"`
 }
 
 type KafkaConfig struct {

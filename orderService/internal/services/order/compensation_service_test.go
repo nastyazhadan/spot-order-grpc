@@ -73,7 +73,7 @@ func (d *compensationDeps) beginTxWithRollback() *mockTx {
 	return tx
 }
 
-func makeEvent(enabled bool, deleted bool) sharedModels.MarketStateChangedEvent {
+func makeEvent(enabled, deleted bool) sharedModels.MarketStateChangedEvent {
 	e := sharedModels.MarketStateChangedEvent{
 		EventID:   uuid.New(),
 		MarketID:  uuid.New(),
@@ -98,15 +98,14 @@ func TestProcessMarketStateChanged(t *testing.T) {
 	tests := []struct {
 		name           string
 		event          sharedModels.MarketStateChangedEvent
-		setupMocks     func(t *testing.T, d *compensationDeps)
+		setupMocks     func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent)
 		expectedErrMsg string
 		checkErr       func(t *testing.T, err error)
 	}{
 		{
 			name:  "enabled рынок — ордера не отменяются, commit, sync block",
 			event: makeEvent(true, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
-				event := makeEvent(true, false)
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTx(nil)
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(true, models.InboxEventStatusProcessing, nil)
@@ -121,7 +120,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "enabled рынок — commit вызывается, sync block called",
 			event: makeEvent(true, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTx(nil)
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(true, models.InboxEventStatusProcessing, nil)
@@ -137,7 +136,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "disabled рынок — ордера отменяются, events публикуются",
 			event: makeEvent(false, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				cancelledIDs := []uuid.UUID{uuid.New(), uuid.New()}
 				tx := d.beginTx(nil)
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
@@ -158,7 +157,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "deleted рынок — ордера отменяются, events публикуются",
 			event: makeEvent(true, true),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				cancelledIDs := []uuid.UUID{uuid.New()}
 				tx := d.beginTx(nil)
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
@@ -179,7 +178,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "disabled+deleted рынок — ордера отменяются",
 			event: makeEvent(false, true),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTx(nil)
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(true, models.InboxEventStatusProcessing, nil)
@@ -196,7 +195,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "нет активных ордеров для отмены — нет событий статуса",
 			event: makeEvent(false, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTx(nil)
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(true, models.InboxEventStatusProcessing, nil)
@@ -213,7 +212,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "событие уже обработано (InboxEventStatusProcessed) — skip, resync block",
 			event: makeEvent(false, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTx(nil)
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(false, models.InboxEventStatusProcessed, nil)
@@ -227,7 +226,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "событие в процессе (InboxEventStatusProcessing) — skip, resync block",
 			event: makeEvent(true, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTx(nil)
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(false, models.InboxEventStatusProcessing, nil)
@@ -241,7 +240,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "ошибка - Begin транзакции",
 			event: makeEvent(true, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				d.manager.On("Begin", mock.Anything).Return((*mockTx)(nil), errors.New("pg pool exhausted"))
 			},
 			checkErr: func(t *testing.T, err error) {
@@ -253,7 +252,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "ошибка - BeginProcessing — rollback, SaveFailed",
 			event: makeEvent(true, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTxWithRollback()
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(false, models.InboxEventStatusFailed, errors.New("inbox write failed"))
@@ -269,7 +268,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "ошибка - BeginProcessing и SaveFailed тоже падает — обе ошибки в сообщении",
 			event: makeEvent(true, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTxWithRollback()
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(false, models.InboxEventStatusFailed, errors.New("inbox error"))
@@ -286,7 +285,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "ошибка - CancelActiveOrdersByMarket — rollback, SaveFailed",
 			event: makeEvent(false, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTxWithRollback()
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(true, models.InboxEventStatusProcessing, nil)
@@ -304,7 +303,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "ошибка - ProduceOrderStatusUpdated — rollback, SaveFailed",
 			event: makeEvent(false, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTxWithRollback()
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(true, models.InboxEventStatusProcessing, nil)
@@ -325,7 +324,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "ошибка - ProduceOrderStatusUpdated для второго ордера — первый уже записан",
 			event: makeEvent(false, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTxWithRollback()
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(true, models.InboxEventStatusProcessing, nil)
@@ -350,7 +349,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "ошибка - MarkProcessed — rollback, SaveFailed",
 			event: makeEvent(true, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTxWithRollback()
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(true, models.InboxEventStatusProcessing, nil)
@@ -368,7 +367,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "ошибка - commit транзакции",
 			event: makeEvent(true, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := &mockTx{}
 				tx.On("Commit", mock.Anything).Return(errors.New("commit failed"))
 				tx.On("Rollback", mock.Anything).Return(pgx.ErrTxClosed)
@@ -385,7 +384,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "ошибка - commit транзакции skip-пути",
 			event: makeEvent(true, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := &mockTx{}
 				tx.On("Commit", mock.Anything).Return(errors.New("commit skipped failed"))
 				tx.On("Rollback", mock.Anything).Return(pgx.ErrTxClosed)
@@ -401,7 +400,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 		{
 			name:  "sync block падает — ошибка не пробрасывается (best effort)",
 			event: makeEvent(false, false),
-			setupMocks: func(t *testing.T, d *compensationDeps) {
+			setupMocks: func(t *testing.T, d *compensationDeps, event sharedModels.MarketStateChangedEvent) {
 				tx := d.beginTx(nil)
 				d.inbox.On("BeginProcessing", mock.Anything, tx, mock.AnythingOfType("models.InboxEvent")).
 					Return(true, models.InboxEventStatusProcessing, nil)
@@ -420,7 +419,7 @@ func TestProcessMarketStateChanged(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := newCompensationDeps(t)
-			tt.setupMocks(t, d)
+			tt.setupMocks(t, d, tt.event)
 
 			svc := d.service()
 			err := svc.ProcessMarketStateChanged(

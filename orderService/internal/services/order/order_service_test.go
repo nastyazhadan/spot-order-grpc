@@ -16,6 +16,7 @@ import (
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	orderModel "github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/services/mocks"
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
@@ -47,9 +48,11 @@ type mockTx struct {
 func (m *mockTx) Begin(ctx context.Context) (pgx.Tx, error) {
 	panic("unexpected: Begin")
 }
+
 func (m *mockTx) Commit(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
 }
+
 func (m *mockTx) Rollback(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
 }
@@ -61,9 +64,11 @@ func (m *mockTx) CopyFrom(_ context.Context, _ pgx.Identifier, _ []string, _ pgx
 func (m *mockTx) SendBatch(_ context.Context, _ *pgx.Batch) pgx.BatchResults {
 	panic("unexpected: SendBatch")
 }
+
 func (m *mockTx) LargeObjects() pgx.LargeObjects {
 	panic("unexpected: LargeObjects")
 }
+
 func (m *mockTx) Prepare(_ context.Context, _, _ string) (*pgconn.StatementDescription, error) {
 	panic("unexpected: Prepare")
 }
@@ -79,6 +84,7 @@ func (m *mockTx) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) 
 func (m *mockTx) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 	panic("unexpected: QueryRow")
 }
+
 func (m *mockTx) Conn() *pgx.Conn {
 	panic("unexpected: Conn")
 }
@@ -115,7 +121,18 @@ func newDeps(t *testing.T) *deps {
 }
 
 func (d *deps) service() *OrderService {
-	idem := NewIdempotencyService(d.idemAdapter, zapLogger.NewNop())
+	cfg := config.OrderConfig{
+		Redis: config.RedisConfig{
+			Idempotency: config.IdempotencyConfig{
+				CompleteAttempts:       testCompleteAttempts,
+				CompleteAttemptTimeout: testCompleteAttemptTimeout,
+				CompleteRetryDelay:     testCompleteRetryDelay,
+				CleanupTimeout:         testCleanupTimeout,
+			},
+		},
+	}
+
+	idem := NewIdempotencyService(d.idemAdapter, zapLogger.NewNop(), cfg)
 	return New(
 		d.manager, d.saver, d.getter, d.viewer, d.blockStore,
 		RateLimiters{Create: d.createLim, Get: d.getLim},
@@ -367,7 +384,7 @@ func TestCreateOrder(t *testing.T) {
 			},
 		},
 		{
-			name:      "идемпотентность - ошибка acquire — продолжаем без идемпотентности",
+			name:      "идемпотентность - ошибка acquire — fail fast",
 			userID:    userID,
 			marketID:  marketID,
 			orderType: orderModel.OrderTypeLimit,
@@ -376,15 +393,11 @@ func TestCreateOrder(t *testing.T) {
 			setupMocks: func(t *testing.T, d *deps) {
 				d.idemAdapter.On("Acquire", mock.Anything, userID, mock.Anything).
 					Return(IdempotencyResult{}, false, errors.New("redis timeout"))
-				d.allowCreate(userID)
-				d.allowMarket(marketID)
-				tx := d.beginTx(nil)
-				d.saver.On("SaveOrder", mock.Anything, tx, mock.AnythingOfType("models.Order")).Return(nil)
-				d.producer.On("ProduceOrderCreated", mock.Anything, tx, mock.AnythingOfType("models.OrderCreatedEvent")).Return(nil)
 			},
-			expectedStatus: orderModel.OrderStatusCreated,
-			checkResult: func(t *testing.T, orderID uuid.UUID, _ orderModel.OrderStatus) {
-				assert.NotEqual(t, uuid.Nil, orderID)
+			expectedStatus: orderModel.OrderStatusUnspecified,
+			expectedErrMsg: "redis timeout",
+			shortCircuit: func(t *testing.T, d *deps) {
+				assertCreateShortCircuit(t, d)
 			},
 		},
 		{

@@ -85,7 +85,6 @@ func TestViewMarkets(t *testing.T) {
 		checkErr    func(t *testing.T, err error)
 		checkResult func(t *testing.T, markets []models.Market)
 	}{
-		// ── роли из контекста ─────────────────────────────────────────────────
 		{
 			name:       "нет роли в контексте — ErrUserRoleNotSpecified",
 			ctx:        context.Background(),
@@ -110,13 +109,11 @@ func TestViewMarkets(t *testing.T) {
 			setupMocks: func(_ *mocks.MarketRepository, _ *mocks.MarketCacheRepository) {},
 			wantErr:    serviceErrors.ErrUserRoleNotSpecified,
 		},
-
-		// ── нормализация лимита ────────────────────────────────────────────────
 		{
 			name:   "limit=0 заменяется на defaultLimit",
 			ctx:    ctxWithRoles(models.UserRoleAdmin),
 			limit:  0,
-			offset: 5, // offset>0 чтобы обойти cache-path
+			offset: 5,
 			setupMocks: func(repo *mocks.MarketRepository, _ *mocks.MarketCacheRepository) {
 				repo.On("GetMarketsPage", mock.Anything, roleAdminKey, testDefaultLimit, uint64(5)).
 					Return(makeMarkets(3), nil)
@@ -132,8 +129,6 @@ func TestViewMarkets(t *testing.T) {
 					Return(makeMarkets(5), nil)
 			},
 		},
-
-		// ── offset overflow ────────────────────────────────────────────────────
 		{
 			name:       "offset > math.MaxInt — ErrInvalidPagination",
 			ctx:        ctxWithRoles(models.UserRoleAdmin),
@@ -142,8 +137,6 @@ func TestViewMarkets(t *testing.T) {
 			setupMocks: func(_ *mocks.MarketRepository, _ *mocks.MarketCacheRepository) {},
 			wantErr:    serviceErrors.ErrInvalidPagination,
 		},
-
-		// ── head-cache path (offset=0, limit≤cacheLimit) ──────────────────────
 		{
 			name:   "cache hit — head page возвращается напрямую, hasMore=true",
 			ctx:    ctxWithRoles(models.UserRoleAdmin),
@@ -151,7 +144,7 @@ func TestViewMarkets(t *testing.T) {
 			offset: 0,
 			setupMocks: func(_ *mocks.MarketRepository, cache *mocks.MarketCacheRepository) {
 				cache.On("GetMarkets", mock.Anything, roleAdminKey).
-					Return(makeMarkets(30), nil) // 30 > 10 → hasMore
+					Return(makeMarkets(30), nil)
 			},
 			wantHasMore: true,
 			wantOffset:  10,
@@ -195,7 +188,7 @@ func TestViewMarkets(t *testing.T) {
 				cache.On("GetMarkets", mock.Anything, roleAdminKey).
 					Return(nil, repositoryErrors.ErrMarketCacheCorrupted)
 
-				repoMarkets := makeMarkets(5) // ровно 5, hasMore=false
+				repoMarkets := makeMarkets(5)
 				repo.On("GetMarketsPage", mock.Anything, roleAdminKey, testCacheLimit+1, uint64(0)).
 					Return(repoMarkets, nil)
 				cache.On("SetMarkets", mock.Anything, repoMarkets, roleAdminKey, testCacheTTL).
@@ -251,8 +244,6 @@ func TestViewMarkets(t *testing.T) {
 				assert.Contains(t, err.Error(), "connection refused")
 			},
 		},
-
-		// ── прямой путь через репо (offset>0 или limit>cacheLimit) ────────────
 		{
 			name:   "offset>0 — кэш не трогается, запрос в репо с правильными параметрами",
 			ctx:    ctxWithRoles(models.UserRoleAdmin),
@@ -260,7 +251,7 @@ func TestViewMarkets(t *testing.T) {
 			offset: 20,
 			setupMocks: func(repo *mocks.MarketRepository, _ *mocks.MarketCacheRepository) {
 				repo.On("GetMarketsPage", mock.Anything, roleAdminKey, uint64(10), uint64(20)).
-					Return(makeMarkets(11), nil) // 11 > 10 → hasMore
+					Return(makeMarkets(11), nil)
 			},
 			wantHasMore: true,
 			wantOffset:  30,
@@ -300,8 +291,6 @@ func TestViewMarkets(t *testing.T) {
 				assert.Contains(t, err.Error(), "db error")
 			},
 		},
-
-		// ── пагинация ─────────────────────────────────────────────────────────
 		{
 			name:   "репо вернул limit+1 элементов — hasMore=true, nextOffset=offset+limit",
 			ctx:    ctxWithRoles(models.UserRoleAdmin),
@@ -329,8 +318,6 @@ func TestViewMarkets(t *testing.T) {
 			wantHasMore: false,
 			wantOffset:  0,
 		},
-
-		// ── выбор ключа роли ──────────────────────────────────────────────────
 		{
 			name:   "admin + user — запрос идёт с ключом admin",
 			ctx:    ctxWithRoles(models.UserRoleAdmin, models.UserRoleUser),
@@ -414,7 +401,6 @@ func TestGetMarketByID(t *testing.T) {
 		wantErr    error
 		checkErr   func(t *testing.T, err error)
 	}{
-		// ── нет роли ─────────────────────────────────────────────────────────
 		{
 			name:       "нет роли в контексте — ErrUserRoleNotSpecified",
 			ctx:        context.Background(),
@@ -429,8 +415,6 @@ func TestGetMarketByID(t *testing.T) {
 			setupMocks: func(_ *mocks.MarketRepository, _ *mocks.MarketByIDCacheRepository) {},
 			wantErr:    serviceErrors.ErrUserRoleNotSpecified,
 		},
-
-		// ── cache hit ─────────────────────────────────────────────────────────
 		{
 			name:   "cache hit — репо не вызывается, маркет возвращается из кэша",
 			ctx:    ctxWithRoles(models.UserRoleAdmin),
@@ -441,8 +425,6 @@ func TestGetMarketByID(t *testing.T) {
 			},
 			wantMarket: &activeMarket,
 		},
-
-		// ── cache miss → repo ─────────────────────────────────────────────────
 		{
 			name:   "cache miss (ErrMarketNotFound) — load from repo, warm cache",
 			ctx:    ctxWithRoles(models.UserRoleAdmin),
@@ -450,7 +432,6 @@ func TestGetMarketByID(t *testing.T) {
 			setupMocks: func(repo *mocks.MarketRepository, byIDCache *mocks.MarketByIDCacheRepository) {
 				byIDCache.On("GetMarketByID", mock.Anything, activeMarket.ID).
 					Return(models.Market{}, repositoryErrors.ErrMarketNotFound).Once()
-				// second check inside singleflight
 				byIDCache.On("GetMarketByID", mock.Anything, activeMarket.ID).
 					Return(models.Market{}, repositoryErrors.ErrMarketNotFound).Once()
 
@@ -473,8 +454,6 @@ func TestGetMarketByID(t *testing.T) {
 			},
 			wantMarket: &activeMarket,
 		},
-
-		// ── corrupted cache ───────────────────────────────────────────────────
 		{
 			name:   "corrupted cache — load from repo, SetMarketByID успешен",
 			ctx:    ctxWithRoles(models.UserRoleAdmin),
@@ -546,12 +525,9 @@ func TestGetMarketByID(t *testing.T) {
 					Return(activeMarket, nil).Once()
 				byIDCache.On("SetMarketByID", mock.Anything, activeMarket, testCacheTTL).
 					Return(errors.New("redis flaky")).Once()
-				// DeleteMarketByID НЕ должен вызываться — проверяется через AssertExpectations
 			},
 			wantMarket: &activeMarket,
 		},
-
-		// ── repo errors ───────────────────────────────────────────────────────
 		{
 			name:   "repo — ErrMarketNotFound — возвращаем ErrMarketNotFound с ID",
 			ctx:    ctxWithRoles(models.UserRoleAdmin),
@@ -588,8 +564,6 @@ func TestGetMarketByID(t *testing.T) {
 				assert.Contains(t, err.Error(), "pg: timeout")
 			},
 		},
-
-		// ── validateMarketAccess — admin ──────────────────────────────────────
 		{
 			name:   "admin видит active enabled маркет",
 			ctx:    ctxWithRoles(models.UserRoleAdmin),
@@ -626,8 +600,6 @@ func TestGetMarketByID(t *testing.T) {
 			},
 			wantMarket: &deletedDisabledMarket,
 		},
-
-		// ── validateMarketAccess — viewer ─────────────────────────────────────
 		{
 			name:   "viewer видит active маркет",
 			ctx:    ctxWithRoles(models.UserRoleViewer),
@@ -673,8 +645,6 @@ func TestGetMarketByID(t *testing.T) {
 				assert.ErrorAs(t, err, &notFound)
 			},
 		},
-
-		// ── validateMarketAccess — user ───────────────────────────────────────
 		{
 			name:   "user видит active enabled маркет",
 			ctx:    ctxWithRoles(models.UserRoleUser),
@@ -725,8 +695,6 @@ func TestGetMarketByID(t *testing.T) {
 				assert.ErrorAs(t, err, &notFound)
 			},
 		},
-
-		// ── приоритет ролей ───────────────────────────────────────────────────
 		{
 			name:   "admin + user — admin, deleted маркет виден",
 			ctx:    ctxWithRoles(models.UserRoleAdmin, models.UserRoleUser),
@@ -1052,7 +1020,7 @@ func TestBuildPageResponse(t *testing.T) {
 			name:    "overflow nextOffset — ErrInvalidPagination",
 			markets: markets5,
 			limit:   3,
-			offset:  math.MaxUint64 - 2, // nextOffset = MaxUint64-2+3 переполняется
+			offset:  math.MaxUint64 - 2,
 			wantErr: true,
 		},
 		{

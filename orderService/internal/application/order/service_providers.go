@@ -156,10 +156,10 @@ func provideIdempotencyService(
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) *orderService.IdempotencyService {
-	idempotencyStore := idemStore.New(store, cfg.Redis.IdempotencyTTL)
+	idempotencyStore := idemStore.New(store, cfg.Redis.Idempotency.RequestTTl)
 	adapter := &redisIdempotencyAdapter{store: idempotencyStore}
 
-	return orderService.NewIdempotencyService(adapter, logger)
+	return orderService.NewIdempotencyService(adapter, logger, cfg)
 }
 
 func provideOrderService(

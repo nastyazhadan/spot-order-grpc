@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	orderModel "github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
 )
@@ -29,12 +31,18 @@ type IdempotencyAdapter interface {
 type IdempotencyService struct {
 	idempotencyAdapter IdempotencyAdapter
 	logger             *zapLogger.Logger
+	config             config.OrderConfig
 }
 
-func NewIdempotencyService(adapter IdempotencyAdapter, logger *zapLogger.Logger) *IdempotencyService {
+func NewIdempotencyService(
+	adapter IdempotencyAdapter,
+	logger *zapLogger.Logger,
+	cfg config.OrderConfig,
+) *IdempotencyService {
 	return &IdempotencyService{
 		idempotencyAdapter: adapter,
 		logger:             logger,
+		config:             cfg,
 	}
 }
 
@@ -89,15 +97,41 @@ func (s *IdempotencyService) completeIdempotencyChecking(
 	requestHash string,
 	orderStatus orderModel.OrderStatus,
 ) {
-	cleanupCtx := context.WithoutCancel(ctx)
-	if err := s.idempotencyAdapter.Complete(
-		cleanupCtx, userID, requestHash, orderID, orderStatus.String(),
-	); err != nil {
-		s.logger.Warn(ctx, "failed to mark idempotency key as completed",
-			zap.String("order_id", orderID.String()),
-			zap.Error(err),
+	var lastError error
+
+	for attempt := 1; attempt <= s.config.Redis.Idempotency.CompleteAttempts; attempt++ {
+		completeCtx, cancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			s.config.Redis.Idempotency.CompleteAttemptTimeout,
 		)
+
+		err := s.idempotencyAdapter.Complete(
+			completeCtx, userID, requestHash, orderID, orderStatus.String(),
+		)
+		cancel()
+
+		if err == nil {
+			return
+		}
+
+		lastError = err
+
+		if attempt < s.config.Redis.Idempotency.CompleteAttempts {
+			s.logger.Warn(ctx, "failed to mark idempotency key as completed, retrying",
+				zap.String("order_id", orderID.String()),
+				zap.Int("attempt", attempt),
+				zap.Int("max_attempts", s.config.Redis.Idempotency.CompleteAttempts),
+				zap.Error(err),
+			)
+			time.Sleep(s.config.Redis.Idempotency.CompleteRetryDelay)
+		}
 	}
+
+	s.logger.Error(ctx, "failed to mark idempotency key as completed after retries",
+		zap.String("order_id", orderID.String()),
+		zap.Int("attempts", s.config.Redis.Idempotency.CompleteAttempts),
+		zap.Error(lastError),
+	)
 }
 
 func (s *IdempotencyService) failCleanup(
@@ -109,7 +143,12 @@ func (s *IdempotencyService) failCleanup(
 	if !acquired {
 		return
 	}
-	cleanupCtx := context.WithoutCancel(ctx)
+
+	cleanupCtx, cancel := context.WithTimeout(
+		context.WithoutCancel(ctx), s.config.Redis.Idempotency.CleanupTimeout,
+	)
+	defer cancel()
+
 	if err := s.idempotencyAdapter.FailCleanup(cleanupCtx, userID, requestHash); err != nil {
 		s.logger.Warn(ctx, "idempotency fail cleanup error",
 			zap.Error(err),
