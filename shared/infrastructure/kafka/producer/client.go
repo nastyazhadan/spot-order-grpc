@@ -245,22 +245,20 @@ func (c *Client) waitPublishResult(
 	ctx context.Context,
 	request *publishRequest,
 ) error {
-	ctxDone := ctx.Done()
-
 	for {
 		select {
 		case <-request.done:
 			return request.result.err
 
-		case <-ctxDone:
+		case <-ctx.Done():
 			c.logger.Warn(
 				ctx,
 				"Kafka publish wait canceled by context",
 				zap.String("topic", request.topic),
 				zap.Error(ctx.Err()),
 			)
-			// Чтобы не было лишнего retry
-			ctxDone = nil
+			tracing.RecordError(request.span, ctx.Err())
+			return ctx.Err()
 
 		case <-c.closed:
 			if request.isDone() {

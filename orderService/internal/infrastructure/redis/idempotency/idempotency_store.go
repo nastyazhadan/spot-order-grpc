@@ -100,7 +100,7 @@ func (s *Store) acquire(
 
 	key := buildKey(userID, requestHash)
 
-	newEntry := Entry{Status: statusProcessing, RequestHash: requestHash}
+	newEntry := Entry{Status: statusProcessing, RequestHash: requestHash, StartedAt: time.Now().UTC()}
 	newValue, err := json.Marshal(newEntry)
 	if err != nil {
 		return Entry{}, false, fmt.Errorf("%s: marshal: %w", op, err)

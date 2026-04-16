@@ -140,7 +140,7 @@ func (s *IdempotencyService) completeIdempotencyChecking(
 					zap.String("order_id", orderID.String()),
 					zap.Error(ctx.Err()),
 				)
-				return nil
+				return ctx.Err()
 			case <-timer.C:
 			}
 		}
