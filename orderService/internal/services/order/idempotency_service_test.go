@@ -261,6 +261,8 @@ func TestCompleteIdempotencyChecking(t *testing.T) {
 	tests := []struct {
 		name      string
 		setupMock func(adapter *mockIdempotencyAdapter)
+		wantError bool
+		wantCalls int
 	}{
 		{
 			name: "успешный Complete — вызывается с правильными аргументами",
@@ -269,6 +271,8 @@ func TestCompleteIdempotencyChecking(t *testing.T) {
 					orderModel.OrderStatusCreated.String(),
 				).Return(nil).Once()
 			},
+			wantError: false,
+			wantCalls: 1,
 		},
 		{
 			name: "ошибка на первой попытке, затем успех — делает retry",
@@ -281,9 +285,11 @@ func TestCompleteIdempotencyChecking(t *testing.T) {
 					orderModel.OrderStatusCreated.String(),
 				).Return(nil).Once()
 			},
+			wantError: false,
+			wantCalls: 2,
 		},
 		{
-			name: "ошибка Complete — делает bounded retries и не пробрасывает ошибку",
+			name: "ошибка Complete — делает bounded retries и возвращает ошибку",
 			setupMock: func(a *mockIdempotencyAdapter) {
 				a.On(
 					"Complete",
@@ -294,6 +300,8 @@ func TestCompleteIdempotencyChecking(t *testing.T) {
 					orderModel.OrderStatusCreated.String(),
 				).Return(errors.New("redis down"))
 			},
+			wantError: true,
+			wantCalls: testCompleteAttempts,
 		},
 	}
 
@@ -303,8 +311,21 @@ func TestCompleteIdempotencyChecking(t *testing.T) {
 			tt.setupMock(adapter)
 			svc := newIdemService(adapter)
 
-			svc.completeIdempotencyChecking(context.Background(), userID, orderID, hash, orderModel.OrderStatusCreated)
+			err := svc.completeIdempotencyChecking(
+				context.Background(),
+				userID,
+				orderID,
+				hash,
+				orderModel.OrderStatusCreated,
+			)
 
+			if tt.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			adapter.AssertNumberOfCalls(t, "Complete", tt.wantCalls)
 			adapter.AssertExpectations(t)
 		})
 	}

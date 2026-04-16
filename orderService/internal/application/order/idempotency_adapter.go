@@ -25,6 +25,7 @@ func (a *redisIdempotencyAdapter) Acquire(
 	return orderService.IdempotencyResult{
 		IsCompleted:  entry.IsCompleted(),
 		IsProcessing: entry.IsProcessing(),
+		StartedAt:    entry.StartedAt,
 		OrderID:      entry.OrderID,
 		OrderStatus:  entry.OrderStatus,
 	}, acquired, nil

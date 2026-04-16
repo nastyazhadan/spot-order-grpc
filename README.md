@@ -554,9 +554,9 @@ spotOrder/
 ┌────────────────────────────────────────┐
 │            OrderService                │  :50051
 │  interceptors (chain):                 │
-│   recoverer → tracer → meter →         │
-│   logger → errorMapper → auth →        │
-│   rateLimiter → validator              │
+│   validator → recoverer → tracer →     │
+│   meter → logger → errorMapper →       │
+│   auth → rateLimiter                   │
 │────────────────────────────────────────│
 │  OrderHandler                          │
 │  OrderService (business)               │
@@ -580,9 +580,9 @@ spotOrder/
 ┌────────────────────────────────────────┐
 │        SpotInstrumentService           │  :50052
 │  interceptors (chain):                 │
-│   recoverer → tracer → meter →         │
-│   logger → errorMapper → auth →        │
-│   rateLimiter → validator              │
+│   validator → recoverer → tracer →     │
+│   meter → logger → errorMapper →       │
+│   auth → rateLimiter                   │
 │────────────────────────────────────────│
 │  SpotInstrumentHandler                 │
 │  MarketViewer (business)               │  ← при miss первой страницы может лениво прогревать head-cache из PostgreSQL

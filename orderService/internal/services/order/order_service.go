@@ -60,6 +60,9 @@ type MarketBlockStore interface {
 
 type Getter interface {
 	GetOrder(ctx context.Context, id, userID uuid.UUID) (models.Order, error)
+	FindOrderForIdempotencyRecovery(ctx context.Context, userID, marketID uuid.UUID,
+		orderType orderModel.OrderType, price orderModel.Decimal, quantity int64, startedAt time.Time,
+	) (models.Order, error)
 }
 
 type MarketViewer interface {
@@ -126,7 +129,16 @@ func (s *OrderService) CreateOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, idemError)
 	}
 	if !acquired {
-		return s.idempotencyService.checkIdempotencyResult(ctx, idemResult)
+		return s.resolveIdempotentRequest(
+			ctx,
+			userID,
+			marketID,
+			orderType,
+			price,
+			quantity,
+			requestHash,
+			idemResult,
+		)
 	}
 
 	if err := s.checkRateLimit(ctx, userID, s.rateLimiters.Create, "create_order"); err != nil {
@@ -145,7 +157,14 @@ func (s *OrderService) CreateOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
-	s.completeIdempotencyAsync(ctx, userID, orderID, requestHash, orderStatus)
+	// Ошибку не нужно возвращать, так как ордер уже закоммичен и ретрай клиента не нужен
+	if err = s.completeIdempotencySync(ctx, userID, orderID, requestHash, orderStatus); err != nil {
+		s.logger.Error(ctx, "order committed but idempotency completion failed",
+			zap.String("order_id", orderID.String()),
+			zap.String("request_hash", requestHash),
+			zap.Error(err),
+		)
+	}
 	return orderID, orderStatus, nil
 }
 
@@ -198,6 +217,66 @@ func (s *OrderService) fetchOrder(
 	)
 
 	return order, nil
+}
+
+func (s *OrderService) resolveIdempotentRequest(
+	ctx context.Context,
+	userID uuid.UUID,
+	marketID uuid.UUID,
+	orderType orderModel.OrderType,
+	price orderModel.Decimal,
+	quantity int64,
+	requestHash string,
+	idemResult IdempotencyResult,
+) (uuid.UUID, orderModel.OrderStatus, error) {
+	if idemResult.IsCompleted {
+		return s.idempotencyService.checkIdempotencyResult(ctx, idemResult)
+	}
+
+	if !idemResult.IsProcessing {
+		return uuid.Nil, orderModel.OrderStatusUnspecified, errors.New("unknown idempotency state")
+	}
+
+	return s.tryRecoverOrderFromProcessing(ctx, userID, marketID, orderType, price, quantity, requestHash, idemResult)
+}
+
+func (s *OrderService) tryRecoverOrderFromProcessing(
+	ctx context.Context,
+	userID uuid.UUID,
+	marketID uuid.UUID,
+	orderType orderModel.OrderType,
+	price orderModel.Decimal,
+	quantity int64,
+	requestHash string,
+	idemResult IdempotencyResult,
+) (uuid.UUID, orderModel.OrderStatus, error) {
+	if idemResult.StartedAt.IsZero() {
+		return uuid.Nil, orderModel.OrderStatusUnspecified, serviceErrors.ErrOrderProcessing
+	}
+
+	order, err := s.getter.FindOrderForIdempotencyRecovery(ctx, userID, marketID, orderType,
+		price, quantity, idemResult.StartedAt)
+	if err != nil {
+		if errors.Is(err, repositoryErrors.ErrOrderNotFound) {
+			return uuid.Nil, orderModel.OrderStatusUnspecified, serviceErrors.ErrOrderProcessing
+		}
+		return uuid.Nil, orderModel.OrderStatusUnspecified, err
+	}
+
+	if err = s.completeIdempotencySync(ctx, userID, order.ID, requestHash, order.Status); err != nil {
+		s.logger.Warn(ctx, "recovered order but failed to finalize idempotency state",
+			zap.String("order_id", order.ID.String()),
+			zap.String("request_hash", requestHash),
+			zap.Error(err),
+		)
+	}
+
+	s.logger.Info(ctx, "recovered order from processing idempotency state",
+		zap.String("order_id", order.ID.String()),
+		zap.String("request_hash", requestHash),
+	)
+
+	return order.ID, order.Status, nil
 }
 
 func (s *OrderService) checkRateLimit(
@@ -439,44 +518,38 @@ func (s *OrderService) saveOrder(
 	return order.ID, order.Status, nil
 }
 
-func (s *OrderService) completeIdempotencyAsync(
+func (s *OrderService) completeIdempotencySync(
 	ctx context.Context,
 	userID, orderID uuid.UUID,
 	requestHash string,
 	orderStatus orderModel.OrderStatus,
-) {
-	go func() {
-		attempts := s.config.Redis.Idempotency.CompleteAttempts
-		attemptTimeout := s.config.Redis.Idempotency.CompleteAttemptTimeout
-		retryDelay := s.config.Redis.Idempotency.CompleteRetryDelay
+) error {
+	attempts := s.config.Redis.Idempotency.CompleteAttempts
+	attemptTimeout := s.config.Redis.Idempotency.CompleteAttemptTimeout
+	retryDelay := s.config.Redis.Idempotency.CompleteRetryDelay
 
-		totalTimeout := time.Duration(attempts) * attemptTimeout
-		if attempts > 1 {
-			totalTimeout += time.Duration(attempts-1) * retryDelay
-		}
+	totalTimeout := time.Duration(attempts) * attemptTimeout
+	if attempts > 1 {
+		totalTimeout += time.Duration(attempts-1) * retryDelay
+	}
 
-		completeCtx, cancel := context.WithTimeout(
-			context.WithoutCancel(ctx),
-			totalTimeout,
-		)
-		defer cancel()
+	completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), totalTimeout)
+	defer cancel()
 
-		_ = recovery.PanicRecoveryHandler(
-			completeCtx,
-			s.logger,
-			"order.complete_idempotency_async",
-			func() error {
-				s.idempotencyService.completeIdempotencyChecking(
-					completeCtx,
-					userID,
-					orderID,
-					requestHash,
-					orderStatus,
-				)
-				return nil
-			},
-		)
-	}()
+	return recovery.PanicRecoveryHandler(
+		completeCtx,
+		s.logger,
+		"order.complete_idempotency_sync",
+		func() error {
+			return s.idempotencyService.completeIdempotencyChecking(
+				completeCtx,
+				userID,
+				orderID,
+				requestHash,
+				orderStatus,
+			)
+		},
+	)
 }
 
 func rollbackTransaction(

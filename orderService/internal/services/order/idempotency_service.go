@@ -18,6 +18,7 @@ import (
 type IdempotencyResult struct {
 	IsCompleted  bool
 	IsProcessing bool
+	StartedAt    time.Time
 	OrderID      uuid.UUID
 	OrderStatus  string
 }
@@ -96,7 +97,7 @@ func (s *IdempotencyService) completeIdempotencyChecking(
 	userID, orderID uuid.UUID,
 	requestHash string,
 	orderStatus orderModel.OrderStatus,
-) {
+) error {
 	var lastError error
 
 	for attempt := 1; attempt <= s.config.Redis.Idempotency.CompleteAttempts; attempt++ {
@@ -105,7 +106,7 @@ func (s *IdempotencyService) completeIdempotencyChecking(
 				zap.String("order_id", orderID.String()),
 				zap.Error(err),
 			)
-			return
+			return err
 		}
 
 		attemptCtx, cancel := context.WithTimeout(
@@ -118,7 +119,7 @@ func (s *IdempotencyService) completeIdempotencyChecking(
 		)
 		cancel()
 		if err == nil {
-			return
+			return nil
 		}
 
 		lastError = err
@@ -139,7 +140,7 @@ func (s *IdempotencyService) completeIdempotencyChecking(
 					zap.String("order_id", orderID.String()),
 					zap.Error(ctx.Err()),
 				)
-				return
+				return nil
 			case <-timer.C:
 			}
 		}
@@ -150,6 +151,8 @@ func (s *IdempotencyService) completeIdempotencyChecking(
 		zap.Int("attempts", s.config.Redis.Idempotency.CompleteAttempts),
 		zap.Error(lastError),
 	)
+
+	return lastError
 }
 
 func (s *IdempotencyService) failCleanup(

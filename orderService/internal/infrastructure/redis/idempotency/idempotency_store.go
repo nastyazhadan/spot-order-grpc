@@ -24,6 +24,7 @@ const (
 type Entry struct {
 	Status      string    `json:"status"`
 	RequestHash string    `json:"request_hash"`
+	StartedAt   time.Time `json:"started_at"`
 	OrderID     uuid.UUID `json:"order_id,omitempty"`
 	OrderStatus string    `json:"order_status,omitempty"`
 }
@@ -86,6 +87,15 @@ func (s *Store) Acquire(
 	userID uuid.UUID,
 	requestHash string,
 ) (Entry, bool, error) {
+	return s.acquire(ctx, userID, requestHash, false)
+}
+
+func (s *Store) acquire(
+	ctx context.Context,
+	userID uuid.UUID,
+	requestHash string,
+	retriedAfterCleanup bool,
+) (Entry, bool, error) {
 	const op = "IdempotencyStore.Acquire"
 
 	key := buildKey(userID, requestHash)
@@ -103,7 +113,6 @@ func (s *Store) Acquire(
 		string(newValue),
 		s.ttl.Milliseconds(),
 	).Text()
-
 	if err != nil && !errors.Is(err, redisGo.Nil) {
 		return Entry{}, false, fmt.Errorf("%s: script: %w", op, err)
 	}
@@ -114,10 +123,16 @@ func (s *Store) Acquire(
 
 	var existing Entry
 	if err = json.Unmarshal([]byte(raw), &existing); err != nil {
-		_ = s.store.Delete(ctx, key)
-		return Entry{}, false, fmt.Errorf(
-			"%s: corrupted entry, cleared: %w", op, sharedErrors.ErrCacheNotFound,
-		)
+		deleteErr := s.store.Delete(ctx, key)
+		if deleteErr != nil && !errors.Is(deleteErr, sharedErrors.ErrCacheNotFound) {
+			return Entry{}, false, fmt.Errorf("%s: delete corrupted entry: %w", op, deleteErr)
+		}
+
+		if retriedAfterCleanup {
+			return Entry{}, false, fmt.Errorf("%s: corrupted entry after cleanup retry: %w", op, err)
+		}
+
+		return s.acquire(ctx, userID, requestHash, true)
 	}
 
 	return existing, false, nil

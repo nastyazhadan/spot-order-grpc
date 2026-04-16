@@ -185,6 +185,12 @@ func (d *deps) idemComplete() {
 	).Return(nil)
 }
 
+func (d *deps) idemCompleteError(err error) {
+	d.idemAdapter.On("Complete",
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+	).Return(err)
+}
+
 func (d *deps) idemFailCleanup() {
 	d.idemAdapter.On("FailCleanup", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
@@ -221,6 +227,7 @@ func assertCreateShortCircuit(t *testing.T, d *deps) {
 	t.Helper()
 	d.viewer.AssertNotCalled(t, "GetMarketByID", mock.Anything, mock.Anything)
 	d.saver.AssertNotCalled(t, "SaveOrder", mock.Anything, mock.Anything, mock.Anything)
+	d.producer.AssertNotCalled(t, "ProduceOrderCreated", mock.Anything, mock.Anything, mock.Anything)
 	d.manager.AssertNotCalled(t, "Begin", mock.Anything)
 }
 
@@ -262,6 +269,28 @@ func TestCreateOrder(t *testing.T) {
 				d.saver.On("SaveOrder", mock.Anything, tx, mock.AnythingOfType("models.Order")).Return(nil)
 				d.producer.On("ProduceOrderCreated", mock.Anything, tx, mock.AnythingOfType("models.OrderCreatedEvent")).Return(nil)
 				d.idemComplete()
+			},
+			expectedStatus: orderModel.OrderStatusCreated,
+			checkResult: func(t *testing.T, orderID uuid.UUID, status orderModel.OrderStatus) {
+				assert.NotEqual(t, uuid.Nil, orderID)
+				assert.Equal(t, orderModel.OrderStatusCreated, status)
+			},
+		},
+		{
+			name:      "успешное создание ордера - ошибка Complete после commit не ломает ответ",
+			userID:    userID,
+			marketID:  marketID,
+			orderType: orderModel.OrderTypeLimit,
+			price:     "100.50",
+			quantity:  10,
+			setupMocks: func(t *testing.T, d *deps) {
+				d.idemAcquired(userID)
+				d.allowCreate(userID)
+				d.allowMarket(marketID)
+				tx := d.beginTx(nil)
+				d.saver.On("SaveOrder", mock.Anything, tx, mock.AnythingOfType("models.Order")).Return(nil)
+				d.producer.On("ProduceOrderCreated", mock.Anything, tx, mock.AnythingOfType("models.OrderCreatedEvent")).Return(nil)
+				d.idemCompleteError(errors.New("redis down"))
 			},
 			expectedStatus: orderModel.OrderStatusCreated,
 			checkResult: func(t *testing.T, orderID uuid.UUID, status orderModel.OrderStatus) {
@@ -362,7 +391,7 @@ func TestCreateOrder(t *testing.T) {
 			shortCircuit: func(t *testing.T, d *deps) { assertCreateShortCircuit(t, d) },
 		},
 		{
-			name:      "идемпотентность - запрос обрабатывается — ErrOrderProcessing",
+			name:      "идемпотентность - processing без StartedAt -> ErrOrderProcessing",
 			userID:    userID,
 			marketID:  marketID,
 			orderType: orderModel.OrderTypeLimit,
@@ -374,6 +403,93 @@ func TestCreateOrder(t *testing.T) {
 			},
 			expectedStatus: orderModel.OrderStatusUnspecified,
 			expectedErr:    serviceErrors.ErrOrderProcessing,
+			shortCircuit: func(t *testing.T, d *deps) {
+				assertCreateShortCircuit(t, d)
+				d.getter.AssertNotCalled(
+					t,
+					"FindOrderForIdempotencyRecovery",
+					mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+				)
+			},
+		},
+		{
+			name:      "идемпотентность - processing, order в БД не найден -> ErrOrderProcessing",
+			userID:    userID,
+			marketID:  marketID,
+			orderType: orderModel.OrderTypeLimit,
+			price:     "100.00",
+			quantity:  5,
+			setupMocks: func(t *testing.T, d *deps) {
+				startedAt := time.Now().UTC()
+
+				d.idemAdapter.On("Acquire", mock.Anything, userID, mock.Anything).
+					Return(IdempotencyResult{
+						IsProcessing: true,
+						StartedAt:    startedAt,
+					}, false, nil)
+
+				d.getter.On(
+					"FindOrderForIdempotencyRecovery",
+					mock.Anything,
+					userID,
+					marketID,
+					orderModel.OrderTypeLimit,
+					mock.Anything,
+					int64(5),
+					startedAt,
+				).Return(models.Order{}, repositoryErrors.ErrOrderNotFound)
+			},
+			expectedStatus: orderModel.OrderStatusUnspecified,
+			expectedErr:    serviceErrors.ErrOrderProcessing,
+			shortCircuit: func(t *testing.T, d *deps) {
+				assertCreateShortCircuit(t, d)
+			},
+		},
+		{
+			name:      "идемпотентность - processing, order найден в БД -> вернуть найденный order",
+			userID:    userID,
+			marketID:  marketID,
+			orderType: orderModel.OrderTypeLimit,
+			price:     "100.00",
+			quantity:  5,
+			setupMocks: func(t *testing.T, d *deps) {
+				startedAt := time.Now().UTC()
+				recoveredOrderID := uuid.New()
+
+				recoveredOrder := models.Order{
+					ID:        recoveredOrderID,
+					UserID:    userID,
+					MarketID:  marketID,
+					Type:      orderModel.OrderTypeLimit,
+					Quantity:  5,
+					Status:    orderModel.OrderStatusCreated,
+					CreatedAt: startedAt.Add(10 * time.Millisecond),
+				}
+
+				d.idemAdapter.On("Acquire", mock.Anything, userID, mock.Anything).
+					Return(IdempotencyResult{
+						IsProcessing: true,
+						StartedAt:    startedAt,
+					}, false, nil)
+
+				d.getter.On(
+					"FindOrderForIdempotencyRecovery",
+					mock.Anything,
+					userID,
+					marketID,
+					orderModel.OrderTypeLimit,
+					mock.Anything,
+					int64(5),
+					startedAt,
+				).Return(recoveredOrder, nil)
+
+				d.idemComplete()
+			},
+			expectedStatus: orderModel.OrderStatusCreated,
+			checkResult: func(t *testing.T, orderID uuid.UUID, status orderModel.OrderStatus) {
+				assert.NotEqual(t, uuid.Nil, orderID)
+				assert.Equal(t, orderModel.OrderStatusCreated, status)
+			},
 			shortCircuit: func(t *testing.T, d *deps) {
 				assertCreateShortCircuit(t, d)
 			},
@@ -391,6 +507,55 @@ func TestCreateOrder(t *testing.T) {
 			},
 			expectedStatus: orderModel.OrderStatusUnspecified,
 			expectedErrMsg: "redis timeout",
+			shortCircuit: func(t *testing.T, d *deps) {
+				assertCreateShortCircuit(t, d)
+			},
+		},
+		{
+			name:      "идемпотентность - processing, order найден, но Complete повторно падает -> успех клиенту",
+			userID:    userID,
+			marketID:  marketID,
+			orderType: orderModel.OrderTypeLimit,
+			price:     "100.00",
+			quantity:  5,
+			setupMocks: func(t *testing.T, d *deps) {
+				startedAt := time.Now().UTC()
+				recoveredOrderID := uuid.New()
+
+				recoveredOrder := models.Order{
+					ID:        recoveredOrderID,
+					UserID:    userID,
+					MarketID:  marketID,
+					Type:      orderModel.OrderTypeLimit,
+					Quantity:  5,
+					Status:    orderModel.OrderStatusCreated,
+					CreatedAt: startedAt.Add(10 * time.Millisecond),
+				}
+
+				d.idemAdapter.On("Acquire", mock.Anything, userID, mock.Anything).
+					Return(IdempotencyResult{
+						IsProcessing: true,
+						StartedAt:    startedAt,
+					}, false, nil)
+
+				d.getter.On(
+					"FindOrderForIdempotencyRecovery",
+					mock.Anything,
+					userID,
+					marketID,
+					orderModel.OrderTypeLimit,
+					mock.Anything,
+					int64(5),
+					startedAt,
+				).Return(recoveredOrder, nil)
+
+				d.idemCompleteError(errors.New("redis down"))
+			},
+			expectedStatus: orderModel.OrderStatusCreated,
+			checkResult: func(t *testing.T, orderID uuid.UUID, status orderModel.OrderStatus) {
+				assert.NotEqual(t, uuid.Nil, orderID)
+				assert.Equal(t, orderModel.OrderStatusCreated, status)
+			},
 			shortCircuit: func(t *testing.T, d *deps) {
 				assertCreateShortCircuit(t, d)
 			},

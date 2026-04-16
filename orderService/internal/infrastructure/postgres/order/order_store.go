@@ -191,6 +191,66 @@ func (o *OrderStore) CancelActiveOrdersByMarket(
 	return cancelledIDs, nil
 }
 
+func (o *OrderStore) FindOrderForIdempotencyRecovery(
+	ctx context.Context,
+	userID uuid.UUID,
+	marketID uuid.UUID,
+	orderType shared.OrderType,
+	price shared.Decimal,
+	quantity int64,
+	startedAt time.Time,
+) (models.Order, error) {
+	const op = "infrastructure.OrderStore.FindOrderForIdempotencyRecovery"
+
+	ctx, span := tracing.StartSpan(ctx, "postgres.find_order_for_idempotency_recovery",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attributes.DBSystemValue(databaseName),
+			attributes.UserIDValue(userID.String()),
+			attributes.MarketIDValue(marketID.String()),
+		),
+	)
+	defer span.End()
+
+	start := time.Now()
+	defer func() {
+		metrics.ObserveWithTrace(ctx,
+			metrics.DBQueryDuration.WithLabelValues(o.config.Service.Name, "find_order_for_idempotency_recovery"),
+			time.Since(start).Seconds(),
+		)
+	}()
+
+	rows, err := o.pool.Query(ctx, `
+		SELECT id, user_id, market_id, type, price, quantity, status, created_at
+		FROM orders
+		WHERE user_id = $1 AND market_id = $2 AND type = $3 AND price = $4 AND quantity = $5 AND created_at >= $6
+		ORDER BY created_at, id
+		LIMIT 1
+	`, userID, marketID, int16(orderType), price.String(), quantity, startedAt,
+	)
+	if err != nil {
+		tracing.RecordError(span, err)
+		return models.Order{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	orderDTO, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[mapper.Order])
+	if err != nil {
+		tracing.RecordError(span, err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Order{}, fmt.Errorf("%s: %w", op, repositoryErrors.ErrOrderNotFound)
+		}
+		return models.Order{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	order, err := orderDTO.ToDomain()
+	if err != nil {
+		tracing.RecordError(span, err)
+		return models.Order{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return order, nil
+}
+
 func isPrimaryKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {

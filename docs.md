@@ -236,29 +236,29 @@ shared/errors/repository/
 
 ## 4. Цепочки gRPC-перехватчиков
 
-Перехватчики применяются в указанном порядке (каждый следующий оборачивает предыдущий). Порядок критичен: паника восстанавливается до трейсинга, аутентификация — после сбора метрик, валидация — последней.
+Перехватчики применяются в указанном порядке. В текущей сборке `validator` стоит первым в chain, затем идут `recoverer`, `tracer`, `meter`, `logger`, `errorMapper`, `auth` и `rateLimiter`.
 
 ### OrderService
 
 ```
-recoverer → tracer → meter → logger → errorMapper → auth → rateLimiter → validator
+validator → recoverer → tracer → meter → logger → errorMapper → auth → rateLimiter
 ```
 
 | Перехватчик | Пакет | Действие                                                             |
 |---|---|----------------------------------------------------------------------|
-| `recoverer` | `interceptors/recovery` | Перехватывает `panic`, возвращает `INTERNAL`                         |
-| `tracer` | `interceptors/tracing` | Создаёт span, инжектирует W3C TraceContext                           |
-| `meter` | `interceptors/metrics` | Счётчики, in-flight gauge, histogram длительности                    |
-| `logger` | `interceptors/logging/zap` | Логирует метод, статус, длительность с trace_id                      |
-| `auth` | `interceptors/auth` | Парсит JWT, кладёт user_id и roles в контекст                        |
-| `rateLimiter` | `interceptors/ratelimit` | Per-instance RPS-лимит (токен-бакет)                                 |
+| `validator` | `interceptors/validate` | Protovalidate: проверяет поля запроса по аннотациям |
+| `recoverer` | `interceptors/recovery` | Перехватывает `panic`, возвращает `INTERNAL` |
+| `tracer` | `interceptors/tracing` | Создаёт span, инжектирует W3C TraceContext |
+| `meter` | `interceptors/metrics` | Счётчики, in-flight gauge, histogram длительности |
+| `logger` | `interceptors/logging/zap` | Логирует метод, статус и trace_id |
 | `errorMapper` | `interceptors/errors` | Переводит доменные ошибки и ошибки JWT-аутентификации в gRPC-статусы |
-| `validator` | `interceptors/validate` | Protovalidate: проверяет поля запроса по аннотациям                  |
+| `auth` | `interceptors/auth` | Парсит JWT, кладёт user_id и roles в контекст |
+| `rateLimiter` | `interceptors/ratelimit` | Per-instance RPS-лимит (token bucket) |
 
 ### SpotInstrumentService
 
 ```
-recoverer → tracer → meter → logger → errorMapper → auth → rateLimiter → validator
+validator → recoverer → tracer → meter → logger → errorMapper → auth → rateLimiter
 ```
 
 SpotService тоже использует JWT auth interceptor.
@@ -756,7 +756,7 @@ By-id cache (`market:by_id:<marketID>`) не перепрогревается po
 | Блокировка рынка | `market:block:<marketID>` | `<unix_ms>:<0\|1>` | настраивается |
 | Refresh token (маркер) | `refresh:<userID>:<jti>` | `"1"` | refresh_token_ttl |
 | Активная сессия | `auth_session:<userID>` | sessionID (string) | refresh_token_ttl |
-| Идемпотентность CreateOrder | `idem:order:create:<userID>:<requestHash>` | JSON `{status, request_hash, order_id, order_status}` | `redis.idempotency.request_ttl` |
+| Идемпотентность CreateOrder | `idem:order:create:<userID>:<requestHash>` | JSON `{status, request_hash, started_at, order_id, order_status}` | `redis.idempotency.request_ttl` |
 
 ### Идемпотентность CreateOrder
 
@@ -772,7 +772,13 @@ requestHash вычисляется как:
 `userID` не включается в сам хэш, потому что уже является частью Redis-ключа.
 
 Формат значения:
-- JSON `{status, request_hash, order_id, order_status}`
+- JSON `{status, request_hash, started_at, order_id, order_status}`
+
+Где:
+- `status` — `processing` или `completed`
+- `request_hash` — SHA-256 от `(marketID | orderType | price | quantity)`
+- `started_at` — UTC timestamp момента захвата idempotency key
+- `order_id` и `order_status` заполняются после успешного завершения CreateOrder
 
 Используемые настройки:
 - `redis.idempotency.request_ttl` — TTL ключа идемпотентности
@@ -787,19 +793,21 @@ requestHash вычисляется как:
 - ключ удалён — заказ не был создан, FailCleanup удаляет ключ, и клиент может повторить запрос
 
 Особенность текущей реализации:
-- после успешного commit заказа запись в Redis переводится в `completed` асинхронно
-- клиентский ответ на успешный CreateOrder не зависит от успеха post-commit обновления idempotency-записи
-- обновление выполняется best-effort с ограниченным числом попыток и timeout на каждую попытку
+- после успешного commit заказа сервис делает bounded synchronous best-effort попытку перевести запись в Redis в `completed`
+- клиентский ответ на успешный CreateOrder не откатывается, даже если post-commit обновление idempotency-записи не удалось
+- обновление выполняется с ограниченным числом попыток и timeout на каждую попытку
 
 Поведение при повторном запросе:
 - статус `completed` → вернуть сохранённый `order_id` и `order_status`
-- статус `processing` → вернуть `FAILED_PRECONDITION`
+- статус `processing` → попытаться восстановить результат через PostgreSQL
+- если order найден → вернуть его и повторно попытаться завершить Redis-запись
+- если order не найден → вернуть `FAILED_PRECONDITION`
 - ключ отсутствует → считать запрос новым и создать новый заказ
 
 Практический нюанс:
-- если заказ уже создан, но post-commit обновление Redis не успело записать статус `completed`,
-  повторный идентичный запрос в пределах `request_ttl` может временно видеть состояние `processing`
-- после истечения TTL такой запрос будет считаться новым
+- если заказ уже создан, но Redis ещё показывает `processing`, сервис пытается восстановить результат через БД
+- `started_at` используется как нижняя граница для recovery-поиска, чтобы не подхватить более старый похожий order
+- если recovery не дал результата, запрос считается реально ещё обрабатывающимся и получает `FAILED_PRECONDITION`
 
 ### SpotService
 
