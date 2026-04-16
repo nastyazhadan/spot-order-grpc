@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,6 +28,18 @@ import (
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
 )
 
+const (
+	marketBlockWorkers   = 4
+	marketBlockQueueSize = 128
+)
+
+type marketBlockTask struct {
+	ctx     context.Context
+	market  sharedModels.Market
+	blocked bool
+	reason  string
+}
+
 type OrderService struct {
 	transactionManager TransactionManager
 	saver              Saver
@@ -36,8 +49,15 @@ type OrderService struct {
 	rateLimiters       RateLimiters
 	eventProducer      EventProducer
 	idempotencyService *IdempotencyService
-	logger             *zapLogger.Logger
-	config             config.OrderConfig
+
+	marketBlockQueue  chan marketBlockTask
+	marketBlockWG     sync.WaitGroup
+	marketBlockOnce   sync.Once
+	marketBlockMu     sync.RWMutex
+	marketBlockClosed bool
+
+	logger *zapLogger.Logger
+	config config.OrderConfig
 }
 
 type RateLimiters struct {
@@ -103,6 +123,38 @@ func New(
 		idempotencyService: service,
 		logger:             logger,
 		config:             cfg,
+		marketBlockQueue:   make(chan marketBlockTask, marketBlockQueueSize),
+	}
+}
+
+func (s *OrderService) startMarketBlockWorkers() {
+	for i := 0; i < marketBlockWorkers; i++ {
+		s.marketBlockWG.Add(1)
+
+		go func() {
+			defer s.marketBlockWG.Done()
+
+			for task := range s.marketBlockQueue {
+				baseCtx := context.Background()
+				if task.ctx != nil {
+					baseCtx = context.WithoutCancel(task.ctx)
+				}
+
+				taskCtx, cancel := contextWithTimeout(baseCtx, s.config.Timeouts.Service)
+
+				_ = recovery.PanicRecoveryHandler(
+					taskCtx,
+					s.logger,
+					"order.market_block_worker",
+					func() error {
+						s.synchronizeMarketBlock(taskCtx, task.market, task.blocked, task.reason)
+						return nil
+					},
+				)
+
+				cancel()
+			}
+		}()
 	}
 }
 
@@ -379,23 +431,29 @@ func (s *OrderService) synchronizeMarketBlockAsync(
 	blocked bool,
 	reason string,
 ) {
-	go func() {
-		syncCtx, cancel := context.WithTimeout(
-			context.WithoutCancel(ctx),
-			s.config.Timeouts.Service,
-		)
-		defer cancel()
+	task := marketBlockTask{
+		ctx:     ctx,
+		market:  market,
+		blocked: blocked,
+		reason:  reason,
+	}
 
-		_ = recovery.PanicRecoveryHandler(
-			syncCtx,
-			s.logger,
-			"order.synchronize_market_block_async",
-			func() error {
-				s.synchronizeMarketBlock(syncCtx, market, blocked, reason)
-				return nil
-			},
+	s.marketBlockMu.RLock()
+	defer s.marketBlockMu.RUnlock()
+
+	if s.marketBlockClosed {
+		return
+	}
+
+	select {
+	case s.marketBlockQueue <- task:
+	default:
+		s.logger.Warn(ctx, "Market block queue is full, dropping async request",
+			zap.String("market_id", market.ID.String()),
+			zap.Bool("blocked", blocked),
+			zap.String("reason", reason),
 		)
-	}()
+	}
 }
 
 func (s *OrderService) getMarketBlockedState(
@@ -550,6 +608,36 @@ func (s *OrderService) completeIdempotencySync(
 			)
 		},
 	)
+}
+
+func (s *OrderService) Start(_ context.Context) error {
+	s.marketBlockOnce.Do(func() {
+		s.startMarketBlockWorkers()
+	})
+
+	return nil
+}
+
+func (s *OrderService) Close(ctx context.Context) error {
+	s.marketBlockMu.Lock()
+	if !s.marketBlockClosed {
+		s.marketBlockClosed = true
+		close(s.marketBlockQueue)
+	}
+	s.marketBlockMu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		s.marketBlockWG.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func rollbackTransaction(

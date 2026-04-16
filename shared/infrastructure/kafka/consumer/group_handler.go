@@ -165,6 +165,9 @@ func (g *groupHandler) handleMessageResult(
 
 		return err
 
+	case errors.Is(err, ErrStopConsumeClaim):
+		return nil
+
 	case IsNonRetryableError(err):
 		tracing.RecordError(span, err)
 		metrics.KafkaMessagesConsumedTotal.WithLabelValues(g.serviceName, message.Topic, "skipped").Inc()

@@ -417,11 +417,12 @@ func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 	refreshCtx := context.WithoutCancel(ctx)
 
 	for _, roleKey := range cacheRoleKeys {
-		roleCtx, cancel := context.WithTimeout(refreshCtx, s.serviceTimeout)
+		roleCtx, cancel := contextWithTimeout(refreshCtx, s.serviceTimeout)
 
 		markets, err := s.marketRepository.GetMarketsPage(roleCtx, roleKey, s.cacheLimit+1, 0)
-		cancel()
 		if err != nil {
+			cancel()
+
 			if errors.Is(err, repositoryErrors.ErrMarketStoreIsEmpty) {
 				return s.invalidateMarketsCache(refreshCtx)
 			}
@@ -432,12 +433,15 @@ func (s *MarketViewer) RefreshAll(ctx context.Context) error {
 			return fmt.Errorf("%s: load head cache for role %s: %w", op, roleKey, err)
 		}
 
-		if err = s.marketCacheRepository.SetMarkets(refreshCtx, markets, roleKey, s.cacheTTL); err != nil {
+		if err = s.marketCacheRepository.SetMarkets(roleCtx, markets, roleKey, s.cacheTTL); err != nil {
+			cancel()
+
 			metrics.CacheWarmupsTotal.
 				WithLabelValues(s.serviceName, "refresh_all", roleKey, "error").Inc()
 
 			return fmt.Errorf("%s: set cache for role %s: %w", op, roleKey, err)
 		}
+		cancel()
 
 		metrics.CacheWarmupsTotal.
 			WithLabelValues(s.serviceName, "refresh_all", roleKey, "success").Inc()

@@ -115,7 +115,9 @@ func newDeps(t *testing.T) *deps {
 	}
 }
 
-func (d *deps) service() *OrderService {
+func (d *deps) service(t *testing.T) *OrderService {
+	t.Helper()
+
 	cfg := config.OrderConfig{
 		Redis: config.RedisConfig{
 			Idempotency: config.IdempotencyConfig{
@@ -128,7 +130,8 @@ func (d *deps) service() *OrderService {
 	}
 
 	idem := NewIdempotencyService(d.idemAdapter, zapLogger.NewNop(), cfg)
-	return New(
+
+	service := New(
 		d.manager, d.saver, d.getter, d.viewer, d.blockStore,
 		RateLimiters{Create: d.createLim, Get: d.getLim},
 		d.producer,
@@ -136,6 +139,13 @@ func (d *deps) service() *OrderService {
 		zapLogger.NewNop(),
 		cfg,
 	)
+
+	require.NoError(t, service.Start(context.Background()))
+	t.Cleanup(func() {
+		_ = service.Close(context.Background())
+	})
+
+	return service
 }
 
 func (d *deps) allowCreate(userID uuid.UUID) {
@@ -875,7 +885,7 @@ func TestCreateOrder(t *testing.T) {
 			price := mustDecimal(t, tt.price)
 			tt.setupMocks(t, d)
 
-			svc := d.service()
+			svc := d.service(t)
 			orderID, status, err := svc.CreateOrder(
 				context.Background(),
 				tt.userID, tt.marketID,
@@ -1049,7 +1059,7 @@ func TestGetOrderStatus(t *testing.T) {
 			d := newDeps(t)
 			tt.setupMocks(t, d)
 
-			svc := d.service()
+			svc := d.service(t)
 			status, err := svc.GetOrderStatus(context.Background(), tt.orderID, tt.userID)
 
 			if tt.expectedErr != nil || tt.expectedErrMsg != "" {

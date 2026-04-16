@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"unicode/utf8"
 
@@ -112,6 +113,9 @@ func sendToDLQ(
 	maxMessageBytes int,
 	logger *zapLogger.Logger,
 ) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("%w: %w", ErrStopConsumeClaim, ctx.Err())
+	}
 	if dlqPublisher == nil {
 		logger.Error(ctx, "Message processing failed (no DLQ configured)",
 			zap.String("topic", message.Topic),
@@ -198,7 +202,7 @@ func buildDLQHeaders(
 	headers["dlq-attempts-total"] = []byte(strconv.Itoa(retryCount))
 	headers["dlq-error"] = truncateUTF8Bytes([]byte(lastError.Error()), dlqErrorMaxBytes)
 	// Явный флаг для DLQ
-	headers["dlq-payload-intact"] = []byte("true")
+	headers["dlq-payload-intact"] = []byte("false")
 
 	return headers
 }

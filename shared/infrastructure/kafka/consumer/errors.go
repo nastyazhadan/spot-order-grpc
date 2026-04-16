@@ -9,6 +9,7 @@ var (
 	ErrMessageHandledByDLQ    = errors.New("message handled by dlq")
 	ErrRestartConsumerSession = errors.New("restart consumer session")
 	ErrSkipMessage            = errors.New("skip message")
+	ErrStopConsumeClaim       = errors.New("stop consume claim")
 )
 
 type RetryExhaustedError struct {
@@ -48,7 +49,8 @@ func (e NonRetryableError) Unwrap() error {
 func IsControlFlowError(err error) bool {
 	return errors.Is(err, ErrSkipMessage) ||
 		errors.Is(err, ErrRestartConsumerSession) ||
-		errors.Is(err, ErrMessageHandledByDLQ)
+		errors.Is(err, ErrMessageHandledByDLQ) ||
+		errors.Is(err, ErrStopConsumeClaim)
 }
 
 func IsNonRetryableError(err error) bool {

@@ -1,6 +1,8 @@
 package order
 
 import (
+	"context"
+
 	"github.com/IBM/sarama"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
@@ -155,6 +157,7 @@ func provideIdempotencyService(
 }
 
 func provideOrderService(
+	lifecycle fx.Lifecycle,
 	pool *pgxpool.Pool,
 	store *orderStore.OrderStore,
 	marketViewer orderService.MarketViewer,
@@ -165,7 +168,7 @@ func provideOrderService(
 	logger *zapLogger.Logger,
 	cfg config.OrderConfig,
 ) *orderService.OrderService {
-	return orderService.New(
+	svc := orderService.New(
 		pool,
 		store,
 		store,
@@ -177,6 +180,17 @@ func provideOrderService(
 		logger,
 		cfg,
 	)
+
+	lifecycle.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			return svc.Start(ctx)
+		},
+		OnStop: func(ctx context.Context) error {
+			return svc.Close(ctx)
+		},
+	})
+
+	return svc
 }
 
 func provideCompensationService(

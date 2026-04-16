@@ -84,7 +84,7 @@ func RetryMiddleware(
 								default:
 								}
 							}
-							return ctx.Err()
+							return fmt.Errorf("%w: %w", ErrStopConsumeClaim, ctx.Err())
 						case <-timer.C:
 							continue
 						}
