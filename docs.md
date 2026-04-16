@@ -756,24 +756,50 @@ By-id cache (`market:by_id:<marketID>`) не перепрогревается po
 | Блокировка рынка | `market:block:<marketID>` | `<unix_ms>:<0\|1>` | настраивается |
 | Refresh token (маркер) | `refresh:<userID>:<jti>` | `"1"` | refresh_token_ttl |
 | Активная сессия | `auth_session:<userID>` | sessionID (string) | refresh_token_ttl |
-| Идемпотентность CreateOrder | `idem:order:create:<userID>:<requestHash>` | JSON `{status, request_hash, order_id, order_status}` | idempotency_ttl |
+| Идемпотентность CreateOrder | `idem:order:create:<userID>:<requestHash>` | JSON `{status, request_hash, order_id, order_status}` | `redis.idempotency.request_ttl` |
 
 ### Идемпотентность CreateOrder
 
-Ключ захватывается атомарно через Lua-скрипт до начала бизнес-логики.
+OrderService использует Redis-ключ идемпотентности для защиты от повторной обработки
+одинакового запроса CreateOrder в пределах TTL.
+
+Ключ:
+- `idem:order:create:<userID>:<requestHash>`
+
+requestHash вычисляется как:
+- `SHA-256(marketID | orderType | price | quantity)`
+
+`userID` не включается в сам хэш, потому что уже является частью Redis-ключа.
+
+Формат значения:
+- JSON `{status, request_hash, order_id, order_status}`
+
+Используемые настройки:
+- `redis.idempotency.request_ttl` — TTL ключа идемпотентности
+- `redis.idempotency.complete_attempts` — количество best-effort попыток пометить запись как completed после успешного создания заказа
+- `redis.idempotency.complete_attempt_timeout` — timeout одной попытки Complete
+- `redis.idempotency.complete_retry_delay` — задержка между попытками Complete
+- `redis.idempotency.cleanup_timeout` — timeout для FailCleanup при ошибке до успешного commit
 
 Жизненный цикл записи:
-- `processing` — ключ захвачен, заказ создаётся
-- `completed`  — заказ создан, хранится `order_id` и `order_status`
-- ключ удалён  — ошибка при создании (FailCleanup), клиент может повторить
+- `processing` — ключ атомарно захвачен до начала бизнес-логики, заказ ещё создаётся
+- `completed` — заказ уже успешно создан, в ключ записаны `order_id` и `order_status`
+- ключ удалён — заказ не был создан, FailCleanup удаляет ключ, и клиент может повторить запрос
 
-requestHash = SHA-256(marketID | orderType | price | quantity)
-userID не включается в хэш — он уже является частью ключа.
+Особенность текущей реализации:
+- после успешного commit заказа запись в Redis переводится в `completed` асинхронно
+- клиентский ответ на успешный CreateOrder не зависит от успеха post-commit обновления idempotency-записи
+- обновление выполняется best-effort с ограниченным числом попыток и timeout на каждую попытку
 
 Поведение при повторном запросе:
-- статус `completed`   → вернуть сохранённый order_id + status (прозрачно для клиента)
-- статус `processing`  → вернуть FAILED_PRECONDITION
-- ключ отсутствует     → создать новый заказ
+- статус `completed` → вернуть сохранённый `order_id` и `order_status`
+- статус `processing` → вернуть `FAILED_PRECONDITION`
+- ключ отсутствует → считать запрос новым и создать новый заказ
+
+Практический нюанс:
+- если заказ уже создан, но post-commit обновление Redis не успело записать статус `completed`,
+  повторный идентичный запрос в пределах `request_ttl` может временно видеть состояние `processing`
+- после истечения TTL такой запрос будет считаться новым
 
 ### SpotService
 

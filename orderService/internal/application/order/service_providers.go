@@ -40,7 +40,6 @@ var ServiceProviders = fx.Options(
 		provideRefreshTokenStore,
 		provideSessionStore,
 		provideAuthService,
-		provideOrderServiceConfig,
 
 		provideKafkaClient,
 		provideKafkaPublisher,
@@ -108,13 +107,6 @@ func provideAuthService(
 	return authService.New(jwtManager, refreshStore, sessionStore, cfg.Timeouts.Service, logger)
 }
 
-func provideOrderServiceConfig(cfg config.OrderConfig) orderService.Config {
-	return orderService.Config{
-		Timeout:     cfg.Timeouts.Service,
-		ServiceName: cfg.Service.Name,
-	}
-}
-
 func provideKafkaClient(
 	asyncProducer sarama.AsyncProducer,
 	cfg config.OrderConfig,
@@ -156,7 +148,7 @@ func provideIdempotencyService(
 	cfg config.OrderConfig,
 	logger *zapLogger.Logger,
 ) *orderService.IdempotencyService {
-	idempotencyStore := idemStore.New(store, cfg.Redis.Idempotency.RequestTTl)
+	idempotencyStore := idemStore.New(store, cfg.Redis.Idempotency.RequestTTL)
 	adapter := &redisIdempotencyAdapter{store: idempotencyStore}
 
 	return orderService.NewIdempotencyService(adapter, logger, cfg)
@@ -168,10 +160,10 @@ func provideOrderService(
 	marketViewer orderService.MarketViewer,
 	blockStore *blockStore.MarketBlockStore,
 	rateLimiters orderService.RateLimiters,
-	cfg orderService.Config,
 	eventProducer orderService.EventProducer,
-	service orderService.IdempotencyService,
+	service *orderService.IdempotencyService,
 	logger *zapLogger.Logger,
+	cfg config.OrderConfig,
 ) *orderService.OrderService {
 	return orderService.New(
 		pool,
@@ -180,10 +172,10 @@ func provideOrderService(
 		marketViewer,
 		blockStore,
 		rateLimiters,
-		cfg,
 		eventProducer,
 		service,
 		logger,
+		cfg,
 	)
 }
 

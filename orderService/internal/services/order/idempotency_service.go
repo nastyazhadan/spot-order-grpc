@@ -100,16 +100,23 @@ func (s *IdempotencyService) completeIdempotencyChecking(
 	var lastError error
 
 	for attempt := 1; attempt <= s.config.Redis.Idempotency.CompleteAttempts; attempt++ {
-		completeCtx, cancel := context.WithTimeout(
-			context.WithoutCancel(ctx),
+		if err := ctx.Err(); err != nil {
+			s.logger.Warn(ctx, "idempotency completion canceled",
+				zap.String("order_id", orderID.String()),
+				zap.Error(err),
+			)
+			return
+		}
+
+		attemptCtx, cancel := context.WithTimeout(
+			ctx,
 			s.config.Redis.Idempotency.CompleteAttemptTimeout,
 		)
 
 		err := s.idempotencyAdapter.Complete(
-			completeCtx, userID, requestHash, orderID, orderStatus.String(),
+			attemptCtx, userID, requestHash, orderID, orderStatus.String(),
 		)
 		cancel()
-
 		if err == nil {
 			return
 		}
@@ -123,7 +130,18 @@ func (s *IdempotencyService) completeIdempotencyChecking(
 				zap.Int("max_attempts", s.config.Redis.Idempotency.CompleteAttempts),
 				zap.Error(err),
 			)
-			time.Sleep(s.config.Redis.Idempotency.CompleteRetryDelay)
+
+			timer := time.NewTimer(s.config.Redis.Idempotency.CompleteRetryDelay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				s.logger.Warn(ctx, "idempotency completion canceled during retry delay",
+					zap.String("order_id", orderID.String()),
+					zap.Error(ctx.Err()),
+				)
+				return
+			case <-timer.C:
+			}
 		}
 	}
 

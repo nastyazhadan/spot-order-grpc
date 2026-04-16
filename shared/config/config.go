@@ -102,7 +102,7 @@ type RedisConfig struct {
 }
 
 type IdempotencyConfig struct {
-	RequestTTl             time.Duration `mapstructure:"request_ttl"`
+	RequestTTL             time.Duration `mapstructure:"request_ttl"`
 	CompleteAttempts       int           `mapstructure:"complete_attempts"`
 	CompleteAttemptTimeout time.Duration `mapstructure:"complete_attempt_timeout"`
 	CompleteRetryDelay     time.Duration `mapstructure:"complete_retry_delay"`

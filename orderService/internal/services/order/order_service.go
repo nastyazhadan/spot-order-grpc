@@ -15,11 +15,13 @@ import (
 
 	"github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models"
 	orderModel "github.com/nastyazhadan/spot-order-grpc/orderService/internal/domain/models/shared"
+	"github.com/nastyazhadan/spot-order-grpc/shared/config"
 	sharedErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors"
 	repositoryErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/repository"
 	serviceErrors "github.com/nastyazhadan/spot-order-grpc/shared/errors/service"
 	"github.com/nastyazhadan/spot-order-grpc/shared/infrastructure/otel/attributes"
 	zapLogger "github.com/nastyazhadan/spot-order-grpc/shared/interceptors/logging/zap"
+	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/recovery"
 	"github.com/nastyazhadan/spot-order-grpc/shared/interceptors/tracing"
 	"github.com/nastyazhadan/spot-order-grpc/shared/metrics"
 	sharedModels "github.com/nastyazhadan/spot-order-grpc/shared/models"
@@ -32,15 +34,10 @@ type OrderService struct {
 	marketViewer       MarketViewer
 	blockStore         MarketBlockStore
 	rateLimiters       RateLimiters
-	config             Config
 	eventProducer      EventProducer
-	idempotencyService IdempotencyService
+	idempotencyService *IdempotencyService
 	logger             *zapLogger.Logger
-}
-
-type Config struct {
-	Timeout     time.Duration
-	ServiceName string
+	config             config.OrderConfig
 }
 
 type RateLimiters struct {
@@ -87,10 +84,10 @@ func New(
 	viewer MarketViewer,
 	store MarketBlockStore,
 	limiters RateLimiters,
-	cfg Config,
 	producer EventProducer,
-	service IdempotencyService,
+	service *IdempotencyService,
 	logger *zapLogger.Logger,
+	cfg config.OrderConfig,
 ) *OrderService {
 	return &OrderService{
 		transactionManager: manager,
@@ -99,10 +96,10 @@ func New(
 		marketViewer:       viewer,
 		blockStore:         store,
 		rateLimiters:       limiters,
-		config:             cfg,
 		eventProducer:      producer,
 		idempotencyService: service,
 		logger:             logger,
+		config:             cfg,
 	}
 }
 
@@ -116,7 +113,7 @@ func (s *OrderService) CreateOrder(
 ) (uuid.UUID, orderModel.OrderStatus, error) {
 	const op = "OrderService.CreateOrder"
 
-	ctx, cancel := contextWithTimeout(ctx, s.config.Timeout)
+	ctx, cancel := contextWithTimeout(ctx, s.config.Timeouts.Service)
 	defer cancel()
 
 	requestHash := s.idempotencyService.buildRequestHash(marketID, orderType, price, quantity)
@@ -148,7 +145,7 @@ func (s *OrderService) CreateOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
-	s.idempotencyService.completeIdempotencyChecking(ctx, userID, orderID, requestHash, orderStatus)
+	s.completeIdempotencyAsync(ctx, userID, orderID, requestHash, orderStatus)
 	return orderID, orderStatus, nil
 }
 
@@ -158,7 +155,7 @@ func (s *OrderService) GetOrderStatus(
 ) (orderModel.OrderStatus, error) {
 	const op = "OrderService.GetOrderStatus"
 
-	ctx, cancel := contextWithTimeout(ctx, s.config.Timeout)
+	ctx, cancel := contextWithTimeout(ctx, s.config.Timeouts.Service)
 	defer cancel()
 
 	if err := s.checkRateLimit(ctx, userID, s.rateLimiters.Get, "get_order_status"); err != nil {
@@ -232,7 +229,7 @@ func (s *OrderService) checkRateLimit(
 			Window: window,
 		}
 		tracing.RecordError(span, err)
-		metrics.RateLimitRejectedBusinessTotal.WithLabelValues(s.config.ServiceName, operation).Inc()
+		metrics.RateLimitRejectedBusinessTotal.WithLabelValues(s.config.Service.Name, operation).Inc()
 		return err
 	}
 
@@ -306,11 +303,19 @@ func (s *OrderService) synchronizeMarketBlockAsync(
 	go func() {
 		syncCtx, cancel := context.WithTimeout(
 			context.WithoutCancel(ctx),
-			s.config.Timeout,
+			s.config.Timeouts.Service,
 		)
 		defer cancel()
 
-		s.synchronizeMarketBlock(syncCtx, market, blocked, reason)
+		_ = recovery.PanicRecoveryHandler(
+			syncCtx,
+			s.logger,
+			"order.synchronize_market_block_async",
+			func() error {
+				s.synchronizeMarketBlock(syncCtx, market, blocked, reason)
+				return nil
+			},
+		)
 	}()
 }
 
@@ -332,7 +337,7 @@ func (s *OrderService) getMarketBlockedState(
 
 	tracing.RecordError(span, err)
 	metrics.CacheFallbacksTotal.
-		WithLabelValues(s.config.ServiceName, "market_is_blocked", "lookup_error").
+		WithLabelValues(s.config.Service.Name, "market_is_blocked", "lookup_error").
 		Inc()
 
 	s.logger.Warn(ctx, "Market block store lookup failed, falling back to market validation",
@@ -352,7 +357,7 @@ func (s *OrderService) synchronizeMarketBlock(
 	updated, err := s.blockStore.SynchronizeState(ctx, market.ID, blocked, market.UpdatedAt)
 	if err != nil {
 		metrics.MarketBlockStateSyncTotal.
-			WithLabelValues(s.config.ServiceName, reason, strconv.FormatBool(blocked), "error", "false").
+			WithLabelValues(s.config.Service.Name, reason, strconv.FormatBool(blocked), "error", "false").
 			Inc()
 
 		s.logger.Warn(ctx, "Failed to synchronize market block state after recheck",
@@ -365,7 +370,7 @@ func (s *OrderService) synchronizeMarketBlock(
 	}
 
 	metrics.MarketBlockStateSyncTotal.
-		WithLabelValues(s.config.ServiceName, reason, strconv.FormatBool(blocked), "success", strconv.FormatBool(updated)).
+		WithLabelValues(s.config.Service.Name, reason, strconv.FormatBool(blocked), "success", strconv.FormatBool(updated)).
 		Inc()
 
 	if updated {
@@ -405,7 +410,7 @@ func (s *OrderService) saveOrder(
 	committed := false
 	defer func() {
 		if !committed {
-			rollbackTransaction(ctx, transaction, s.logger, op, s.config.Timeout)
+			rollbackTransaction(ctx, transaction, s.logger, op, s.config.Timeouts.Service)
 		}
 	}()
 
@@ -423,15 +428,55 @@ func (s *OrderService) saveOrder(
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: %w", op, err)
 	}
 
-	if err = commitTransaction(ctx, transaction, s.config.Timeout); err != nil {
+	if err = commitTransaction(ctx, transaction, s.config.Timeouts.Service); err != nil {
 		tracing.RecordError(span, err)
 		return uuid.Nil, orderModel.OrderStatusUnspecified, fmt.Errorf("%s: commit transaction: %w", op, err)
 	}
 
 	committed = true
-	metrics.OrdersCreatedTotal.WithLabelValues(s.config.ServiceName, marketID.String()).Inc()
+	metrics.OrdersCreatedTotal.WithLabelValues(s.config.Service.Name, marketID.String()).Inc()
 
 	return order.ID, order.Status, nil
+}
+
+func (s *OrderService) completeIdempotencyAsync(
+	ctx context.Context,
+	userID, orderID uuid.UUID,
+	requestHash string,
+	orderStatus orderModel.OrderStatus,
+) {
+	go func() {
+		attempts := s.config.Redis.Idempotency.CompleteAttempts
+		attemptTimeout := s.config.Redis.Idempotency.CompleteAttemptTimeout
+		retryDelay := s.config.Redis.Idempotency.CompleteRetryDelay
+
+		totalTimeout := time.Duration(attempts) * attemptTimeout
+		if attempts > 1 {
+			totalTimeout += time.Duration(attempts-1) * retryDelay
+		}
+
+		completeCtx, cancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			totalTimeout,
+		)
+		defer cancel()
+
+		_ = recovery.PanicRecoveryHandler(
+			completeCtx,
+			s.logger,
+			"order.complete_idempotency_async",
+			func() error {
+				s.idempotencyService.completeIdempotencyChecking(
+					completeCtx,
+					userID,
+					orderID,
+					requestHash,
+					orderStatus,
+				)
+				return nil
+			},
+		)
+	}()
 }
 
 func rollbackTransaction(

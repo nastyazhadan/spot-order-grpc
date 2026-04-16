@@ -89,11 +89,6 @@ func (m *mockTx) Conn() *pgx.Conn {
 	panic("unexpected: Conn")
 }
 
-const (
-	serviceTimeout = 5 * time.Second
-	serviceName    = "order-test"
-)
-
 type deps struct {
 	manager     *mocks.TransactionManager
 	saver       *mocks.Saver
@@ -136,10 +131,10 @@ func (d *deps) service() *OrderService {
 	return New(
 		d.manager, d.saver, d.getter, d.viewer, d.blockStore,
 		RateLimiters{Create: d.createLim, Get: d.getLim},
-		Config{Timeout: serviceTimeout, ServiceName: serviceName},
 		d.producer,
-		*idem,
+		idem,
 		zapLogger.NewNop(),
+		cfg,
 	)
 }
 

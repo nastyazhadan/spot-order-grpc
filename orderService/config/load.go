@@ -126,10 +126,38 @@ func validateOrderRedis(cfg config.OrderConfig) error {
 		)
 	}
 
-	if cfg.Redis.IdempotencyTTL <= 0 {
+	if cfg.Redis.Idempotency.RequestTTL <= 0 {
 		return fmt.Errorf(
-			"redis.idempotency_ttl must be greater than 0, got %s",
-			cfg.Redis.IdempotencyTTL,
+			"redis.idempotency_request_ttl must be greater than 0, got %s",
+			cfg.Redis.Idempotency.RequestTTL,
+		)
+	}
+
+	if cfg.Redis.Idempotency.CleanupTimeout <= 0 {
+		return fmt.Errorf(
+			"redis.idempotency_cleanup_timeout must be greater than 0, got %s",
+			cfg.Redis.Idempotency.CleanupTimeout,
+		)
+	}
+
+	if cfg.Redis.Idempotency.CompleteRetryDelay <= 0 {
+		return fmt.Errorf(
+			"redis.idempotency_complete_retry_delay must be greater than 0, got %s",
+			cfg.Redis.Idempotency.CompleteRetryDelay,
+		)
+	}
+
+	if cfg.Redis.Idempotency.CompleteAttemptTimeout <= 0 {
+		return fmt.Errorf(
+			"redis.idempotency_complete_attempt_timeout must be greater than 0, got %s",
+			cfg.Redis.Idempotency.CompleteAttemptTimeout,
+		)
+	}
+
+	if cfg.Redis.Idempotency.CompleteAttempts <= 0 {
+		return fmt.Errorf(
+			"redis.idempotency_complete_attempts must be greater than 0, got %d",
+			cfg.Redis.Idempotency.CompleteAttempts,
 		)
 	}
 
