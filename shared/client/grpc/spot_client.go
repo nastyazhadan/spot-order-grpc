@@ -43,12 +43,12 @@ func (c *SpotClient) ViewMarkets(
 	limit, offset uint64,
 ) ([]models.Market, uint64, bool, error) {
 	response, err := c.viewMarketsBreaker.Execute(func() (*proto.ViewMarketsResponse, error) {
-		resp, err := c.api.ViewMarkets(ctx, &proto.ViewMarketsRequest{
+		resp, callError := c.api.ViewMarkets(ctx, &proto.ViewMarketsRequest{
 			Limit:  limit,
 			Offset: offset,
 		})
-		if err != nil {
-			return nil, err
+		if callError != nil {
+			return nil, callError
 		}
 		return resp, nil
 	})
@@ -104,25 +104,29 @@ func mapViewMarketsError(err error) error {
 	case errors.Is(err, context.DeadlineExceeded),
 		errors.Is(err, gobreaker.ErrOpenState),
 		errors.Is(err, gobreaker.ErrTooManyRequests):
-		return serviceErrors.ErrMarketsUnavailable
+		return errors.Join(serviceErrors.ErrSpotUnavailable, err)
 	}
 
 	stat, ok := status.FromError(err)
 	if !ok {
-		return fmt.Errorf("spot client view markets: %w", err)
+		return errors.Join(serviceErrors.ErrSpotInternalFailure, err)
 	}
 
 	switch stat.Code() {
 	case codes.NotFound:
-		return serviceErrors.ErrMarketsNotFound
-	case codes.Unavailable,
-		codes.DeadlineExceeded,
-		codes.ResourceExhausted,
-		codes.Unauthenticated,
-		codes.PermissionDenied:
-		return serviceErrors.ErrMarketsUnavailable
+		return errors.Join(serviceErrors.ErrMarketsNotFound, err)
+	case codes.Unavailable, codes.DeadlineExceeded:
+		return errors.Join(serviceErrors.ErrSpotUnavailable, err)
+	case codes.Unauthenticated:
+		return errors.Join(serviceErrors.ErrSpotUnauthenticated, err)
+	case codes.PermissionDenied:
+		return errors.Join(serviceErrors.ErrSpotPermissionDenied, err)
+	case codes.ResourceExhausted:
+		return errors.Join(serviceErrors.ErrSpotRateLimited, err)
+	case codes.Internal, codes.Unknown, codes.DataLoss:
+		return errors.Join(serviceErrors.ErrSpotInternalFailure, err)
 	default:
-		return fmt.Errorf("spot client view markets: %w", err)
+		return errors.Join(serviceErrors.ErrSpotInternalFailure, err)
 	}
 }
 
@@ -137,27 +141,31 @@ func mapGetMarketByIDError(err error, marketID uuid.UUID) error {
 	case errors.Is(err, context.DeadlineExceeded),
 		errors.Is(err, gobreaker.ErrOpenState),
 		errors.Is(err, gobreaker.ErrTooManyRequests):
-		return serviceErrors.ErrUnavailable{ID: marketID}
+		return errors.Join(serviceErrors.ErrSpotUnavailable, serviceErrors.ErrUnavailable{ID: marketID}, err)
 	}
 
 	stat, ok := status.FromError(err)
 	if !ok {
-		return fmt.Errorf("spot client get market by id: %w", err)
+		return errors.Join(serviceErrors.ErrSpotInternalFailure, err)
 	}
 
 	switch stat.Code() {
 	case codes.NotFound:
-		return sharedErrors.ErrMarketNotFound{ID: marketID}
+		return errors.Join(sharedErrors.ErrMarketNotFound{ID: marketID}, err)
 	case codes.FailedPrecondition:
-		return serviceErrors.ErrDisabled{ID: marketID}
-	case codes.Unavailable,
-		codes.DeadlineExceeded,
-		codes.ResourceExhausted,
-		codes.Unauthenticated,
-		codes.PermissionDenied:
-		return serviceErrors.ErrUnavailable{ID: marketID}
+		return errors.Join(serviceErrors.ErrDisabled{ID: marketID}, err)
+	case codes.Unavailable, codes.DeadlineExceeded:
+		return errors.Join(serviceErrors.ErrSpotUnavailable, serviceErrors.ErrUnavailable{ID: marketID}, err)
+	case codes.Unauthenticated:
+		return errors.Join(serviceErrors.ErrSpotUnauthenticated, serviceErrors.ErrUnavailable{ID: marketID}, err)
+	case codes.PermissionDenied:
+		return errors.Join(serviceErrors.ErrSpotPermissionDenied, serviceErrors.ErrUnavailable{ID: marketID}, err)
+	case codes.ResourceExhausted:
+		return errors.Join(serviceErrors.ErrSpotRateLimited, serviceErrors.ErrUnavailable{ID: marketID}, err)
+	case codes.Internal, codes.Unknown, codes.DataLoss:
+		return errors.Join(serviceErrors.ErrSpotInternalFailure, err)
 	default:
-		return fmt.Errorf("spot client get market by id: %w", err)
+		return errors.Join(serviceErrors.ErrSpotInternalFailure, err)
 	}
 }
 

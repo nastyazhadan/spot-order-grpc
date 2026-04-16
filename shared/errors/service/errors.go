@@ -26,6 +26,12 @@ var (
 	ErrInvalidPagination = errors.New("invalid pagination parameters")
 
 	ErrUserRoleNotSpecified = errors.New("user role not specified")
+
+	ErrSpotUnavailable      = errors.New("spot service unavailable")
+	ErrSpotUnauthenticated  = errors.New("spot service unauthenticated")
+	ErrSpotPermissionDenied = errors.New("spot service permission denied")
+	ErrSpotRateLimited      = errors.New("spot service rate limited")
+	ErrSpotInternalFailure  = errors.New("spot service internal failure")
 )
 
 type ErrLimitExceeded struct {

@@ -275,7 +275,7 @@ func (s *OrderService) validateMarket(
 
 	// Обновление кэша происходит асинхронно
 	if market.DeletedAt != nil {
-		go s.synchronizeMarketBlock(context.WithoutCancel(ctx), market, true, "warm_block_after_deleted_recheck")
+		s.synchronizeMarketBlockAsync(ctx, market, true, "warm_block_after_deleted_recheck")
 
 		err = sharedErrors.ErrMarketNotFound{ID: marketID}
 		tracing.RecordError(span, err)
@@ -283,7 +283,7 @@ func (s *OrderService) validateMarket(
 	}
 
 	if !market.Enabled {
-		go s.synchronizeMarketBlock(context.WithoutCancel(ctx), market, true, "warm_block_after_disabled_recheck")
+		s.synchronizeMarketBlockAsync(ctx, market, true, "warm_block_after_disabled_recheck")
 
 		err = serviceErrors.ErrDisabled{ID: marketID}
 		tracing.RecordError(span, err)
@@ -291,10 +291,27 @@ func (s *OrderService) validateMarket(
 	}
 
 	if blocked {
-		go s.synchronizeMarketBlock(context.WithoutCancel(ctx), market, false, "remove_stale_block_after_recheck")
+		s.synchronizeMarketBlockAsync(ctx, market, false, "remove_stale_block_after_recheck")
 	}
 
 	return nil
+}
+
+func (s *OrderService) synchronizeMarketBlockAsync(
+	ctx context.Context,
+	market sharedModels.Market,
+	blocked bool,
+	reason string,
+) {
+	go func() {
+		syncCtx, cancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			s.config.Timeout,
+		)
+		defer cancel()
+
+		s.synchronizeMarketBlock(syncCtx, market, blocked, reason)
+	}()
 }
 
 func (s *OrderService) getMarketBlockedState(
