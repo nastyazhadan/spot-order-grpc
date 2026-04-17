@@ -1,5 +1,7 @@
 # Техническая спецификация: spotOrder
 
+Документ описывает текущее фактическое состояние архива, а не желаемую future-state архитектуру.
+
 **Версия:** 1.0  
 **Дата:** Апрель 2026  
 **Репозиторий:** `github.com/nastyazhadan/spot-order-grpc`
@@ -61,12 +63,13 @@ type Getter interface {
     GetOrder(ctx context.Context, id, userID uuid.UUID) (models.Order, error)
 }
 
-// MarketViewer — получение рынка через SpotService (gRPC-клиент)
+// MarketViewer — получение рынка через SpotInstrumentService (gRPC-клиент order -> spot)
 type MarketViewer interface {
     GetMarketByID(ctx context.Context, id uuid.UUID) (sharedModels.Market, error)
 }
 
-// MarketBlockStore — управление блокировками рынков в Redis
+// MarketBlockStore — Redis-слой синхронизации block-state рынка.
+// Используется как быстрый pre-check, но не заменяет authoritative recheck через SpotService.
 type MarketBlockStore interface {
     // SyncState обновляет состояние блокировки только если newUpdatedAt >= текущего.
     // Возвращает true, если состояние было фактически обновлено.
@@ -82,7 +85,7 @@ type RateLimiter interface {
     Window() time.Duration
 }
 
-// EventProducer — запись событий ордеров в Outbox (в рамках транзакции)
+// EventProducer — запись доменных событий ордера в transactional outbox в рамках PostgreSQL-транзакции
 type EventProducer interface {
     ProduceOrderCreated(ctx context.Context, tx pgx.Tx, event models.OrderCreatedEvent) error
     ProduceOrderStatusUpdated(ctx context.Context, tx pgx.Tx, event models.OrderStatusUpdatedEvent) error
@@ -113,12 +116,19 @@ type MarketOrderCanceler interface {
     // в статус CANCELLED. Возвращает список отменённых order_id.
     CancelActiveOrdersByMarket(ctx context.Context, tx pgx.Tx, marketID uuid.UUID) ([]uuid.UUID, error)
 }
+
+// OrderEventProducer — публикация order.status.updated в transactional outbox
+type OrderEventProducer interface {
+ProduceOrderStatusUpdated(ctx context.Context, tx pgx.Tx, event models.OrderStatusUpdatedEvent) error
+}
 ```
 
 ### IdempotencyService
 
 ```go
-// IdempotencyAdapter — гарантия однократного создания ордера.
+// IdempotencyAdapter — Redis-based dedup слой для повторов CreateOrder.
+// В текущей реализации он схлопывает одинаковые запросы одного пользователя
+// в пределах TTL и ближе к payload deduplication, чем к внешнему idempotency-key API.
 type IdempotencyAdapter interface {
 	Acquire(ctx context.Context, userID uuid.UUID, requestHash string) (IdempotencyResult, bool, error)
 	Complete(ctx context.Context, userID uuid.UUID, requestHash string, orderID uuid.UUID, orderStatus string) error
@@ -129,39 +139,50 @@ type IdempotencyAdapter interface {
 ### SpotService (бизнес-логика)
 
 ```go
-// Role-based head-cache хранит не полный список рынков, а только head-срез до `cacheLimit + 1` элементов для первой страницы и расчёта `hasMore`.
+// Role-based head-cache хранит не полный список рынков,
+// а только head-срез до `cacheLimit + 1` элементов для первой страницы и расчёта `hasMore`.
 type MarketCacheRepository interface {
-    GetMarkets(ctx context.Context, roleKey string) ([]sharedModels.Market, error)
-    SetMarkets(ctx context.Context, markets []sharedModels.Market, roleKey string, ttl time.Duration) error
-    DeleteMarkets(ctx context.Context, roleKey string) error
+GetMarkets(ctx context.Context, roleKey string) ([]models.Market, error)
+SetMarkets(ctx context.Context, markets []models.Market, roleKey string, ttl time.Duration) error
+DeleteMarkets(ctx context.Context, roleKey string) error
 }
 
 // MarketByIDCacheRepository — кэш рынка по market_id
 type MarketByIDCacheRepository interface {
-    GetMarketByID(ctx context.Context, id uuid.UUID) (sharedModels.Market, error)
-    SetMarketByID(ctx context.Context, market sharedModels.Market, ttl time.Duration) error
-    DeleteMarketByID(ctx context.Context, id uuid.UUID) error
+GetMarketByID(ctx context.Context, id uuid.UUID) (models.Market, error)
+SetMarketByID(ctx context.Context, market models.Market, ttl time.Duration) error
+DeleteMarketByID(ctx context.Context, id uuid.UUID) error
 }
 
 // MarketReader — чтение рынков с поддержкой cursor-based пагинации
 type MarketReader interface {
-    // ListUpdatedSince возвращает рынки, изменённые после since с курсором (afterID).
-    // Результат упорядочен по (updated_at ASC, id ASC).
-    ListUpdatedSince(ctx context.Context, since time.Time, afterID uuid.UUID, limit int) ([]sharedModels.Market, error)
+// ListUpdatedSince возвращает рынки, изменённые после since с курсором (afterID).
+// Результат упорядочен по (updated_at ASC, id ASC).
+ListUpdatedSince(ctx context.Context, since time.Time, afterID uuid.UUID, limit int) ([]sharedModels.Market, error)
 }
 
 // MarketEventProducer — публикация батча событий через Outbox
 type MarketEventProducer interface {
-    // PublishMarketStateChanged записывает события в outbox и сохраняет курсор атомарно.
-    // Обновление Redis-кэша выполняется отдельно логикой MarketPoller после успешной обработки батча.
-    PublishMarketStateChanged(ctx context.Context, events []sharedModels.MarketStateChangedEvent, cursor models.PollerCursor) error
+// PublishMarketStateChanged записывает события в outbox и сохраняет курсор атомарно.
+// Обновление Redis-кэша выполняется отдельно логикой MarketPoller после успешной обработки батча.
+PublishMarketStateChanged(ctx context.Context, events []sharedModels.MarketStateChangedEvent, cursor models.PollerCursor) error
 }
 
 // CursorStore — чтение позиции поллера
 type CursorStore interface {
-    Get(ctx context.Context, pollerName string) (models.PollerCursor, error)
+Get(ctx context.Context, pollerName string) (models.PollerCursor, error)
 }
 ```
+### AuthService
+
+Публичный gRPC API auth-части сейчас состоит из одного метода:
+
+- `RefreshToken`
+
+Особенности текущей реализации:
+- `AuthService` живёт в том же процессе, что и `OrderService`
+- наружу не опубликован метод первичной выдачи токенов
+- начальная пара токенов для локальной проверки генерируется через dev helper
 
 ---
 
@@ -278,10 +299,13 @@ SpotService тоже использует JWT auth interceptor.
 - `auth.v1.AuthService`
 - `spot.v1.SpotInstrumentService`
 
-Текущее ограничение:
-- `order-service` больше не выполняет обязательный startup health-check `spot-service`
-- сервис стартует независимо от доступности downstream-зависимостей
-- текущий health по-прежнему не является dependency-aware readiness: статус `SERVING` отражает факт запуска процесса и регистрации gRPC-сервисов, а не доступность Redis / Postgres / Kafka / `spot-service`
+Текущее состояние health/readiness:
+- gRPC health status отражает факт запуска процесса и регистрации gRPC-сервисов
+- readiness monitor внутри приложений проверяет только `Postgres` и `Redis`
+- `order-service` не проверяет `spot-service` как критичный downstream
+- Kafka не входит в readiness-проверки
+- живость фоновых async-компонентов отдельно не проверяется
+- если gRPC server или metrics server аварийно перестаёт `Serve()`-ить, это логируется, но не эскалируется в остановку процесса
 
 ---
 
@@ -318,6 +342,8 @@ SpotService тоже использует JWT auth interceptor.
 - `/grpc.health.v1.Health/Watch`
 - `/auth.v1.AuthService/RefreshToken`
 
+`RefreshToken` пропускается мимо JWT access-token interceptor, потому что сам работает с refresh token как отдельным типом токена.
+
 Для `spot.auth_verifier.skip_methods`:
 - `/grpc.health.v1.Health/Check`
 - `/grpc.health.v1.Health/Watch`
@@ -326,10 +352,10 @@ SpotService тоже использует JWT auth interceptor.
 
 ```go
 type Claims struct {
-    jwt.RegisteredClaims                            // sub (user_id), exp, jti
-    TokenType TokenType `json:"token_type"`         // "access" | "refresh"
-    SessionID string    `json:"session_id"`         // идентификатор сессии (UUID)
-    UserRoles []string  `json:"user_roles,omitempty"` // больше не передаются в Spot request
+    jwt.RegisteredClaims                              // sub (user_id), exp, jti
+    TokenType TokenType `json:"token_type"`           // "access" | "refresh"
+    SessionID string    `json:"session_id"`           // идентификатор сессии (UUID)
+    UserRoles []string  `json:"user_roles,omitempty"` // используются для определения effective role после JWT-валидации
 }
 ```
 
@@ -354,11 +380,27 @@ type Claims struct {
 - Текущая модель не ротирует `sessionID` при каждом refresh. 
 - При refresh меняется `jti` refresh token и указатель на текущий refresh key, а `sessionID` сохраняется в рамках активной сессии.
 
+Практическое следствие:
+- текущая схема рассчитана на одну активную refresh-session цепочку на пользователя
+- новый initial issue / replace перезаписывает предыдущую session-связку
+Срок жизни refresh-сессии сейчас sliding:
+- при каждом успешном refresh создаётся новый refresh token с новым TTL
+- абсолютный max session lifetime отдельно не ограничен
+
 ### Проброс `authorization` между сервисами
 
-При исходящем gRPC-вызове из одного сервиса в другой client auth interceptor копирует входящий `authorization` из incoming metadata в outgoing metadata downstream-запроса.
+Текущая межсервисная схема такая:
 
-Используется одно актуальное значение заголовка `authorization`, чтобы downstream-сервис получал ожидаемый bearer token без накопления нескольких значений заголовка.
+- `order-service` принимает пользовательский bearer token
+- client interceptor копирует этот `authorization` header в downstream вызов `order -> spot`
+
+Что это означает practically:
+- отдельной identity самого сервиса в этом вызове нет
+- downstream авторизация зависит от пользовательского токена
+- системные/background вызовы без входящего user-token таким способом не авторизуются
+- transport security между сервисами в локальном окружении построена на insecure gRPC
+
+То есть текущая схема удобна для dev/local сценария, но не является полноценной service-to-service auth моделью.
 
 ---
 
@@ -469,15 +511,15 @@ validateMarket(marketID):
         вернуть ошибку SpotService
 
   3. market.DeletedAt != nil?
-     → go syncMarketBlock(blocked=true, ...)  // асинхронно, не блокирует ответ
+     → async synchronizeMarketBlock(blocked=true, reason="warm_block_after_deleted_recheck")
      → вернуть ErrMarketNotFound
 
   4. !market.Enabled?
-     → syncMarketBlock(blocked=true, reason="warm_block_after_disabled_recheck")
+     → async synchronizeMarketBlock(blocked=true, reason="warm_block_after_disabled_recheck")
      → вернуть ErrDisabled
 
   5. blocked=true, но рынок доступен?
-     → syncMarketBlock(blocked=false, reason="remove_stale_block_after_recheck")
+     → async synchronizeMarketBlock(blocked=false, reason="remove_stale_block_after_recheck")
      → разрешить создание ордера
 ```
 
@@ -485,6 +527,11 @@ validateMarket(marketID):
 
 `syncMarketBlock` вызывается асинхронно (горутина) с context.WithoutCancel — не блокирует ответ клиенту и не зависит от отмены родительского контекста. 
 Результат фиксируется в метрике `grpc_server_market_block_state_sync_total`.
+
+Замечания к текущей реализации:
+- при ошибках Redis block-state слой рассматривается как ускоряющий, а не authoritative источник истины
+- authoritative решение всё равно принимается после recheck через `SpotInstrumentService`
+- асинхронная синхронизация block-state уже ограничена worker-pool моделью и не создаёт неограниченное число goroutine в request path
 ---
 
 ## 9. Компенсационный сервис: конечный автомат
@@ -495,9 +542,9 @@ validateMarket(marketID):
                     BeginProcessing
                          │
               ┌──────────┴──────────┐
-              │ новое событие        │ дубликат
+              │ новое событие       │ дубликат
               ▼                     ▼
-           PENDING            (пропустить)
+          PROCESSING           (пропустить)
               │                     │
      ┌────────┴────────┐            └──→ trySyncMarketBlockState
      │ успех           │ ошибка
@@ -543,8 +590,12 @@ ProcessMarketStateChanged(topic, consumerGroup, rawPayload, event):
 
 При получении события с уже известным `(event_id, consumer_group)`:
 - Статус `PROCESSED`: коммит + синхронизация блокировки (idempotent).
-- Статус `PENDING`: коммит + синхронизация блокировки (параллельная обработка).
+- Статус `PROCESSING`: коммит + синхронизация блокировки (параллельная обработка).
 - Логируется с уровнем INFO, метрики не инкрементируются как ошибки.
+
+Практический риск:
+- повторная доставка сообщения с уже зависшим `processing` статусом будет воспринята как "already in progress"
+- из-за этого компенсация может больше не примениться к нужным ордерам
 
 ### Отказоустойчивость `trySyncMarketBlockState`
 
@@ -658,6 +709,11 @@ type PollerCursor struct {
 - `Init()` не вызывает `RefreshAll()`
 - refresh кэша выполняется как часть логики poller-а после обработки изменений
 - outbox worker не инвалидирует Redis-кэш самостоятельно
+
+Практическое ограничение текущей реализации:
+- poller отслеживает изменения по `updated_at`
+- поэтому событие `market.state.changed` может быть опубликовано на любой update строки рынка
+- имя события уже, чем его фактическая текущая семантика
 ```
 
 ### Атомарность курсора и событий
@@ -669,6 +725,9 @@ type PollerCursor struct {
 После `COMMIT` poller сначала вызывает `MarketCache.InvalidateByIDs(updatedIDs)`, чтобы удалить stale by-id cache для изменённых рынков, а затем вызывает `MarketCache.RefreshAll`, чтобы перепрогреть role-based Redis head-cache актуальными данными.
 
 By-id cache (`market:by_id:<marketID>`) не перепрогревается poller-ом eagerly: после адресной инвалидации он повторно заполняется лениво при следующем `GetMarketByID` либо естественно истекает по TTL.
+
+`RefreshAll` обновляет role-based head-cache по ролям последовательно.
+Если refresh прерывается между ролями, кэши ролей могут временно отражать разные snapshot'ы данных.
 ---
 
 ## 13. Prometheus-метрики: полный реестр
@@ -700,8 +759,8 @@ By-id cache (`market:by_id:<marketID>`) не перепрогревается po
 | `grpc_server_cache_misses_total` | Counter | `service`, `operation` | Промахи кэша |
 | `grpc_server_cache_operation_duration_seconds` | Histogram | `service`, `operation` | Латентность операций Redis (buckets: 0.1ms–100ms) |
 | `grpc_server_cache_fallbacks_total` | Counter | `service`, `operation`, `reason` | Fallback при ошибке Redis |
-| `grpc_server_cache_invalidations_total` | Counter | `service`, `reason`, `scope`, `result` | Инвалидации кэша (`role` или `market_by_id`) |
-| `grpc_server_cache_warmups_total` | Counter | `service`, `operation`, `scope`, `result` | Прогревы кэша (`role` или `market_by_id`) |
+| `grpc_server_cache_invalidations_total` | Counter | `service`, `reason`, `role`, `result` | Инвалидации кэша |
+| `grpc_server_cache_warmups_total` | Counter | `service`, `operation`, `role`, `result` | Прогревы кэша |
 
 ### Database (PostgreSQL)
 
@@ -769,6 +828,11 @@ OrderService использует Redis-ключ идемпотентности 
 requestHash вычисляется как:
 - `SHA-256(marketID | orderType | price | quantity)`
 
+Это означает:
+- два одинаковых запроса одного пользователя в пределах TTL могут быть схлопнуты
+- семантика ближе к payload deduplication, чем к классическому внешнему idempotency-key API
+- повтор идентичного ордера не обязательно трактуется как новый бизнесовый ордер
+
 `userID` не включается в сам хэш, потому что уже является частью Redis-ключа.
 
 Формат значения:
@@ -834,6 +898,11 @@ requestHash вычисляется как:
 - `RefreshAll` перепрогревает role-based head-cache после обработки изменений рынков
 
 Role-based head-cache не использует `singleflight`: конкурентные запросы первой страницы могут независимо сделать fallback в PostgreSQL. Кэш затем прогревается результатом первого успешного чтения или плановым `RefreshAll`.
+
+Практическое ограничение:
+- `ViewMarkets` использует offset-based pagination
+- если между запросами к разным страницам список изменился или рынок был переименован, возможны пропуски и дубли
+- это ожидаемое ограничение offset-пагинации для изменяющегося списка
 
 ### By-id cache (`GetMarketByID`)
 
@@ -1000,7 +1069,14 @@ Kafka Consumer (market.state.changed)
 
 Outbox Worker
   └── outbox_store + kafka/producer
+  
+AuthHandler
+  └── AuthService
+        ├── JWTManager
+        └── RefreshTokenStore ← redis/auth
 ```
+Важно:
+- `AuthService` и `OrderService` живут в одном процессе, но представляют разные gRPC service contracts
 
 ### Граф зависимостей SpotService
 
@@ -1032,3 +1108,8 @@ Outbox Worker
 | Kafka | Producer (outbox), Consumer (market.state.changed) | Producer (outbox) |
 | SpotService gRPC | ← клиент | — |
 | OTel Collector | OTLP gRPC :4317 (traces) | OTLP gRPC :4317 (traces) |
+| AuthService gRPC | в составе order-process | — |
+
+Дополнительно:
+- `order -> spot` использует insecure gRPC transport в локальном окружении
+- tracing exporter тоже использует insecure OTLP transport до collector

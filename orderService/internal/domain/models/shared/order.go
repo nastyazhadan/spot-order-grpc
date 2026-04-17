@@ -45,6 +45,8 @@ func FromString(s string) OrderStatus {
 	switch s {
 	case "created":
 		return OrderStatusCreated
+	case "pending":
+		return OrderStatusPending
 	case "filled":
 		return OrderStatusFilled
 	case "cancelled":

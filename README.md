@@ -1,9 +1,12 @@
-# spotOrder — gRPC Microservices (Go)
+# spotOrder
 
-Два gRPC-сервиса для работы со спотовыми торговыми инструментами и ордерами.
+`spotOrder` — учебный/демо-проект на Go с двумя gRPC-сервисами:
 
-- **SpotInstrumentService** — справочник рынков (`markets`) с фильтрацией по ролям пользователя. Для `ViewMarkets` используется role-based Redis head-cache первой страницы, а для `GetMarketByID` — отдельный Redis cache по `market_id` с `singleflight` на miss-path. Поллер отслеживает изменения рынков, записывает события в outbox и после обработки обновлений сначала инвалидирует by-id cache по изменённым `market_id`, а затем инициирует refresh role-specific head-cache.
-- **OrderService** — создание ордеров и получение статуса, с проверкой рынка через SpotService, JWT-аутентификацией, circuit breaker и per-user rate limiting. При получении события `market.state.changed` компенсирует активные ордера заблокированного рынка.
+- `SpotInstrumentService` — хранение и выдача рынков
+- `OrderService` — создание ордеров, проверка рынка, компенсация при изменении состояния рынка
+- `AuthService` — отдельный gRPC-сервис в составе order-процесса, который сейчас публикует только `RefreshToken`
+
+Проект собран как workspace из нескольких Go-модулей и поднимается локально через Docker Compose вместе с PostgreSQL, Redis, Kafka и observability-стеком.
 
 ## Быстрый старт
 
@@ -26,49 +29,69 @@ docker compose up --build -d
 - PostgreSQL 17
 - Redis 7
 - Kafka
+- Transactional Outbox + Inbox
 - OpenTelemetry Collector + Tempo
 - Prometheus + Grafana
 - FX для сборки приложения
-- Goose migrations
 - Taskfile для локальных команд
 
-## Состав сервисов
+## Сервисы и их ответственность
 
 ### SpotInstrumentService
 
-gRPC-методы:
+Методы:
+
 - `ViewMarkets`
 - `GetMarketByID`
 
 Что делает:
-- читает рынки из `market_store`
-- фильтрует выдачу по ролям
-- Redis key `market:cache:<role>` хранит head-срез списка рынков для первой страницы, а не полный снимок всех markets
-- при запросе первой страницы сначала пытается читать head-cache; при cache miss или corrupted payload загружает первую страницу из PostgreSQL, возвращает её клиенту и прогревает head-cache
-- `RefreshAll` перепрогревает role-based head-cache после обработки изменений рынков
-- для `GetMarketByID` использует отдельный Redis by-id cache по ключу `market:by_id:<marketID>`; ролевые ограничения применяются после загрузки рынка
-- при `cache miss` по `market_id` использует `singleflight`, чтобы только один запрос сходил в PostgreSQL и прогрел by-id cache
-- при повреждённом (`corrupted`) payload в by-id cache пытается удалить stale key, если перепрогрев не удался
-- `MarketPoller` после успешной обработки батча адресно инвалидирует by-id cache для изменённых рынков и затем вызывает `RefreshAll` для role-based head-cache
-- запускает `MarketPoller`, который отслеживает изменения в БД и складывает события в outbox
-- публикует `market.state.changed` в Kafka
+
+- хранит рынки в `spot_db.market_store`
+- фильтрует видимость рынков по ролям пользователя
+- использует два Redis-кэша:
+    - role-based head-cache для первой страницы `ViewMarkets`
+    - by-id cache для `GetMarketByID`
+- использует `singleflight` только для by-id miss path
+- запускает `MarketPoller`, который читает изменения из PostgreSQL, пишет события в outbox и после обработки батча:
+    - инвалидирует by-id cache по изменённым `market_id`
+    - вызывает `RefreshAll` для role-based head-cache
 
 ### OrderService
 
-gRPC-методы:
+Методы:
+
 - `CreateOrder`
 - `GetOrderStatus`
+
+Что делает:
+
+- создаёт ордера в `order_db.orders`
+- валидирует рынок через `SpotInstrumentService`
+- использует JWT-аутентификацию для пользовательских методов
+- применяет per-user rate limiting через Redis
+- хранит состояние блокировки рынка в Redis
+- пишет доменные события в outbox
+- читает Kafka-события `market.state.changed` и запускает компенсацию активных ордеров
+- использует Redis-based dedup/idempotency слой для `CreateOrder`
+
+### AuthService
+
+Методы:
+
 - `RefreshToken`
 
 Что делает:
-- создаёт ордера в PostgreSQL
-- валидирует рынок через `SpotInstrumentService`
-- использует JWT-аутентификацию для пользовательских методов
-- применяет per-user rate limit через Redis
-- хранит блокировки рынков в Redis
-- пишет события в outbox и публикует их в Kafka
-- читает `market.state.changed` из Kafka и запускает компенсационную обработку
-- гарантирует идемпотентность CreateOrder через Redis: повторный запрос с теми же параметрами возвращает результат первого заказа
+
+- принимает refresh token
+- валидирует его как stateful refresh-token цепочку в Redis
+- ротирует refresh token в рамках той же logical session
+- выдаёт новую пару `access_token + refresh_token`
+
+Важно:
+
+- `AuthService` — это отдельный gRPC-сервис, хотя живёт в том же процессе, что и `OrderService`
+- публичного `IssueToken`/`Login` метода в gRPC API сейчас нет
+- для ручной локальной проверки стартовая пара токенов генерируется через dev helper
 
 ## Требования
 
@@ -110,8 +133,20 @@ Docker Compose поднимает весь стек целиком:
 | `grafana` | Grafana | `3000` |
 | `tempo` | Tempo | `3200` |
 
-PostgreSQL при старте создаёт базы `order_db` и `spot_db`, а сами сервисы затем автоматически применяют SQL-миграции через Goose. Seed-данные рынков загружаются миграцией `spotService`.
-Примечание:
+## Как запускаются миграции
+
+Runtime-сервисы сами миграции не применяют.
+
+Схема обновляется отдельными контейнерами:
+
+- `order-migrator`
+- `spot-migrator`
+
+Дополнительно:
+
+- `postgres` стартует с `ORDER_DB` как основной БД контейнера
+- отдельная БД `spot_db` создаётся init-скриптом из `spotService/migrations/db_spot`
+- seed-данные для рынков по-прежнему приезжают SQL-миграцией `spotService`
 - `order-service` и `spot-service` стартуют независимо друг от друга
 - `order-service` может успешно запуститься, даже если `spot-service` ещё недоступен
 - при этом запросы, которым нужен вызов `SpotInstrumentService`, будут временно завершаться ошибкой до восстановления downstream-зависимости
@@ -134,11 +169,15 @@ PostgreSQL при старте создаёт базы `order_db` и `spot_db`, 
 
 ## Конфигурация
 
-Проект использует:
-- общий `config.yaml` в корне
-- `.env` / переменные окружения для строк подключения и части runtime-настроек
+Проект использует два источника конфигурации:
 
-### Обязательные переменные окружения
+- корневой `config.yaml`
+- переменные окружения из `.env`
+
+`config.yaml` разделён на две верхнеуровневые секции:
+
+- `order`
+- `spot`
 
 Для локального запуска фактически обязательны:
 
@@ -148,48 +187,77 @@ PostgreSQL при старте создаёт базы `order_db` и `spot_db`, 
 
 Остальные значения в `.env` нужны в основном для `docker-compose` и внешних портов.
 
-### Структура `config.yaml`
+---
 
-Конфиг разделён на две верхнеуровневые секции: `order` и `spot`.
+## Аутентификация и роли
 
-#### Секция `order`
+JWT-модель сейчас такая:
 
-| Подсекция | Ключевые параметры |
-|---|---|
-| `service` | `address`, `name`, `max_recv_msg_size` |
-| `spot_address` | адрес SpotService |
-| `timeouts` | `service`, `check` |
-| `auth_verifier` | `skip_methods` |
-| `auth_issuer` | `access_token_ttl`, `refresh_token_ttl` |
-| `circuit_breaker` | `max_requests`, `interval`, `timeout`, `max_failures` |
-| `rate_limit_by_user` | `create_order`, `get_order_status`, `window` |
-| `kafka` | `brokers`, `producer`, `consumer`, `topics`, `outbox` |
-| `postgres_pool`, `redis`, `grpc_rate_limit`, `tracing`, `metrics`, `keep_alive`, `retry` | — |
+- access token — stateless
+- refresh token — stateful
 
-Значения по умолчанию:
-- `service.address = :50051`
-- `spot_address = spot-service:50052`
-- `timeouts.service = 5s`, `timeouts.check = 15s`
-- `metrics.http_address = :9091`
-- `rate_limit_by_user.create_order = 5`, `rate_limit_by_user.get_order_status = 50`
+В access token и refresh token лежат:
 
-#### Секция `spot`
+- `sub`
+- `iat`
+- `exp`
+- `session_id`
+- `user_roles`
 
-| Подсекция | Ключевые параметры |
-|---|---|
-| `service` | `address`, `name`, `max_recv_msg_size` |
-| `timeouts` | `service` |
-| `redis` | `spot_cache_ttl` |
-| `market_poller` | `poll_interval`, `processing_timeout`, `batch_size` |
-| `kafka` | `brokers`, `producer`, `topics`, `outbox` |
-| `postgres_pool`, `grpc_rate_limit`, `tracing`, `metrics`, `keep_alive` | — |
+Дополнительно у refresh token есть `jti`.
 
-Значения по умолчанию:
-- `service.address = :50052`
-- `timeouts.service = 5s`
-- `redis.spot_cache_ttl = 5m`
-- `metrics.http_address = :9093`
-- `market_poller.poll_interval = 1s`, `processing_timeout = 5s`, `batch_size = 100`
+Что важно про текущую реализацию:
+
+- access token не сверяется с Redis-сессией
+- refresh token сверяется и ротируется через Redis
+- текущая Redis-модель рассчитана на одну активную refresh-session цепочку на пользователя
+- `RefreshToken` исключён из JWT server interceptor и вызывается без access token
+
+Роли используются в `SpotInstrumentService` для определения видимости рынков:
+
+- `admin`
+- `viewer`
+- `user`
+
+Текущая политика выбора effective role берёт наиболее привилегированную роль из набора, если в токене их несколько.
+
+---
+
+## Кэширование
+
+### SpotInstrumentService
+
+Используются два отдельных Redis-кэша:
+
+- `market:cache:<role>` — head-cache первой страницы `ViewMarkets`
+- `market:by_id:<marketID>` — by-id cache для `GetMarketByID`
+
+Особенности:
+
+- head-cache используется только для первой страницы и только при ограничении `limit <= cacheLimit`
+- остальные страницы идут напрямую в PostgreSQL
+- by-id cache прогревается лениво
+- на miss-path для by-id используется `singleflight`
+
+### OrderService
+
+Используется Redis-хранилище блокировки рынка:
+
+- `market:block:<marketID>`
+
+Состояние обновляется по времени изменения рынка и помогает быстро отклонять новые заказы для уже закрытого/недоступного рынка.
+
+---
+
+## Readiness / health
+
+Сейчас health/readiness надо понимать так:
+
+- контейнерный healthcheck проверяет gRPC health probe
+- readiness monitor внутри сервисов проверяет `Postgres` и `Redis`
+- `order-service` сейчас не включает `spot-service` в readiness dependency check
+- Kafka тоже не входит в readiness checks
+- если gRPC server или metrics server аварийно перестаёт `Serve()`-ить, это логируется, но сам процесс не завершается автоматически
 
 ---
 
@@ -613,3 +681,15 @@ spotOrder/
   - регистрируют gRPC reflection и health check
   - наблюдаются через Prometheus + Grafana + Tempo
 ```
+---
+
+## Что важно знать про текущее поведение
+
+Ниже рабочие ограничения текущего архива:
+
+- `AuthService` публикует только `RefreshToken`; первичной выдачи токенов в публичном gRPC API нет
+- `CreateOrder` использует Redis-based dedup semantics, а не классический idempotency-key из внешнего API
+- `market.state.changed` сейчас завязан на обновление строки рынка через `updated_at`, поэтому событие шире по фактической семантике, чем его имя
+- `MARKET`, `STOP_LOSS` и `TAKE_PROFIT` уже есть в enum контракта, но доменная модель пока ближе к общей форме ордера с обязательным `price`
+- gRPC reflection включён всегда, без feature flag
+- `order -> spot` использует insecure transport и пробрасывает пользовательский bearer downstream
